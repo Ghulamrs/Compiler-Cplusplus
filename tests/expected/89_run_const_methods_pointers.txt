@@ -1,0 +1,264 @@
+Function print_int returns void
+  param:
+    Var n : int
+Function print_line returns void
+Class A
+  Field public x : int
+  Constructor public A::A
+    Block
+      ExprStmt
+        Binary =
+          x
+          1
+  Method public A::get returns int
+    Block
+      Return
+        x
+  Method public A::bump returns void
+    Block
+      ExprStmt
+        Binary =
+          x
+          Binary +
+            x
+            1
+Function readIt returns int
+  param:
+    Var a : reference to class A
+  Block
+    Return
+      Call
+        Member .get
+          a
+Function viaPtr returns int
+  param:
+    Var p : pointer to class A
+  Block
+    Return
+      Call
+        Member ->get
+          p
+Function main returns int
+  Block
+    Var a : class A
+    ExprStmt
+      Call
+        Member .bump
+          a
+    ExprStmt
+      Call
+        Member .bump
+          a
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member .get
+              a
+    Var c : class A
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member .get
+              c
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            readIt
+            arg 0:
+              c
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            viaPtr
+            arg 0:
+              Unary &
+                c
+    Var p : pointer to char
+      init:
+        "ab"
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Index
+            p
+            0
+    ExprStmt
+      Binary =
+        Index
+          p
+          0
+        122 : char
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Index
+            p
+            0
+    Var q : pointer to char
+      init:
+        "cd"
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Index
+            q
+            0
+    ExprStmt
+      Binary =
+        q
+        "ef"
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Index
+            q
+            0
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+class A  size=4 align=4
+    +0  x (4 bytes)
+    construct: field x -> A() body
+    destroy:   ~A() body -> field x
+
+string str0  "ab"
+string str1  "cd"
+string str2  "ef"
+
+function A__ctor$v   ; A::A
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = const 1
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+            store [%5] <- %2 :4
+            ret
+
+function A__get$v   ; A::get
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +0
+    %3 = load [%2] :4
+            ret %3
+
+function A__bump$v   ; A::bump
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +0
+    %3 = load [%2] :4
+    %4 = const 1
+    %5 = add %3, %4
+    %6 = local #0
+    %7 = load [%6] :8
+    %8 = field %7 +0
+            store [%8] <- %5 :4
+            ret
+
+function readIt$R1A   ; readIt
+  #0 a  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = call A__get$v(%1)
+            ret %2
+
+function viaPtr$P1A   ; viaPtr
+  #0 p  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = call A__get$v(%1)
+            ret %2
+
+function main
+  #0 a  4 bytes
+  #1 c  4 bytes
+  #2 p  8 bytes
+  #3 q  8 bytes
+            call __global_init()
+    %0 = local #0
+            call A__ctor$v(%0)
+    %1 = local #0
+            call A__bump$v(%1)
+    %2 = local #0
+            call A__bump$v(%2)
+    %3 = local #0
+    %4 = call A__get$v(%3)
+            call print_int(%4)
+    %5 = local #1
+            call A__ctor$v(%5)
+    %6 = local #1
+    %7 = call A__get$v(%6)
+            call print_int(%7)
+    %8 = local #1
+    %9 = call readIt$R1A(%8)
+            call print_int(%9)
+    %10 = local #1
+    %11 = call viaPtr$P1A(%10)
+            call print_int(%11)
+    %12 = straddr str0
+    %13 = local #2
+            store [%13] <- %12 :8
+    %14 = local #2
+    %15 = load [%14] :8
+    %16 = const 0
+    %17 = add %15, %16
+    %18 = load [%17] :1
+    %19 = iresize %18 :4 signed
+            call print_int(%19)
+    %20 = const 122
+    %21 = local #2
+    %22 = load [%21] :8
+    %23 = const 0
+    %24 = add %22, %23
+            store [%24] <- %20 :1
+    %25 = local #2
+    %26 = load [%25] :8
+    %27 = const 0
+    %28 = add %26, %27
+    %29 = load [%28] :1
+    %30 = iresize %29 :4 signed
+            call print_int(%30)
+    %31 = straddr str1
+    %32 = local #3
+            store [%32] <- %31 :8
+    %33 = local #3
+    %34 = load [%33] :8
+    %35 = const 0
+    %36 = add %34, %35
+    %37 = load [%36] :1
+    %38 = iresize %37 :4 signed
+            call print_int(%38)
+    %39 = straddr str2
+    %40 = local #3
+            store [%40] <- %39 :8
+    %41 = local #3
+    %42 = load [%41] :8
+    %43 = const 0
+    %44 = add %42, %43
+    %45 = load [%44] :1
+    %46 = iresize %45 :4 signed
+            call print_int(%46)
+            call print_line()
+    %47 = const 0
+            ret %47
+
+function __global_init
+            ret

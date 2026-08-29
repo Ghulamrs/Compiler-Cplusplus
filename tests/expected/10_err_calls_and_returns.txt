@@ -1,0 +1,40 @@
+10_err_calls_and_returns.cpp:4:14: error: 'add' expects 2 argument(s) but got 1
+10_err_calls_and_returns.cpp:5:14: error: 'add' expects 2 argument(s) but got 3
+10_err_calls_and_returns.cpp:7:3: error: returning void from a function returning int
+Function add returns int
+  param:
+    Var a : int
+  param:
+    Var b : int
+  Block
+    Return
+      Binary +
+        a
+        b
+Function nothing returns void
+  Block
+    Return
+Function main returns int
+  Block
+    Var a : int
+      init:
+        Call
+          add
+          arg 0:
+            1
+    Var b : int
+      init:
+        Call
+          add
+          arg 0:
+            1
+          arg 1:
+            2
+          arg 2:
+            3
+    ExprStmt
+      Call
+        nothing
+    Return
+      Call
+        nothing

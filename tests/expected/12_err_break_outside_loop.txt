@@ -1,0 +1,8 @@
+12_err_break_outside_loop.cpp:2:3: error: 'break' outside a loop or switch
+12_err_break_outside_loop.cpp:3:3: error: 'continue' outside a loop
+Function main returns int
+  Block
+    Break
+    Continue
+    Return
+      0

@@ -1,0 +1,17 @@
+17_err_multiple_inheritance.cpp:3:19: error: multiple inheritance is not supported in this version
+Class A
+  Field public a : int
+Class B
+  Field public b : int
+Class C : public A
+  Field public c : int
+
+class A  size=4 align=4
+    +0  a (4 bytes)
+
+class B  size=4 align=4
+    +0  b (4 bytes)
+
+class C  size=8 align=4
+    +0  a (4 bytes)  inherited from A
+    +4  c (4 bytes)

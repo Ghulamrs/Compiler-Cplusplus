@@ -1,0 +1,192 @@
+Function print_int returns void
+  param:
+    Var n : int
+Function print_line returns void
+Class Base
+  Method public virtual Base::f returns int
+    param:
+      Var a : int
+    Block
+      Return
+        Binary +
+          100
+          a
+  Method public virtual Base::f returns int
+    param:
+      Var a : int
+    param:
+      Var b : int
+    Block
+      Return
+        Binary +
+          Binary +
+            200
+            a
+          b
+  Destructor public virtual Base::~Base
+    Block
+Class Derived : public Base
+  Method public virtual overriding Derived::f returns int
+    param:
+      Var a : int
+    Block
+      Return
+        Binary +
+          300
+          a
+  Method public virtual overriding Derived::f returns int
+    param:
+      Var a : int
+    param:
+      Var b : int
+    Block
+      Return
+        Binary +
+          Binary +
+            400
+            a
+          b
+Function main returns int
+  Block
+    Var d : class Derived
+    Var p : pointer to class Base
+      init:
+        Unary &
+          d
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member ->f
+              p
+            arg 0:
+              1
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member ->f
+              p
+            arg 0:
+              1
+            arg 1:
+              2
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+    [on exit: destroy d]
+
+class Base  size=8 align=8  [has vptr]
+     +0  __vptr (8 bytes)
+    vtable[0] = Base::f
+    vtable[1] = Base::f
+    vtable[2] = Base::~Base
+    construct: set vptr -> Base() body
+    destroy:   ~Base() body -> reset vptr
+
+class Derived  size=8 align=8  [has vptr]
+     +0  __vptr (8 bytes)
+    vtable[0] = Derived::f
+    vtable[1] = Derived::f
+    vtable[2] = Base::~Base
+    construct: base Base -> set vptr
+    destroy:   reset vptr -> base Base
+
+vtable Base__vtable
+    [0] Base__f$i
+    [1] Base__f$ii
+    [2] Base__dtor
+
+vtable Derived__vtable
+    [0] Derived__f$i
+    [1] Derived__f$ii
+    [2] Base__dtor
+
+function Base__f$i   ; Base::f
+  #0 this  8 bytes  (param)
+  #1 a  4 bytes  (param)
+    %0 = const 100
+    %1 = local #1
+    %2 = load [%1] :4
+    %3 = add %0, %2
+            ret %3
+
+function Base__f$ii   ; Base::f
+  #0 this  8 bytes  (param)
+  #1 a  4 bytes  (param)
+  #2 b  4 bytes  (param)
+    %0 = const 200
+    %1 = local #1
+    %2 = load [%1] :4
+    %3 = add %0, %2
+    %4 = local #2
+    %5 = load [%4] :4
+    %6 = add %3, %5
+            ret %6
+
+function Base__dtor   ; Base::~Base
+  #0 this  8 bytes  (param)
+            ret
+
+function Derived__f$i   ; Derived::f
+  #0 this  8 bytes  (param)
+  #1 a  4 bytes  (param)
+    %0 = const 300
+    %1 = local #1
+    %2 = load [%1] :4
+    %3 = add %0, %2
+            ret %3
+
+function Derived__f$ii   ; Derived::f
+  #0 this  8 bytes  (param)
+  #1 a  4 bytes  (param)
+  #2 b  4 bytes  (param)
+    %0 = const 400
+    %1 = local #1
+    %2 = load [%1] :4
+    %3 = add %0, %2
+    %4 = local #2
+    %5 = load [%4] :4
+    %6 = add %3, %5
+            ret %6
+
+function main
+  #0 d  8 bytes
+  #1 p  8 bytes
+            call __global_init()
+    %0 = local #0
+    %1 = global Derived__vtable
+    %2 = field %0 +0
+            store [%2] <- %1 :8
+    %3 = local #0
+    %4 = local #1
+            store [%4] <- %3 :8
+    %5 = local #1
+    %6 = load [%5] :8
+    %7 = const 1
+    %8 = vtable [%6] slot 0
+    %9 = call.ind %8(%6, %7)
+            call print_int(%9)
+            call print_line()
+    %10 = local #1
+    %11 = load [%10] :8
+    %12 = const 1
+    %13 = const 2
+    %14 = vtable [%11] slot 1
+    %15 = call.ind %14(%11, %12, %13)
+            call print_int(%15)
+            call print_line()
+    %16 = const 0
+    %17 = local #0
+            call Base__dtor(%17)
+            ret %16
+
+function __global_init
+            ret

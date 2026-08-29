@@ -1,0 +1,21 @@
+48_err_reserved_keywords.cpp:1:1: error: templates are not supported in this version
+48_err_reserved_keywords.cpp:2:1: error: namespaces are not supported in this version
+48_err_reserved_keywords.cpp:3:11: error: 'static' is not supported in this version
+48_err_reserved_keywords.cpp:3:32: error: a friend class is not supported in this version; name the function
+48_err_reserved_keywords.cpp:5:3: error: exceptions are not supported in this version
+48_err_reserved_keywords.cpp:6:3: error: 'static' is not supported in this version
+48_err_reserved_keywords.cpp:7:3: error: 'goto' is not supported in this version
+48_err_reserved_keywords.cpp:8:11: error: 'sizeof' is not supported in this version
+48_err_reserved_keywords.cpp:9:3: error: 'enum' is not supported in this version
+48_err_reserved_keywords.cpp:10:3: error: 'union' is not supported in this version
+48_err_reserved_keywords.cpp:11:3: error: 'typedef' is not supported in this version
+48_err_reserved_keywords.cpp:12:3: error: named casts are not supported in this version; use (T)value
+48_err_reserved_keywords.cpp:13:7: error: labels are not supported in this version
+Class A
+Function main returns int
+  Block
+    Var n : int
+    Return
+      0
+
+class A  size=1 align=1

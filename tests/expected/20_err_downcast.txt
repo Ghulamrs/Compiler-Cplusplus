@@ -1,0 +1,25 @@
+20_err_downcast.cpp:6:12: error: cannot initialise 'Derived* dp' from an expression of type Base*
+Class Base
+  Field public b : int
+Class Derived : public Base
+  Field public d : int
+Function main returns int
+  Block
+    Var base : class Base
+    Var bp : pointer to class Base
+      init:
+        Unary &
+          base
+    Var dp : pointer to class Derived
+      init:
+        bp
+    Return
+      Member ->d
+        dp
+
+class Base  size=4 align=4
+    +0  b (4 bytes)
+
+class Derived  size=8 align=4
+    +0  b (4 bytes)  inherited from Base
+    +4  d (4 bytes)

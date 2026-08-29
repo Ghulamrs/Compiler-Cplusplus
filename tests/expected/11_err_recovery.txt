@@ -1,0 +1,14 @@
+11_err_recovery.cpp:2:11: error: expected an expression, found ';'
+11_err_recovery.cpp:4:15: error: expected an expression, found ';'
+Function main returns int
+  Block
+    Var a : int
+    Var b : int
+      init:
+        2
+    Var c : int
+      init:
+        Binary +
+          b
+    Return
+      b

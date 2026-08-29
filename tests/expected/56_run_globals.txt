@@ -1,0 +1,170 @@
+Function print_int returns void
+  param:
+    Var n : int
+Function print_line returns void
+Var g : int
+  init:
+    5
+Var h : int
+  init:
+    7
+Class C
+  Field public v : int
+  Constructor public C::C
+    Block
+      ExprStmt
+        Binary =
+          v
+          42
+  Method public virtual C::get returns int
+    Block
+      Return
+        v
+  Destructor public virtual C::~C
+    Block
+Var gc : class C
+Function main returns int
+  Block
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          g
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          h
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Binary =
+        g
+        Binary +
+          g
+          h
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          g
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Member .v
+            gc
+    ExprStmt
+      Call
+        print_line
+    Var p : pointer to class C
+      init:
+        Unary &
+          gc
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member ->get
+              p
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+class C  size=16 align=8  [has vptr]
+     +0  __vptr (8 bytes)
+    +8  v (4 bytes)
+    vtable[0] = C::get
+    vtable[1] = C::~C
+    construct: set vptr -> field v -> C() body
+    destroy:   ~C() body -> field v -> reset vptr
+
+global g  4 bytes
+global h  4 bytes
+global gc  16 bytes
+
+vtable C__vtable
+    [0] C__get$v
+    [1] C__dtor
+
+function C__ctor$v   ; C::C
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = global C__vtable
+    %3 = field %1 +0
+            store [%3] <- %2 :8
+    %4 = const 42
+    %5 = local #0
+    %6 = load [%5] :8
+    %7 = field %6 +8
+            store [%7] <- %4 :4
+            ret
+
+function C__get$v   ; C::get
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +8
+    %3 = load [%2] :4
+            ret %3
+
+function C__dtor   ; C::~C
+  #0 this  8 bytes  (param)
+            ret
+
+function main
+  #0 p  8 bytes
+            call __global_init()
+    %0 = global g
+    %1 = load [%0] :4
+            call print_int(%1)
+    %2 = global h
+    %3 = load [%2] :4
+            call print_int(%3)
+            call print_line()
+    %4 = global g
+    %5 = load [%4] :4
+    %6 = global h
+    %7 = load [%6] :4
+    %8 = add %5, %7
+    %9 = global g
+            store [%9] <- %8 :4
+    %10 = global g
+    %11 = load [%10] :4
+            call print_int(%11)
+            call print_line()
+    %12 = global gc
+    %13 = field %12 +8
+    %14 = load [%13] :4
+            call print_int(%14)
+            call print_line()
+    %15 = global gc
+    %16 = local #0
+            store [%16] <- %15 :8
+    %17 = local #0
+    %18 = load [%17] :8
+    %19 = vtable [%18] slot 0
+    %20 = call.ind %19(%18)
+            call print_int(%20)
+            call print_line()
+    %21 = const 0
+            ret %21
+
+function __global_init
+    %0 = global g
+    %1 = const 5
+            store [%0] <- %1 :4
+    %2 = global h
+    %3 = const 7
+            store [%2] <- %3 :4
+    %4 = global gc
+            call C__ctor$v(%4)
+            ret

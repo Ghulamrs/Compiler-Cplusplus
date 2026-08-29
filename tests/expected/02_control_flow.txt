@@ -1,0 +1,158 @@
+Function main returns int
+  Block
+    Var total : int
+      init:
+        0
+    Var i : int
+      init:
+        0
+    While
+      Binary <
+        i
+        10
+      Block
+        If
+          Binary ==
+            Binary %
+              i
+              2
+            0
+        then:
+          Block
+            ExprStmt
+              Binary =
+                total
+                Binary +
+                  total
+                  i
+        else:
+          Block
+            ExprStmt
+              Binary =
+                total
+                Binary -
+                  total
+                  i
+        ExprStmt
+          Binary =
+            i
+            Binary +
+              i
+              1
+    Block
+      Var j : int
+        init:
+          0
+      For
+        Binary <
+          j
+          3
+        Binary =
+          j
+          Binary +
+            j
+            1
+        Block
+          If
+            Binary ==
+              j
+              2
+          then:
+            Block
+              Break
+          ExprStmt
+            Binary =
+              total
+              Binary +
+                total
+                j
+    Return
+      total
+
+function main
+  #0 total  4 bytes
+  #1 i  4 bytes
+  #2 j  4 bytes
+            call __global_init()
+    %0 = const 0
+    %1 = local #0
+            store [%1] <- %0 :4
+    %2 = const 0
+    %3 = local #1
+            store [%3] <- %2 :4
+    L0:
+    %4 = local #1
+    %5 = load [%4] :4
+    %6 = const 10
+    %7 = cmp.lt %5, %6
+            brz %7 L1
+    %8 = local #1
+    %9 = load [%8] :4
+    %10 = const 2
+    %11 = mod %9, %10
+    %12 = const 0
+    %13 = cmp.eq %11, %12
+            brz %13 L2
+    %14 = local #0
+    %15 = load [%14] :4
+    %16 = local #1
+    %17 = load [%16] :4
+    %18 = add %15, %17
+    %19 = local #0
+            store [%19] <- %18 :4
+            jump L3
+    L2:
+    %20 = local #0
+    %21 = load [%20] :4
+    %22 = local #1
+    %23 = load [%22] :4
+    %24 = sub %21, %23
+    %25 = local #0
+            store [%25] <- %24 :4
+    L3:
+    %26 = local #1
+    %27 = load [%26] :4
+    %28 = const 1
+    %29 = add %27, %28
+    %30 = local #1
+            store [%30] <- %29 :4
+            jump L0
+    L1:
+    %31 = const 0
+    %32 = local #2
+            store [%32] <- %31 :4
+    L4:
+    %33 = local #2
+    %34 = load [%33] :4
+    %35 = const 3
+    %36 = cmp.lt %34, %35
+            brz %36 L6
+    %37 = local #2
+    %38 = load [%37] :4
+    %39 = const 2
+    %40 = cmp.eq %38, %39
+            brz %40 L7
+            jump L6
+    L7:
+    %41 = local #0
+    %42 = load [%41] :4
+    %43 = local #2
+    %44 = load [%43] :4
+    %45 = add %42, %44
+    %46 = local #0
+            store [%46] <- %45 :4
+    L5:
+    %47 = local #2
+    %48 = load [%47] :4
+    %49 = const 1
+    %50 = add %48, %49
+    %51 = local #2
+            store [%51] <- %50 :4
+            jump L4
+    L6:
+    %52 = local #0
+    %53 = load [%52] :4
+            ret %53
+
+function __global_init
+            ret

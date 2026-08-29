@@ -1,0 +1,7 @@
+Hello, world!
+42 3.5
+a = 7, a*2 = 14
+X
+1
+area 12.5664
+to cerr

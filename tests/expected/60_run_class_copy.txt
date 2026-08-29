@@ -1,0 +1,179 @@
+Function print_int returns void
+  param:
+    Var n : int
+Function print_line returns void
+Class P
+  Field public a : int
+  Field public b : int
+  Field public c : int
+  Constructor public P::P
+    Block
+      ExprStmt
+        Binary =
+          a
+          1
+      ExprStmt
+        Binary =
+          b
+          2
+      ExprStmt
+        Binary =
+          c
+          3
+Function main returns int
+  Block
+    Var x : class P
+    ExprStmt
+      Binary =
+        Member .a
+          x
+        10
+    ExprStmt
+      Binary =
+        Member .b
+          x
+        20
+    ExprStmt
+      Binary =
+        Member .c
+          x
+        30
+    Var y : class P
+    ExprStmt
+      Binary =
+        y
+        x
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Member .a
+            y
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Member .b
+            y
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Member .c
+            y
+    ExprStmt
+      Call
+        print_line
+    Var z : class P
+      init:
+        x
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Member .a
+            z
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Member .b
+            z
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Member .c
+            z
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+class P  size=12 align=4
+    +0  a (4 bytes)
+    +4  b (4 bytes)
+    +8  c (4 bytes)
+    construct: field a -> field b -> field c -> P() body
+    destroy:   ~P() body -> field c -> field b -> field a
+
+function P__ctor$v   ; P::P
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = const 1
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+            store [%5] <- %2 :4
+    %6 = const 2
+    %7 = local #0
+    %8 = load [%7] :8
+    %9 = field %8 +4
+            store [%9] <- %6 :4
+    %10 = const 3
+    %11 = local #0
+    %12 = load [%11] :8
+    %13 = field %12 +8
+            store [%13] <- %10 :4
+            ret
+
+function main
+  #0 x  12 bytes
+  #1 y  12 bytes
+  #2 z  12 bytes
+            call __global_init()
+    %0 = local #0
+            call P__ctor$v(%0)
+    %1 = const 10
+    %2 = local #0
+    %3 = field %2 +0
+            store [%3] <- %1 :4
+    %4 = const 20
+    %5 = local #0
+    %6 = field %5 +4
+            store [%6] <- %4 :4
+    %7 = const 30
+    %8 = local #0
+    %9 = field %8 +8
+            store [%9] <- %7 :4
+    %10 = local #1
+            call P__ctor$v(%10)
+    %11 = local #0
+    %12 = local #1
+            memcpy [%12] <- [%11] :12
+    %13 = local #1
+    %14 = field %13 +0
+    %15 = load [%14] :4
+            call print_int(%15)
+    %16 = local #1
+    %17 = field %16 +4
+    %18 = load [%17] :4
+            call print_int(%18)
+    %19 = local #1
+    %20 = field %19 +8
+    %21 = load [%20] :4
+            call print_int(%21)
+            call print_line()
+    %22 = local #0
+    %23 = local #2
+            memcpy [%23] <- [%22] :12
+    %24 = local #2
+    %25 = field %24 +0
+    %26 = load [%25] :4
+            call print_int(%26)
+    %27 = local #2
+    %28 = field %27 +4
+    %29 = load [%28] :4
+            call print_int(%29)
+    %30 = local #2
+    %31 = field %30 +8
+    %32 = load [%31] :4
+            call print_int(%32)
+            call print_line()
+    %33 = const 0
+            ret %33
+
+function __global_init
+            ret

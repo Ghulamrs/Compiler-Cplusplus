@@ -1,0 +1,89 @@
+45_err_new_features.cpp:9:10: error: an array must have at least one element
+45_err_new_features.cpp:6:5: error: no member 'zzz' of class 'P' matches this definition
+45_err_new_features.cpp:7:5: error: 'Q' is not a class
+45_err_new_features.cpp:5:39: error: 'P::m' is declared twice with the same parameters
+45_err_new_features.cpp:2:5: error: function 'f' is already defined
+45_err_new_features.cpp:4:8: error: 'g' cannot be overloaded on return type alone
+45_err_new_features.cpp:11:5: error: left side of assignment is not an lvalue
+45_err_new_features.cpp:12:4: error: '++ (postfix)' needs an lvalue
+45_err_new_features.cpp:14:6: error: '++ (postfix)' needs an lvalue
+45_err_new_features.cpp:15:3: error: a switch needs an integer subject, not double
+45_err_new_features.cpp:16:31: error: duplicate case label
+45_err_new_features.cpp:16:62: error: a switch may have only one 'default'
+45_err_new_features.cpp:17:3: error: a case label outside a switch
+Function f returns int
+  param:
+    Var a : int
+  Block
+    Return
+      a
+Function f returns int
+  param:
+    Var b : int
+  Block
+    Return
+      b
+Function g returns double
+  param:
+    Var a : int
+  Block
+    Return
+      a
+Function g returns int
+  param:
+    Var a : int
+  Block
+    Return
+      a
+Class P
+  Field public x : int
+  Method public P::m returns int
+  Method public P::m returns int
+Method public P::zzz returns int
+  Block
+    Return
+      1
+Method public Q::m returns int
+  Block
+    Return
+      1
+Function main returns int
+  Block
+    Var a : array[1] of int
+    Var b : array[3] of int
+    ExprStmt
+      Binary =
+        b
+        0
+    ExprStmt
+      Unary ++ (postfix)
+        1
+    Var c : int
+      init:
+        5
+    ExprStmt
+      Unary ++ (postfix)
+        Unary ++ (postfix)
+          c
+    Switch
+      1.5 : double
+      Block
+        case 1:
+        Break
+    Switch
+      1
+      Block
+        case 1:
+        Break
+        case 1:
+        Break
+        default:
+        Break
+        default:
+        Break
+    case 9:
+    Return
+      0
+
+class P  size=4 align=4
+    +0  x (4 bytes)

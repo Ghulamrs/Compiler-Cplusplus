@@ -1,0 +1,183 @@
+Function print_int returns void
+  param:
+    Var n : int
+Function print_string returns void
+  param:
+    Var s : pointer to char
+Function print_line returns void
+Class Zed
+  Field public v : int
+  Constructor public Zed::Zed
+    Block
+      ExprStmt
+        Binary =
+          v
+          42
+  Destructor public Zed::~Zed
+    Block
+      ExprStmt
+        Call
+          print_string
+          arg 0:
+            "~Zed "
+Class Inner
+  Field public w : int
+  Constructor public Inner::Inner
+    Block
+      ExprStmt
+        Binary =
+          w
+          7
+  Destructor public Inner::~Inner
+    Block
+      ExprStmt
+        Call
+          print_string
+          arg 0:
+            "~Inner "
+Class Wrap
+  Field public in : class Inner
+  Field public z : class Zed
+  Constructor public Wrap::Wrap
+    Block
+  Destructor public Wrap::~Wrap
+    Block
+      ExprStmt
+        Call
+          print_string
+          arg 0:
+            "~Wrap "
+Function main returns int
+  Block
+    Block
+      Var w : class Wrap
+      ExprStmt
+        Call
+          print_int
+          arg 0:
+            Member .w
+              Member .in
+                w
+      ExprStmt
+        Call
+          print_int
+          arg 0:
+            Member .v
+              Member .z
+                w
+      ExprStmt
+        Call
+          print_line
+      [on exit: destroy w]
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+class Inner  size=4 align=4
+    +0  w (4 bytes)
+    construct: field w -> Inner() body
+    destroy:   ~Inner() body -> field w
+
+class Wrap  size=8 align=4
+    +0  in (4 bytes)
+    +4  z (4 bytes)
+    construct: field in -> field z -> Wrap() body
+    destroy:   ~Wrap() body -> field z -> field in
+
+class Zed  size=4 align=4
+    +0  v (4 bytes)
+    construct: field v -> Zed() body
+    destroy:   ~Zed() body -> field v
+
+string str0  "~Zed "
+string str1  "~Inner "
+string str2  "~Wrap "
+
+function Zed__ctor$v   ; Zed::Zed
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = const 42
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+            store [%5] <- %2 :4
+            ret
+
+function Zed__dtor   ; Zed::~Zed
+  #0 this  8 bytes  (param)
+    %0 = straddr str0
+            call print_string(%0)
+            ret
+
+function Inner__ctor$v   ; Inner::Inner
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = const 7
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+            store [%5] <- %2 :4
+            ret
+
+function Inner__dtor   ; Inner::~Inner
+  #0 this  8 bytes  (param)
+    %0 = straddr str1
+            call print_string(%0)
+            ret
+
+function Wrap__ctor$v   ; Wrap::Wrap
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = local #0
+    %3 = load [%2] :8
+    %4 = field %3 +0
+            call Inner__ctor$v(%4)
+    %5 = local #0
+    %6 = load [%5] :8
+    %7 = field %6 +4
+            call Zed__ctor$v(%7)
+            ret
+
+function Wrap__dtor   ; Wrap::~Wrap
+  #0 this  8 bytes  (param)
+    %0 = straddr str2
+            call print_string(%0)
+    %1 = local #0
+    %2 = load [%1] :8
+    %3 = field %2 +4
+            call Zed__dtor(%3)
+    %4 = local #0
+    %5 = load [%4] :8
+    %6 = field %5 +0
+            call Inner__dtor(%6)
+            ret
+
+function main
+  #0 w  8 bytes
+            call __global_init()
+    %0 = local #0
+            call Wrap__ctor$v(%0)
+    %1 = local #0
+    %2 = field %1 +0
+    %3 = field %2 +0
+    %4 = load [%3] :4
+            call print_int(%4)
+    %5 = local #0
+    %6 = field %5 +4
+    %7 = field %6 +0
+    %8 = load [%7] :4
+            call print_int(%8)
+            call print_line()
+    %9 = local #0
+            call Wrap__dtor(%9)
+            call print_line()
+    %10 = const 0
+            ret %10
+
+function __global_init
+            ret

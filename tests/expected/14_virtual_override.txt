@@ -1,0 +1,196 @@
+Class Shape
+  Field public side : int
+  Method public virtual Shape::area returns int
+    Block
+      Return
+        0
+  Method public virtual Shape::perimeter returns int
+    Block
+      Return
+        0
+  Method public Shape::name returns int
+    Block
+      Return
+        1
+Class Square : public Shape
+  Method public virtual overriding Square::area returns int
+    Block
+      Return
+        Binary *
+          side
+          side
+Class Cube : public Square
+  Method public virtual overriding Cube::area returns int
+    Block
+      Return
+        Binary *
+          Binary *
+            side
+            side
+          side
+  Method public virtual Cube::volume returns int
+    Block
+      Return
+        Binary *
+          Binary *
+            side
+            side
+          side
+Function main returns int
+  Block
+    Var c : class Cube
+    ExprStmt
+      Binary =
+        Member .side
+          c
+        3
+    Var s : pointer to class Shape
+      init:
+        Unary &
+          c
+    Return
+      Binary +
+        Binary +
+          Call
+            Member ->area
+              s
+          Call
+            Member ->perimeter
+              s
+        Call
+          Member .volume
+            c
+
+class Cube  size=16 align=8  [has vptr]
+     +0  __vptr (8 bytes)
+    +8  side (4 bytes)  inherited from Shape
+    vtable[0] = Cube::area
+    vtable[1] = Shape::perimeter
+    vtable[2] = Cube::volume
+    construct: base Square -> set vptr
+    destroy:   reset vptr -> base Square
+
+class Shape  size=16 align=8  [has vptr]
+     +0  __vptr (8 bytes)
+    +8  side (4 bytes)
+    vtable[0] = Shape::area
+    vtable[1] = Shape::perimeter
+    construct: set vptr -> field side
+    destroy:   field side -> reset vptr
+
+class Square  size=16 align=8  [has vptr]
+     +0  __vptr (8 bytes)
+    +8  side (4 bytes)  inherited from Shape
+    vtable[0] = Square::area
+    vtable[1] = Shape::perimeter
+    construct: base Shape -> set vptr
+    destroy:   reset vptr -> base Shape
+
+vtable Cube__vtable
+    [0] Cube__area$v
+    [1] Shape__perimeter$v
+    [2] Cube__volume$v
+
+vtable Shape__vtable
+    [0] Shape__area$v
+    [1] Shape__perimeter$v
+
+vtable Square__vtable
+    [0] Square__area$v
+    [1] Shape__perimeter$v
+
+function Shape__area$v   ; Shape::area
+  #0 this  8 bytes  (param)
+    %0 = const 0
+            ret %0
+
+function Shape__perimeter$v   ; Shape::perimeter
+  #0 this  8 bytes  (param)
+    %0 = const 0
+            ret %0
+
+function Shape__name$v   ; Shape::name
+  #0 this  8 bytes  (param)
+    %0 = const 1
+            ret %0
+
+function Square__area$v   ; Square::area
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +8
+    %3 = load [%2] :4
+    %4 = local #0
+    %5 = load [%4] :8
+    %6 = field %5 +8
+    %7 = load [%6] :4
+    %8 = mul %3, %7
+            ret %8
+
+function Cube__area$v   ; Cube::area
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +8
+    %3 = load [%2] :4
+    %4 = local #0
+    %5 = load [%4] :8
+    %6 = field %5 +8
+    %7 = load [%6] :4
+    %8 = mul %3, %7
+    %9 = local #0
+    %10 = load [%9] :8
+    %11 = field %10 +8
+    %12 = load [%11] :4
+    %13 = mul %8, %12
+            ret %13
+
+function Cube__volume$v   ; Cube::volume
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +8
+    %3 = load [%2] :4
+    %4 = local #0
+    %5 = load [%4] :8
+    %6 = field %5 +8
+    %7 = load [%6] :4
+    %8 = mul %3, %7
+    %9 = local #0
+    %10 = load [%9] :8
+    %11 = field %10 +8
+    %12 = load [%11] :4
+    %13 = mul %8, %12
+            ret %13
+
+function main
+  #0 c  16 bytes
+  #1 s  8 bytes
+            call __global_init()
+    %0 = local #0
+    %1 = global Cube__vtable
+    %2 = field %0 +0
+            store [%2] <- %1 :8
+    %3 = const 3
+    %4 = local #0
+    %5 = field %4 +8
+            store [%5] <- %3 :4
+    %6 = local #0
+    %7 = local #1
+            store [%7] <- %6 :8
+    %8 = local #1
+    %9 = load [%8] :8
+    %10 = vtable [%9] slot 0
+    %11 = call.ind %10(%9)
+    %12 = local #1
+    %13 = load [%12] :8
+    %14 = vtable [%13] slot 1
+    %15 = call.ind %14(%13)
+    %16 = add %11, %15
+    %17 = local #0
+    %18 = call Cube__volume$v(%17)
+    %19 = add %16, %18
+            ret %19
+
+function __global_init
+            ret

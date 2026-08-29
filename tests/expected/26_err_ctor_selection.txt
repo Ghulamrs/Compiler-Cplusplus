@@ -1,0 +1,33 @@
+26_err_ctor_selection.cpp:7:5: error: class 'P' has no constructor taking 0 argument(s), needed for the declaration of 'p'
+26_err_ctor_selection.cpp:8:5: error: class 'P' has no constructor taking 2 argument(s), needed for the declaration of 'q'
+26_err_ctor_selection.cpp:9:10: error: class 'P' has no constructor taking 0 argument(s), needed for 'new'
+Class P
+  Field public x : int
+  Constructor public P::P
+    param:
+      Var a : int
+    init member x
+      a
+    Block
+Function main returns int
+  Block
+    Var p : class P
+    Var q : class P
+      construct with 2 argument(s):
+        1
+        2
+    Var r : pointer to class P
+      init:
+        New class P
+    Var s : pointer to class P
+      init:
+        New class P
+          1
+    Return
+      Member ->x
+        s
+
+class P  size=4 align=4
+    +0  x (4 bytes)
+    construct: field x -> P() body
+    destroy:   ~P() body -> field x

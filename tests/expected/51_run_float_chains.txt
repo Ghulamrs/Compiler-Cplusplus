@@ -1,0 +1,148 @@
+Function print_double returns void
+  param:
+    Var d : double
+Function print_line returns void
+Function main returns int
+  Block
+    Var a : double
+      init:
+        2 : double
+    ExprStmt
+      Call
+        print_double
+        arg 0:
+          Binary *
+            Binary *
+              a
+              a
+            a
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_double
+        arg 0:
+          Binary +
+            Binary +
+              1.5 : double
+              2.5 : double
+            3 : double
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_double
+        arg 0:
+          Binary /
+            Binary /
+              10 : double
+              2 : double
+            2.5 : double
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_double
+        arg 0:
+          Binary +
+            1 : double
+            Binary *
+              2 : double
+              3 : double
+    ExprStmt
+      Call
+        print_line
+    Var f : float
+      init:
+        1.5 : float
+    ExprStmt
+      Call
+        print_double
+        arg 0:
+          Binary *
+            Binary *
+              f
+              f
+            2 : double
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_double
+        arg 0:
+          Unary -
+            Binary *
+              1.5 : double
+              2 : double
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+function main
+  #0 a  8 bytes
+  #1 f  4 bytes
+            call __global_init()
+    %0 = fconst 2
+    %1 = local #0
+            store [%1] <- %0 :8f
+    %2 = local #0
+    %3 = load [%2] :8f
+    %4 = local #0
+    %5 = load [%4] :8f
+    %6 = fmul %3, %5
+    %7 = local #0
+    %8 = load [%7] :8f
+    %9 = fmul %6, %8
+            call print_double(%9)
+            call print_line()
+    %10 = fconst 1.5
+    %11 = fconst 2.5
+    %12 = fadd %10, %11
+    %13 = fconst 3
+    %14 = fadd %12, %13
+            call print_double(%14)
+            call print_line()
+    %15 = fconst 10
+    %16 = fconst 2
+    %17 = fdiv %15, %16
+    %18 = fconst 2.5
+    %19 = fdiv %17, %18
+            call print_double(%19)
+            call print_line()
+    %20 = fconst 1
+    %21 = fconst 2
+    %22 = fconst 3
+    %23 = fmul %21, %22
+    %24 = fadd %20, %23
+            call print_double(%24)
+            call print_line()
+    %25 = fconst 1.5
+    %26 = local #1
+            store [%26] <- %25 :4f
+    %27 = local #1
+    %28 = load [%27] :4f
+    %29 = local #1
+    %30 = load [%29] :4f
+    %31 = fmul %28, %30
+    %32 = fconst 2
+    %33 = fresize %31 :8
+    %34 = fmul %33, %32
+            call print_double(%34)
+            call print_line()
+    %35 = fconst 1.5
+    %36 = fconst 2
+    %37 = fmul %35, %36
+    %38 = fneg %37
+            call print_double(%38)
+            call print_line()
+    %39 = const 0
+            ret %39
+
+function __global_init
+            ret

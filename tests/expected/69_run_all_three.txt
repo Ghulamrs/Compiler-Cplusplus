@@ -1,0 +1,616 @@
+Function sqrt returns double
+  param:
+    Var x : double
+Function pow returns double
+  param:
+    Var b : double
+  param:
+    Var e : double
+Function print_double returns void
+  param:
+    Var d : double
+Function print_int returns void
+  param:
+    Var n : int
+Function print_string returns void
+  param:
+    Var s : pointer to char
+Function print_line returns void
+Class Vec
+  Field public x : double
+  Field public y : double
+  Constructor public Vec::Vec
+    Block
+      ExprStmt
+        Binary =
+          x
+          0 : double
+      ExprStmt
+        Binary =
+          y
+          0 : double
+  Method public Vec::operator+ returns class Vec
+    param:
+      Var o : class Vec
+    Block
+      Var r : class Vec
+      ExprStmt
+        Binary =
+          Member .x
+            r
+          Binary +
+            x
+            Member .x
+              o
+      ExprStmt
+        Binary =
+          Member .y
+            r
+          Binary +
+            y
+            Member .y
+              o
+      Return
+        r
+  Method public Vec::operator* returns class Vec
+    param:
+      Var k : double
+    Block
+      Var r : class Vec
+      ExprStmt
+        Binary =
+          Member .x
+            r
+          Binary *
+            x
+            k
+      ExprStmt
+        Binary =
+          Member .y
+            r
+          Binary *
+            y
+            k
+      Return
+        r
+  Method public Vec::operator== returns bool
+    param:
+      Var o : class Vec
+    Block
+      Return
+        Binary &&
+          Binary ==
+            x
+            Member .x
+              o
+          Binary ==
+            y
+            Member .y
+              o
+  Method public Vec::length returns double
+    Block
+      Return
+        Call
+          sqrt
+          arg 0:
+            Binary +
+              Call
+                pow
+                arg 0:
+                  x
+                arg 1:
+                  2 : double
+              Call
+                pow
+                arg 0:
+                  y
+                arg 1:
+                  2 : double
+Class Circle
+  Field public centre : class Vec
+  Field public r : double
+  Constructor public Circle::Circle
+    Block
+      ExprStmt
+        Binary =
+          r
+          1 : double
+  Method public Circle::area returns double
+    Block
+      Return
+        Binary *
+          3.14159 : double
+          Call
+            pow
+            arg 0:
+              r
+            arg 1:
+              2 : double
+Function main returns int
+  Block
+    Var a : class Vec
+    ExprStmt
+      Binary =
+        Member .x
+          a
+        3 : double
+    ExprStmt
+      Binary =
+        Member .y
+          a
+        4 : double
+    Var b : class Vec
+    ExprStmt
+      Binary =
+        Member .x
+          b
+        1 : double
+    ExprStmt
+      Binary =
+        Member .y
+          b
+        2 : double
+    ExprStmt
+      Call
+        print_double
+        arg 0:
+          Call
+            Member .length
+              a
+    ExprStmt
+      Call
+        print_line
+    Var c : class Vec
+      init:
+        Binary +
+          a
+          b
+    ExprStmt
+      Call
+        print_double
+        arg 0:
+          Member .x
+            c
+    ExprStmt
+      Call
+        print_double
+        arg 0:
+          Member .y
+            c
+    ExprStmt
+      Call
+        print_line
+    Var d : class Vec
+      init:
+        Binary *
+          Binary +
+            a
+            b
+          2 : double
+    ExprStmt
+      Call
+        print_double
+        arg 0:
+          Member .x
+            d
+    ExprStmt
+      Call
+        print_double
+        arg 0:
+          Member .y
+            d
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Binary ==
+            a
+            b
+    ExprStmt
+      Call
+        print_line
+    Var circles : array[3] of class Circle
+    Block
+      Var i : int
+        init:
+          0
+      For
+        Binary <
+          i
+          3
+        Unary ++ (postfix)
+          i
+        Block
+          ExprStmt
+            Binary =
+              Member .r
+                Index
+                  circles
+                  i
+              Binary +
+                i
+                1
+    Block
+      Var i : int
+        init:
+          0
+      For
+        Binary <
+          i
+          3
+        Unary ++ (postfix)
+          i
+        Block
+          ExprStmt
+            Call
+              print_double
+              arg 0:
+                Call
+                  Member .area
+                    Index
+                      circles
+                      i
+          ExprStmt
+            Call
+              print_line
+    ExprStmt
+      Binary =
+        Member .centre
+          Index
+            circles
+            1
+        a
+    ExprStmt
+      Call
+        print_double
+        arg 0:
+          Call
+            Member .length
+              Member .centre
+                Index
+                  circles
+                  1
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+class Circle  size=24 align=8
+    +0  centre (16 bytes)
+    +16  r (8 bytes)
+    construct: field centre -> field r -> Circle() body
+    destroy:   ~Circle() body -> field r -> field centre
+
+class Vec  size=16 align=8
+    +0  x (8 bytes)
+    +8  y (8 bytes)
+    construct: field x -> field y -> Vec() body
+    destroy:   ~Vec() body -> field y -> field x
+
+function Vec__ctor$v   ; Vec::Vec
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = fconst 0
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+            store [%5] <- %2 :8f
+    %6 = fconst 0
+    %7 = local #0
+    %8 = load [%7] :8
+    %9 = field %8 +8
+            store [%9] <- %6 :8f
+            ret
+
+function Vec__operator+$3Vec   ; Vec::operator+
+  #0 this  8 bytes  (param)
+  #1 __ret  8 bytes  (param)
+  #2 o  16 bytes  (param)
+  #3 r  16 bytes
+    %0 = local #3
+            call Vec__ctor$v(%0)
+    %1 = local #0
+    %2 = load [%1] :8
+    %3 = field %2 +0
+    %4 = load [%3] :8f
+    %5 = local #2
+    %6 = field %5 +0
+    %7 = load [%6] :8f
+    %8 = fadd %4, %7
+    %9 = local #3
+    %10 = field %9 +0
+            store [%10] <- %8 :8f
+    %11 = local #0
+    %12 = load [%11] :8
+    %13 = field %12 +8
+    %14 = load [%13] :8f
+    %15 = local #2
+    %16 = field %15 +8
+    %17 = load [%16] :8f
+    %18 = fadd %14, %17
+    %19 = local #3
+    %20 = field %19 +8
+            store [%20] <- %18 :8f
+    %21 = local #1
+    %22 = load [%21] :8
+    %23 = local #3
+            memcpy [%22] <- [%23] :16
+            ret %22
+
+function Vec__operator*$d   ; Vec::operator*
+  #0 this  8 bytes  (param)
+  #1 __ret  8 bytes  (param)
+  #2 k  8 bytes  (param)
+  #3 r  16 bytes
+    %0 = local #3
+            call Vec__ctor$v(%0)
+    %1 = local #0
+    %2 = load [%1] :8
+    %3 = field %2 +0
+    %4 = load [%3] :8f
+    %5 = local #2
+    %6 = load [%5] :8f
+    %7 = fmul %4, %6
+    %8 = local #3
+    %9 = field %8 +0
+            store [%9] <- %7 :8f
+    %10 = local #0
+    %11 = load [%10] :8
+    %12 = field %11 +8
+    %13 = load [%12] :8f
+    %14 = local #2
+    %15 = load [%14] :8f
+    %16 = fmul %13, %15
+    %17 = local #3
+    %18 = field %17 +8
+            store [%18] <- %16 :8f
+    %19 = local #1
+    %20 = load [%19] :8
+    %21 = local #3
+            memcpy [%20] <- [%21] :16
+            ret %20
+
+function Vec__operator==$3Vec   ; Vec::operator==
+  #0 this  8 bytes  (param)
+  #1 o  16 bytes  (param)
+  #2 __sc  4 bytes
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +0
+    %3 = load [%2] :8f
+    %4 = local #1
+    %5 = field %4 +0
+    %6 = load [%5] :8f
+    %7 = fcmp.eq %3, %6
+    %8 = const 0
+    %9 = cmp.ne %7, %8
+    %10 = local #2
+            store [%10] <- %9 :4
+            brz %9 L0
+    %11 = local #0
+    %12 = load [%11] :8
+    %13 = field %12 +8
+    %14 = load [%13] :8f
+    %15 = local #1
+    %16 = field %15 +8
+    %17 = load [%16] :8f
+    %18 = fcmp.eq %14, %17
+    %19 = const 0
+    %20 = cmp.ne %18, %19
+    %21 = local #2
+            store [%21] <- %20 :4
+    L0:
+    %22 = local #2
+    %23 = load [%22] :4
+            ret %23
+
+function Vec__length$v   ; Vec::length
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +0
+    %3 = load [%2] :8f
+    %4 = fconst 2
+    %5 = call pow(%3, %4)
+    %6 = local #0
+    %7 = load [%6] :8
+    %8 = field %7 +8
+    %9 = load [%8] :8f
+    %10 = fconst 2
+    %11 = call pow(%9, %10)
+    %12 = fadd %5, %11
+    %13 = call sqrt(%12)
+            ret %13
+
+function Circle__ctor$v   ; Circle::Circle
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = local #0
+    %3 = load [%2] :8
+    %4 = field %3 +0
+            call Vec__ctor$v(%4)
+    %5 = fconst 1
+    %6 = local #0
+    %7 = load [%6] :8
+    %8 = field %7 +16
+            store [%8] <- %5 :8f
+            ret
+
+function Circle__area$v   ; Circle::area
+  #0 this  8 bytes  (param)
+    %0 = fconst 3.14159
+    %1 = local #0
+    %2 = load [%1] :8
+    %3 = field %2 +16
+    %4 = load [%3] :8f
+    %5 = fconst 2
+    %6 = call pow(%4, %5)
+    %7 = fmul %0, %6
+            ret %7
+
+function main
+  #0 a  16 bytes
+  #1 b  16 bytes
+  #2 c  16 bytes
+  #3 __result  16 bytes
+  #4 d  16 bytes
+  #5 __result  16 bytes
+  #6 __result  16 bytes
+  #7 circles  72 bytes
+  #8 i  4 bytes
+  #9 i  4 bytes
+            call __global_init()
+    %0 = local #0
+            call Vec__ctor$v(%0)
+    %1 = fconst 3
+    %2 = local #0
+    %3 = field %2 +0
+            store [%3] <- %1 :8f
+    %4 = fconst 4
+    %5 = local #0
+    %6 = field %5 +8
+            store [%6] <- %4 :8f
+    %7 = local #1
+            call Vec__ctor$v(%7)
+    %8 = fconst 1
+    %9 = local #1
+    %10 = field %9 +0
+            store [%10] <- %8 :8f
+    %11 = fconst 2
+    %12 = local #1
+    %13 = field %12 +8
+            store [%13] <- %11 :8f
+    %14 = local #0
+    %15 = call Vec__length$v(%14)
+            call print_double(%15)
+            call print_line()
+    %16 = local #0
+    %17 = local #3
+    %18 = local #1
+    %19 = call Vec__operator+$3Vec(%16, %17, %18)
+    %20 = local #2
+            memcpy [%20] <- [%19] :16
+    %21 = local #2
+    %22 = field %21 +0
+    %23 = load [%22] :8f
+            call print_double(%23)
+    %24 = local #2
+    %25 = field %24 +8
+    %26 = load [%25] :8f
+            call print_double(%26)
+            call print_line()
+    %27 = local #0
+    %28 = local #5
+    %29 = local #1
+    %30 = call Vec__operator+$3Vec(%27, %28, %29)
+    %31 = local #6
+    %32 = fconst 2
+    %33 = call Vec__operator*$d(%30, %31, %32)
+    %34 = local #4
+            memcpy [%34] <- [%33] :16
+    %35 = local #4
+    %36 = field %35 +0
+    %37 = load [%36] :8f
+            call print_double(%37)
+    %38 = local #4
+    %39 = field %38 +8
+    %40 = load [%39] :8f
+            call print_double(%40)
+            call print_line()
+    %41 = local #0
+    %42 = local #1
+    %43 = call Vec__operator==$3Vec(%41, %42)
+    %44 = iresize %43 :4 unsigned
+            call print_int(%44)
+            call print_line()
+    %45 = local #7
+    %46 = field %45 +0
+            call Circle__ctor$v(%46)
+    %47 = field %45 +24
+            call Circle__ctor$v(%47)
+    %48 = field %45 +48
+            call Circle__ctor$v(%48)
+    %49 = const 0
+    %50 = local #8
+            store [%50] <- %49 :4
+    L0:
+    %51 = local #8
+    %52 = load [%51] :4
+    %53 = const 3
+    %54 = cmp.lt %52, %53
+            brz %54 L2
+    %55 = local #8
+    %56 = load [%55] :4
+    %57 = const 1
+    %58 = add %56, %57
+    %59 = itof %58
+    %60 = local #7
+    %61 = local #8
+    %62 = load [%61] :4
+    %63 = const 24
+    %64 = mul %62, %63
+    %65 = add %60, %64
+    %66 = field %65 +16
+            store [%66] <- %59 :8f
+    L1:
+    %67 = local #8
+    %68 = load [%67] :4
+    %69 = const 1
+    %70 = add %68, %69
+            store [%67] <- %70 :4
+            jump L0
+    L2:
+    %71 = const 0
+    %72 = local #9
+            store [%72] <- %71 :4
+    L3:
+    %73 = local #9
+    %74 = load [%73] :4
+    %75 = const 3
+    %76 = cmp.lt %74, %75
+            brz %76 L5
+    %77 = local #7
+    %78 = local #9
+    %79 = load [%78] :4
+    %80 = const 24
+    %81 = mul %79, %80
+    %82 = add %77, %81
+    %83 = call Circle__area$v(%82)
+            call print_double(%83)
+            call print_line()
+    L4:
+    %84 = local #9
+    %85 = load [%84] :4
+    %86 = const 1
+    %87 = add %85, %86
+            store [%84] <- %87 :4
+            jump L3
+    L5:
+    %88 = local #0
+    %89 = local #7
+    %90 = const 1
+    %91 = const 24
+    %92 = mul %90, %91
+    %93 = add %89, %92
+    %94 = field %93 +0
+            memcpy [%94] <- [%88] :16
+    %95 = local #7
+    %96 = const 1
+    %97 = const 24
+    %98 = mul %96, %97
+    %99 = add %95, %98
+    %100 = field %99 +0
+    %101 = call Vec__length$v(%100)
+            call print_double(%101)
+            call print_line()
+    %102 = const 0
+            ret %102
+
+function __global_init
+            ret

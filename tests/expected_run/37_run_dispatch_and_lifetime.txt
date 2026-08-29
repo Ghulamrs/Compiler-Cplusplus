@@ -1,0 +1,4 @@
+virtual through base: 27
+heap dispatch: 16
+delete runs: ~Square ~Shape 
+scope exit runs: ~Cube ~Square ~Shape 

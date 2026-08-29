@@ -1,0 +1,164 @@
+Function print_double returns void
+  param:
+    Var d : double
+Function print_int returns void
+  param:
+    Var n : int
+Function print_line returns void
+Function main returns int
+  Block
+    Var x : double
+      init:
+        2.5 : double
+    Var i : int
+      init:
+        3
+    ExprStmt
+      Call
+        print_double
+        arg 0:
+          Binary *
+            x
+            Unary ++ (postfix)
+              i
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          i
+    ExprStmt
+      Call
+        print_line
+    Var j : int
+      init:
+        4
+    Var z : double
+      init:
+        Unary ++ (postfix)
+          j
+    ExprStmt
+      Call
+        print_double
+        arg 0:
+          z
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          j
+    ExprStmt
+      Call
+        print_line
+    Var y : double
+      init:
+        1.5 : double
+    ExprStmt
+      Call
+        print_double
+        arg 0:
+          Unary ++ (prefix)
+            y
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_double
+        arg 0:
+          Unary -- (postfix)
+            y
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_double
+        arg 0:
+          y
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+function main
+  #0 x  8 bytes
+  #1 i  4 bytes
+  #2 j  4 bytes
+  #3 z  8 bytes
+  #4 y  8 bytes
+            call __global_init()
+    %0 = fconst 2.5
+    %1 = local #0
+            store [%1] <- %0 :8f
+    %2 = const 3
+    %3 = local #1
+            store [%3] <- %2 :4
+    %4 = local #0
+    %5 = load [%4] :8f
+    %6 = local #1
+    %7 = load [%6] :4
+    %8 = const 1
+    %9 = add %7, %8
+            store [%6] <- %9 :4
+    %10 = itof %7
+    %11 = fmul %5, %10
+            call print_double(%11)
+            call print_line()
+    %12 = local #1
+    %13 = load [%12] :4
+            call print_int(%13)
+            call print_line()
+    %14 = const 4
+    %15 = local #2
+            store [%15] <- %14 :4
+    %16 = local #2
+    %17 = load [%16] :4
+    %18 = const 1
+    %19 = add %17, %18
+            store [%16] <- %19 :4
+    %20 = itof %17
+    %21 = local #3
+            store [%21] <- %20 :8f
+    %22 = local #3
+    %23 = load [%22] :8f
+            call print_double(%23)
+            call print_line()
+    %24 = local #2
+    %25 = load [%24] :4
+            call print_int(%25)
+            call print_line()
+    %26 = fconst 1.5
+    %27 = local #4
+            store [%27] <- %26 :8f
+    %28 = local #4
+    %29 = load [%28] :8f
+    %30 = const 1
+    %31 = itof %30
+    %32 = fadd %29, %31
+            store [%28] <- %32 :8f
+            call print_double(%32)
+            call print_line()
+    %33 = local #4
+    %34 = load [%33] :8f
+    %35 = const 1
+    %36 = itof %35
+    %37 = fsub %34, %36
+            store [%33] <- %37 :8f
+            call print_double(%34)
+            call print_line()
+    %38 = local #4
+    %39 = load [%38] :8f
+            call print_double(%39)
+            call print_line()
+    %40 = const 0
+            ret %40
+
+function __global_init
+            ret

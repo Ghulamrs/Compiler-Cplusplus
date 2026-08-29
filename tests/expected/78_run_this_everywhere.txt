@@ -1,0 +1,428 @@
+Function print_int returns void
+  param:
+    Var n : int
+Function print_string returns void
+  param:
+    Var s : pointer to char
+Function print_line returns void
+Class C
+  Field private v : int
+  Constructor public C::C
+    Block
+      ExprStmt
+        Binary =
+          v
+          0
+  Constructor public C::C
+    param:
+      Var n : int
+    Block
+      ExprStmt
+        Binary =
+          Member ->v
+            this
+          n
+  Method public C::set returns void
+    param:
+      Var n : int
+    Block
+      ExprStmt
+        Binary =
+          Member ->v
+            this
+          n
+  Method public C::get returns int
+    Block
+      Return
+        Member ->v
+          this
+  Method public C::self returns pointer to class C
+    Block
+      Return
+        this
+  Method public C::twin returns class C
+    Block
+      Return
+        Unary *
+          this
+  Method public C::add returns class C
+    param:
+      Var o : class C
+    Block
+      Var r : class C
+      ExprStmt
+        Binary =
+          Member .v
+            r
+          Binary +
+            Member ->v
+              this
+            Member .v
+              o
+      Return
+        r
+      [on exit: destroy r]
+  Method public C::operator+ returns class C
+    param:
+      Var o : class C
+    Block
+      Return
+        Call
+          Member ->add
+            this
+          arg 0:
+            o
+  Method public C::operator+= returns class C
+    param:
+      Var o : class C
+    Block
+      ExprStmt
+        Binary +=
+          Member ->v
+            this
+          Member .v
+            o
+      Return
+        Unary *
+          this
+  Method public C::isBig returns bool
+    Block
+      Return
+        Binary >
+          Member ->v
+            this
+          100
+  Destructor public C::~C
+    Block
+Function useIt returns int
+  param:
+    Var p : pointer to class C
+  Block
+    Return
+      Call
+        Member ->get
+          p
+Class D : public C
+  Constructor public D::D
+    Block
+  Method public D::viaBase returns int
+    Block
+      Return
+        Call
+          Member ->get
+            this
+Function main returns int
+  Block
+    Var a : class C
+      construct with 1 argument(s):
+        5
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member .get
+              a
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member ->get
+              Call
+                Member .self
+                  a
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member .get
+              Call
+                Member .twin
+                  a
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member .get
+              Binary +
+                a
+                a
+    ExprStmt
+      Binary +=
+        a
+        a
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member .get
+              a
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member .isBig
+              a
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            useIt
+            arg 0:
+              Call
+                Member .self
+                  a
+    Var d : class D
+    ExprStmt
+      Call
+        Member .set
+          d
+        arg 0:
+          9
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member .viaBase
+              d
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+    [on exit: destroy d]
+    [on exit: destroy a]
+
+class C  size=4 align=4
+    +0  v (4 bytes)
+    construct: field v -> C() body
+    destroy:   ~C() body -> field v
+
+class D  size=4 align=4
+    +0  v (4 bytes)  inherited from C
+    construct: base C -> D() body
+    destroy:   ~D() body -> base C
+
+function C__ctor$v   ; C::C
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = const 0
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+            store [%5] <- %2 :4
+            ret
+
+function C__ctor$i   ; C::C
+  #0 this  8 bytes  (param)
+  #1 n  4 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = local #1
+    %3 = load [%2] :4
+    %4 = local #0
+    %5 = load [%4] :8
+    %6 = field %5 +0
+            store [%6] <- %3 :4
+            ret
+
+function C__set$i   ; C::set
+  #0 this  8 bytes  (param)
+  #1 n  4 bytes  (param)
+    %0 = local #1
+    %1 = load [%0] :4
+    %2 = local #0
+    %3 = load [%2] :8
+    %4 = field %3 +0
+            store [%4] <- %1 :4
+            ret
+
+function C__get$v   ; C::get
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +0
+    %3 = load [%2] :4
+            ret %3
+
+function C__self$v   ; C::self
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+            ret %1
+
+function C__twin$v   ; C::twin
+  #0 this  8 bytes  (param)
+  #1 __ret  8 bytes  (param)
+    %0 = local #1
+    %1 = load [%0] :8
+    %2 = local #0
+    %3 = load [%2] :8
+            memcpy [%1] <- [%3] :4
+            ret %1
+
+function C__add$1C   ; C::add
+  #0 this  8 bytes  (param)
+  #1 __ret  8 bytes  (param)
+  #2 o  4 bytes  (param)
+  #3 r  4 bytes
+    %0 = local #3
+            call C__ctor$v(%0)
+    %1 = local #0
+    %2 = load [%1] :8
+    %3 = field %2 +0
+    %4 = load [%3] :4
+    %5 = local #2
+    %6 = field %5 +0
+    %7 = load [%6] :4
+    %8 = add %4, %7
+    %9 = local #3
+    %10 = field %9 +0
+            store [%10] <- %8 :4
+    %11 = local #1
+    %12 = load [%11] :8
+    %13 = local #3
+            memcpy [%12] <- [%13] :4
+    %14 = local #3
+            call C__dtor(%14)
+            ret %12
+
+function C__operator+$1C   ; C::operator+
+  #0 this  8 bytes  (param)
+  #1 __ret  8 bytes  (param)
+  #2 o  4 bytes  (param)
+  #3 __result  4 bytes
+    %0 = local #1
+    %1 = load [%0] :8
+    %2 = local #0
+    %3 = load [%2] :8
+    %4 = local #3
+    %5 = local #2
+    %6 = call C__add$1C(%3, %4, %5)
+            memcpy [%1] <- [%6] :4
+            ret %1
+
+function C__operator+=$1C   ; C::operator+=
+  #0 this  8 bytes  (param)
+  #1 __ret  8 bytes  (param)
+  #2 o  4 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +0
+    %3 = load [%2] :4
+    %4 = local #2
+    %5 = field %4 +0
+    %6 = load [%5] :4
+    %7 = add %3, %6
+            store [%2] <- %7 :4
+    %8 = local #1
+    %9 = load [%8] :8
+    %10 = local #0
+    %11 = load [%10] :8
+            memcpy [%9] <- [%11] :4
+            ret %9
+
+function C__isBig$v   ; C::isBig
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +0
+    %3 = load [%2] :4
+    %4 = const 100
+    %5 = cmp.gt %3, %4
+            ret %5
+
+function C__dtor   ; C::~C
+  #0 this  8 bytes  (param)
+            ret
+
+function useIt$P1C   ; useIt
+  #0 p  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = call C__get$v(%1)
+            ret %2
+
+function D__ctor$v   ; D::D
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+            call C__ctor$v(%1)
+            ret
+
+function D__viaBase$v   ; D::viaBase
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = call C__get$v(%1)
+            ret %2
+
+function main
+  #0 a  4 bytes
+  #1 __result  4 bytes
+  #2 __result  4 bytes
+  #3 __result  4 bytes
+  #4 d  4 bytes
+            call __global_init()
+    %0 = local #0
+    %1 = const 5
+            call C__ctor$i(%0, %1)
+    %2 = local #0
+    %3 = call C__get$v(%2)
+            call print_int(%3)
+    %4 = local #0
+    %5 = call C__self$v(%4)
+    %6 = call C__get$v(%5)
+            call print_int(%6)
+    %7 = local #0
+    %8 = local #1
+    %9 = call C__twin$v(%7, %8)
+    %10 = call C__get$v(%9)
+            call print_int(%10)
+    %11 = local #0
+    %12 = local #2
+    %13 = local #0
+    %14 = call C__operator+$1C(%11, %12, %13)
+    %15 = call C__get$v(%14)
+            call print_int(%15)
+    %16 = local #0
+    %17 = local #3
+    %18 = local #0
+    %19 = call C__operator+=$1C(%16, %17, %18)
+    %20 = local #0
+    %21 = call C__get$v(%20)
+            call print_int(%21)
+    %22 = local #0
+    %23 = call C__isBig$v(%22)
+    %24 = iresize %23 :4 unsigned
+            call print_int(%24)
+    %25 = local #0
+    %26 = call C__self$v(%25)
+    %27 = call useIt$P1C(%26)
+            call print_int(%27)
+    %28 = local #4
+            call D__ctor$v(%28)
+    %29 = local #4
+    %30 = const 9
+            call C__set$i(%29, %30)
+    %31 = local #4
+    %32 = call D__viaBase$v(%31)
+            call print_int(%32)
+            call print_line()
+    %33 = const 0
+    %34 = local #4
+            call C__dtor(%34)
+    %35 = local #0
+            call C__dtor(%35)
+            ret %33
+
+function __global_init
+            ret

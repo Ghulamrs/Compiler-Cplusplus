@@ -1,0 +1,37 @@
+25_err_init_list_mistakes.cpp:6:9: error: 'b' is inherited from 'Base'; initialise the base instead
+25_err_init_list_mistakes.cpp:6:21: error: 'zzz' is not a member of class 'D'
+25_err_init_list_mistakes.cpp:6:29: error: 'p' is initialised more than once
+25_err_init_list_mistakes.cpp:7:3: warning: initialiser list is out of declaration order; members construct in declaration order
+Class Base
+  Field public b : int
+Class D : public Base
+  Field public p : int
+  Field public q : int
+  Constructor public D::D
+    init member b
+      1
+    init member p
+      2
+    init member zzz
+      3
+    init member p
+      4
+    Block
+  Constructor public D::D
+    param:
+      Var v : int
+    init member q
+      v
+    init member p
+      v
+    Block
+
+class Base  size=4 align=4
+    +0  b (4 bytes)
+
+class D  size=12 align=4
+    +0  b (4 bytes)  inherited from Base
+    +4  p (4 bytes)
+    +8  q (4 bytes)
+    construct: base Base -> field p -> field q -> D() body
+    destroy:   ~D() body -> field q -> field p -> base Base

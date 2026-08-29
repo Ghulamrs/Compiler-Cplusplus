@@ -1,0 +1,317 @@
+Function print_int returns void
+  param:
+    Var n : int
+Function print_string returns void
+  param:
+    Var s : pointer to char
+Function print_line returns void
+Class Point
+  Field public x : int
+  Field public y : int
+  Constructor public Point::Point
+    param:
+      Var a : int
+    param:
+      Var b : int
+    init member x
+      a
+    init member y
+      b
+    Block
+  Method public Point::sum returns int
+    Block
+      Return
+        Binary +
+          x
+          y
+  Method public Point::scaled returns int
+    param:
+      Var k : int
+    Block
+      Return
+        Binary *
+          Call
+            sum
+          k
+  Method public virtual Point::area returns int
+    Block
+      Return
+        Binary *
+          x
+          y
+  Destructor public virtual Point::~Point
+    Block
+      ExprStmt
+        Call
+          print_string
+          arg 0:
+            "~Point "
+Constructor public Point::Point
+  param:
+    Var a : int
+  param:
+    Var b : int
+Method public Point::sum returns int
+Method public Point::scaled returns int
+  param:
+    Var k : int
+Method public Point::area returns int
+Destructor public Point::~Point
+Class Cube : public Point
+  Constructor public Cube::Cube
+    param:
+      Var a : int
+    init base Point
+      a
+      a
+    Block
+  Method public virtual overriding Cube::area returns int
+    Block
+      Return
+        Binary *
+          Binary *
+            x
+            y
+          x
+  Destructor public virtual overriding Cube::~Cube
+    Block
+      ExprStmt
+        Call
+          print_string
+          arg 0:
+            "~Cube "
+Method public Cube::area returns int
+Function main returns int
+  Block
+    Var p : class Point
+      construct with 2 argument(s):
+        3
+        4
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member .sum
+              p
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member .scaled
+              p
+            arg 0:
+              2
+    ExprStmt
+      Call
+        print_line
+    Var c : class Cube
+      construct with 1 argument(s):
+        2
+    Var base : pointer to class Point
+      init:
+        Unary &
+          c
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member ->area
+              base
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_string
+        arg 0:
+          "exit: "
+    Return
+      0
+    [on exit: destroy c]
+    [on exit: destroy p]
+
+class Cube  size=16 align=8  [has vptr]
+     +0  __vptr (8 bytes)
+    +8  x (4 bytes)  inherited from Point
+    +12  y (4 bytes)  inherited from Point
+    vtable[0] = Cube::area
+    vtable[1] = Cube::~Cube
+    construct: base Point -> set vptr -> Cube() body
+    destroy:   ~Cube() body -> reset vptr -> base Point
+
+class Point  size=16 align=8  [has vptr]
+     +0  __vptr (8 bytes)
+    +8  x (4 bytes)
+    +12  y (4 bytes)
+    vtable[0] = Point::area
+    vtable[1] = Point::~Point
+    construct: set vptr -> field x -> field y -> Point() body
+    destroy:   ~Point() body -> field y -> field x -> reset vptr
+
+string str0  "~Point "
+string str1  "~Cube "
+string str2  "exit: "
+
+vtable Cube__vtable
+    [0] Cube__area$v
+    [1] Cube__dtor
+
+vtable Point__vtable
+    [0] Point__area$v
+    [1] Point__dtor
+
+function Point__ctor$ii   ; Point::Point
+  #0 this  8 bytes  (param)
+  #1 a  4 bytes  (param)
+  #2 b  4 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = global Point__vtable
+    %3 = field %1 +0
+            store [%3] <- %2 :8
+    %4 = local #1
+    %5 = load [%4] :4
+    %6 = local #0
+    %7 = load [%6] :8
+    %8 = field %7 +8
+            store [%8] <- %5 :4
+    %9 = local #2
+    %10 = load [%9] :4
+    %11 = local #0
+    %12 = load [%11] :8
+    %13 = field %12 +12
+            store [%13] <- %10 :4
+            ret
+
+function Point__sum$v   ; Point::sum
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +8
+    %3 = load [%2] :4
+    %4 = local #0
+    %5 = load [%4] :8
+    %6 = field %5 +12
+    %7 = load [%6] :4
+    %8 = add %3, %7
+            ret %8
+
+function Point__scaled$i   ; Point::scaled
+  #0 this  8 bytes  (param)
+  #1 k  4 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = call Point__sum$v(%1)
+    %3 = local #1
+    %4 = load [%3] :4
+    %5 = mul %2, %4
+            ret %5
+
+function Point__area$v   ; Point::area
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +8
+    %3 = load [%2] :4
+    %4 = local #0
+    %5 = load [%4] :8
+    %6 = field %5 +12
+    %7 = load [%6] :4
+    %8 = mul %3, %7
+            ret %8
+
+function Point__dtor   ; Point::~Point
+  #0 this  8 bytes  (param)
+    %0 = straddr str0
+            call print_string(%0)
+            ret
+
+function Cube__ctor$i   ; Cube::Cube
+  #0 this  8 bytes  (param)
+  #1 a  4 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = local #1
+    %3 = load [%2] :4
+    %4 = local #1
+    %5 = load [%4] :4
+            call Point__ctor$ii(%1, %3, %5)
+    %6 = global Cube__vtable
+    %7 = field %1 +0
+            store [%7] <- %6 :8
+            ret
+
+function Cube__area$v   ; Cube::area
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +8
+    %3 = load [%2] :4
+    %4 = local #0
+    %5 = load [%4] :8
+    %6 = field %5 +12
+    %7 = load [%6] :4
+    %8 = mul %3, %7
+    %9 = local #0
+    %10 = load [%9] :8
+    %11 = field %10 +8
+    %12 = load [%11] :4
+    %13 = mul %8, %12
+            ret %13
+
+function Cube__dtor   ; Cube::~Cube
+  #0 this  8 bytes  (param)
+    %0 = straddr str1
+            call print_string(%0)
+    %1 = local #0
+    %2 = load [%1] :8
+            call Point__dtor(%2)
+            ret
+
+function main
+  #0 p  16 bytes
+  #1 c  16 bytes
+  #2 base  8 bytes
+            call __global_init()
+    %0 = local #0
+    %1 = const 3
+    %2 = const 4
+            call Point__ctor$ii(%0, %1, %2)
+    %3 = local #0
+    %4 = call Point__sum$v(%3)
+            call print_int(%4)
+            call print_line()
+    %5 = local #0
+    %6 = const 2
+    %7 = call Point__scaled$i(%5, %6)
+            call print_int(%7)
+            call print_line()
+    %8 = local #1
+    %9 = const 2
+            call Cube__ctor$i(%8, %9)
+    %10 = local #1
+    %11 = local #2
+            store [%11] <- %10 :8
+    %12 = local #2
+    %13 = load [%12] :8
+    %14 = vtable [%13] slot 0
+    %15 = call.ind %14(%13)
+            call print_int(%15)
+            call print_line()
+    %16 = straddr str2
+            call print_string(%16)
+    %17 = const 0
+    %18 = local #1
+            call Cube__dtor(%18)
+    %19 = local #0
+            call Point__dtor(%19)
+            ret %17
+
+function __global_init
+            ret

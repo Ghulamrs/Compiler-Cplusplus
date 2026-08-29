@@ -1,0 +1,241 @@
+Function print_int returns void
+  param:
+    Var n : int
+Function print_string returns void
+  param:
+    Var s : pointer to char
+Function print_line returns void
+Class Cell
+  Field public v : int
+  Constructor public Cell::Cell
+    Block
+      ExprStmt
+        Binary =
+          v
+          1
+      ExprStmt
+        Call
+          print_string
+          arg 0:
+            "+"
+  Destructor public Cell::~Cell
+    Block
+      ExprStmt
+        Call
+          print_string
+          arg 0:
+            "-"
+  Method public Cell::get returns int
+    Block
+      Return
+        v
+Function main returns int
+  Block
+    Block
+      Var a : array[3] of class Cell
+      Var g : array[2] of array[2] of class Cell
+      ExprStmt
+        Call
+          print_line
+      ExprStmt
+        Binary =
+          Member .v
+            Index
+              a
+              1
+          9
+      ExprStmt
+        Binary =
+          Member .v
+            Index
+              Index
+                g
+                1
+              1
+          8
+      ExprStmt
+        Call
+          print_int
+          arg 0:
+            Call
+              Member .get
+                Index
+                  a
+                  0
+      ExprStmt
+        Call
+          print_int
+          arg 0:
+            Call
+              Member .get
+                Index
+                  a
+                  1
+      ExprStmt
+        Call
+          print_int
+          arg 0:
+            Member .v
+              Index
+                Index
+                  g
+                  1
+                1
+      ExprStmt
+        Call
+          print_int
+          arg 0:
+            Member .v
+              Index
+                Index
+                  g
+                  0
+                0
+      ExprStmt
+        Call
+          print_line
+      [on exit: destroy g]
+      [on exit: destroy a]
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+class Cell  size=4 align=4
+    +0  v (4 bytes)
+    construct: field v -> Cell() body
+    destroy:   ~Cell() body -> field v
+
+string str0  "+"
+string str1  "-"
+
+function Cell__ctor$v   ; Cell::Cell
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = const 1
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+            store [%5] <- %2 :4
+    %6 = straddr str0
+            call print_string(%6)
+            ret
+
+function Cell__dtor   ; Cell::~Cell
+  #0 this  8 bytes  (param)
+    %0 = straddr str1
+            call print_string(%0)
+            ret
+
+function Cell__get$v   ; Cell::get
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +0
+    %3 = load [%2] :4
+            ret %3
+
+function main
+  #0 a  12 bytes
+  #1 g  16 bytes
+            call __global_init()
+    %0 = local #0
+    %1 = field %0 +0
+            call Cell__ctor$v(%1)
+    %2 = field %0 +4
+            call Cell__ctor$v(%2)
+    %3 = field %0 +8
+            call Cell__ctor$v(%3)
+    %4 = local #1
+    %5 = field %4 +0
+            call Cell__ctor$v(%5)
+    %6 = field %4 +4
+            call Cell__ctor$v(%6)
+    %7 = field %4 +8
+            call Cell__ctor$v(%7)
+    %8 = field %4 +12
+            call Cell__ctor$v(%8)
+            call print_line()
+    %9 = const 9
+    %10 = local #0
+    %11 = const 1
+    %12 = const 4
+    %13 = mul %11, %12
+    %14 = add %10, %13
+    %15 = field %14 +0
+            store [%15] <- %9 :4
+    %16 = const 8
+    %17 = local #1
+    %18 = const 1
+    %19 = const 8
+    %20 = mul %18, %19
+    %21 = add %17, %20
+    %22 = const 1
+    %23 = const 4
+    %24 = mul %22, %23
+    %25 = add %21, %24
+    %26 = field %25 +0
+            store [%26] <- %16 :4
+    %27 = local #0
+    %28 = const 0
+    %29 = const 4
+    %30 = mul %28, %29
+    %31 = add %27, %30
+    %32 = call Cell__get$v(%31)
+            call print_int(%32)
+    %33 = local #0
+    %34 = const 1
+    %35 = const 4
+    %36 = mul %34, %35
+    %37 = add %33, %36
+    %38 = call Cell__get$v(%37)
+            call print_int(%38)
+    %39 = local #1
+    %40 = const 1
+    %41 = const 8
+    %42 = mul %40, %41
+    %43 = add %39, %42
+    %44 = const 1
+    %45 = const 4
+    %46 = mul %44, %45
+    %47 = add %43, %46
+    %48 = field %47 +0
+    %49 = load [%48] :4
+            call print_int(%49)
+    %50 = local #1
+    %51 = const 0
+    %52 = const 8
+    %53 = mul %51, %52
+    %54 = add %50, %53
+    %55 = const 0
+    %56 = const 4
+    %57 = mul %55, %56
+    %58 = add %54, %57
+    %59 = field %58 +0
+    %60 = load [%59] :4
+            call print_int(%60)
+            call print_line()
+    %61 = local #1
+    %62 = field %61 +12
+            call Cell__dtor(%62)
+    %63 = field %61 +8
+            call Cell__dtor(%63)
+    %64 = field %61 +4
+            call Cell__dtor(%64)
+    %65 = field %61 +0
+            call Cell__dtor(%65)
+    %66 = local #0
+    %67 = field %66 +8
+            call Cell__dtor(%67)
+    %68 = field %66 +4
+            call Cell__dtor(%68)
+    %69 = field %66 +0
+            call Cell__dtor(%69)
+            call print_line()
+    %70 = const 0
+            ret %70
+
+function __global_init
+            ret

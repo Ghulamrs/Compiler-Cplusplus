@@ -1,0 +1,53 @@
+92_err_const_laundering.cpp:8:8: error: cannot initialise 'int* q' from an expression of type const int*
+92_err_const_laundering.cpp:9:14: error: argument const int* does not match parameter 'q' of type int*
+92_err_const_laundering.cpp:11:5: error: cannot assign to const int* const
+92_err_const_laundering.cpp:12:6: error: cannot assign to const int
+92_err_const_laundering.cpp:14:5: error: cannot assign to int* const
+Function takesPlain returns void
+  param:
+    Var q : pointer to int
+Function main returns int
+  Block
+    Var a : int
+      init:
+        1
+    Var b : int
+      init:
+        2
+    Var p : pointer to int
+      init:
+        Unary &
+          a
+    Var q : pointer to int
+      init:
+        p
+    ExprStmt
+      Call
+        takesPlain
+        arg 0:
+          p
+    Var r : pointer to int
+      init:
+        Unary &
+          a
+    ExprStmt
+      Binary =
+        r
+        Unary &
+          b
+    ExprStmt
+      Binary =
+        Unary *
+          r
+        9
+    Var s : pointer to int
+      init:
+        Unary &
+          a
+    ExprStmt
+      Binary =
+        s
+        Unary &
+          b
+    Return
+      0

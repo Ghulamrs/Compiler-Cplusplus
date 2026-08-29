@@ -1,0 +1,356 @@
+Function print_int returns void
+  param:
+    Var n : int
+Function print_char returns void
+  param:
+    Var c : int
+Function print_line returns void
+Class Str
+  Field private buf : array[8] of char
+  Field private n : int
+  Constructor public Str::Str
+    Block
+      ExprStmt
+        Binary =
+          n
+          0
+  Method public Str::push returns void
+    param:
+      Var c : char
+    Block
+      ExprStmt
+        Binary =
+          Index
+            buf
+            n
+          c
+      ExprStmt
+        Binary =
+          n
+          Binary +
+            n
+            1
+  Method public Str::size returns int
+    Block
+      Return
+        n
+  Method public Str::operator[] returns char
+    param:
+      Var i : int
+    Block
+      Return
+        Index
+          buf
+          i
+Class Table
+  Field private cells : array[4] of int
+  Constructor public Table::Table
+    Block
+      Block
+        Var i : int
+          init:
+            0
+        For
+          Binary <
+            i
+            4
+          Unary ++ (postfix)
+            i
+          Block
+            ExprStmt
+              Binary =
+                Index
+                  cells
+                  i
+                0
+  Method public Table::operator[] returns reference to int
+    param:
+      Var i : int
+    Block
+      Return
+        Index
+          cells
+          i
+Function main returns int
+  Block
+    Var s : class Str
+    ExprStmt
+      Call
+        Member .push
+          s
+        arg 0:
+          97 : char
+    ExprStmt
+      Call
+        Member .push
+          s
+        arg 0:
+          98 : char
+    ExprStmt
+      Call
+        Member .push
+          s
+        arg 0:
+          99 : char
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member .size
+              s
+    ExprStmt
+      Call
+        print_char
+        arg 0:
+          Index
+            s
+            0
+    ExprStmt
+      Call
+        print_char
+        arg 0:
+          Index
+            s
+            1
+    ExprStmt
+      Call
+        print_char
+        arg 0:
+          Index
+            s
+            2
+    ExprStmt
+      Call
+        print_line
+    Var t : class Table
+    ExprStmt
+      Binary =
+        Index
+          t
+          1
+        42
+    ExprStmt
+      Binary =
+        Index
+          t
+          2
+        Binary +
+          Index
+            t
+            1
+          1
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Index
+            t
+            0
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Index
+            t
+            1
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Index
+            t
+            2
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+class Str  size=12 align=4
+    +0  buf (8 bytes)
+    +8  n (4 bytes)
+    construct: field buf -> field n -> Str() body
+    destroy:   ~Str() body -> field n -> field buf
+
+class Table  size=16 align=4
+    +0  cells (16 bytes)
+    construct: field cells -> Table() body
+    destroy:   ~Table() body -> field cells
+
+function Str__ctor$v   ; Str::Str
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = const 0
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +8
+            store [%5] <- %2 :4
+            ret
+
+function Str__push$c   ; Str::push
+  #0 this  8 bytes  (param)
+  #1 c  1 bytes  (param)
+    %0 = local #1
+    %1 = load [%0] :1
+    %2 = local #0
+    %3 = load [%2] :8
+    %4 = field %3 +0
+    %5 = local #0
+    %6 = load [%5] :8
+    %7 = field %6 +8
+    %8 = load [%7] :4
+    %9 = add %4, %8
+            store [%9] <- %1 :1
+    %10 = local #0
+    %11 = load [%10] :8
+    %12 = field %11 +8
+    %13 = load [%12] :4
+    %14 = const 1
+    %15 = add %13, %14
+    %16 = local #0
+    %17 = load [%16] :8
+    %18 = field %17 +8
+            store [%18] <- %15 :4
+            ret
+
+function Str__size$v   ; Str::size
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +8
+    %3 = load [%2] :4
+            ret %3
+
+function Str__operator[]$i   ; Str::operator[]
+  #0 this  8 bytes  (param)
+  #1 i  4 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +0
+    %3 = local #1
+    %4 = load [%3] :4
+    %5 = add %2, %4
+    %6 = load [%5] :1
+            ret %6
+
+function Table__ctor$v   ; Table::Table
+  #0 this  8 bytes  (param)
+  #1 i  4 bytes
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = const 0
+    %3 = local #1
+            store [%3] <- %2 :4
+    L0:
+    %4 = local #1
+    %5 = load [%4] :4
+    %6 = const 4
+    %7 = cmp.lt %5, %6
+            brz %7 L2
+    %8 = const 0
+    %9 = local #0
+    %10 = load [%9] :8
+    %11 = field %10 +0
+    %12 = local #1
+    %13 = load [%12] :4
+    %14 = const 4
+    %15 = mul %13, %14
+    %16 = add %11, %15
+            store [%16] <- %8 :4
+    L1:
+    %17 = local #1
+    %18 = load [%17] :4
+    %19 = const 1
+    %20 = add %18, %19
+            store [%17] <- %20 :4
+            jump L0
+    L2:
+            ret
+
+function Table__operator[]$i   ; Table::operator[]
+  #0 this  8 bytes  (param)
+  #1 i  4 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +0
+    %3 = local #1
+    %4 = load [%3] :4
+    %5 = const 4
+    %6 = mul %4, %5
+    %7 = add %2, %6
+            ret %7
+
+function main
+  #0 s  12 bytes
+  #1 t  16 bytes
+            call __global_init()
+    %0 = local #0
+            call Str__ctor$v(%0)
+    %1 = local #0
+    %2 = const 97
+            call Str__push$c(%1, %2)
+    %3 = local #0
+    %4 = const 98
+            call Str__push$c(%3, %4)
+    %5 = local #0
+    %6 = const 99
+            call Str__push$c(%5, %6)
+    %7 = local #0
+    %8 = call Str__size$v(%7)
+            call print_int(%8)
+    %9 = local #0
+    %10 = const 0
+    %11 = call Str__operator[]$i(%9, %10)
+    %12 = iresize %11 :4 signed
+            call print_char(%12)
+    %13 = local #0
+    %14 = const 1
+    %15 = call Str__operator[]$i(%13, %14)
+    %16 = iresize %15 :4 signed
+            call print_char(%16)
+    %17 = local #0
+    %18 = const 2
+    %19 = call Str__operator[]$i(%17, %18)
+    %20 = iresize %19 :4 signed
+            call print_char(%20)
+            call print_line()
+    %21 = local #1
+            call Table__ctor$v(%21)
+    %22 = const 42
+    %23 = local #1
+    %24 = const 1
+    %25 = call Table__operator[]$i(%23, %24)
+            store [%25] <- %22 :4
+    %26 = local #1
+    %27 = const 1
+    %28 = call Table__operator[]$i(%26, %27)
+    %29 = load [%28] :4
+    %30 = const 1
+    %31 = add %29, %30
+    %32 = local #1
+    %33 = const 2
+    %34 = call Table__operator[]$i(%32, %33)
+            store [%34] <- %31 :4
+    %35 = local #1
+    %36 = const 0
+    %37 = call Table__operator[]$i(%35, %36)
+    %38 = load [%37] :4
+            call print_int(%38)
+    %39 = local #1
+    %40 = const 1
+    %41 = call Table__operator[]$i(%39, %40)
+    %42 = load [%41] :4
+            call print_int(%42)
+    %43 = local #1
+    %44 = const 2
+    %45 = call Table__operator[]$i(%43, %44)
+    %46 = load [%45] :4
+            call print_int(%46)
+            call print_line()
+    %47 = const 0
+            ret %47
+
+function __global_init
+            ret

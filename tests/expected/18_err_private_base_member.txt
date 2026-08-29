@@ -1,0 +1,29 @@
+18_err_private_base_member.cpp:9:34: error: 'secret' is private in class 'Base'
+18_err_private_base_member.cpp:10:36: error: 'secret' is private in class 'Base'
+Class Base
+  Field public open : int
+  Field private secret : int
+Class Derived : public Base
+  Method public Derived::leakUnqualified returns int
+    Block
+      Return
+        secret
+  Method public Derived::leakQualified returns int
+    Block
+      Return
+        Member ->secret
+          this
+Function main returns int
+  Block
+    Var d : class Derived
+    Return
+      Member .open
+        d
+
+class Base  size=8 align=4
+    +0  open (4 bytes)
+    +4  secret (4 bytes)
+
+class Derived  size=8 align=4
+    +0  open (4 bytes)  inherited from Base
+    +4  secret (4 bytes)  inherited from Base

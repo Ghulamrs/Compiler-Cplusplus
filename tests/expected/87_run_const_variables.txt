@@ -1,0 +1,226 @@
+Function print_int returns void
+  param:
+    Var n : int
+Function print_line returns void
+Class A
+  Field public x : int
+  Constructor public A::A
+    Block
+      ExprStmt
+        Binary =
+          x
+          1
+Function readOnly returns int
+  param:
+    Var a : reference to class A
+  Block
+    Return
+      Member .x
+        a
+Function useConstParam returns int
+  param:
+    Var n : int
+  Block
+    Return
+      Binary *
+        n
+        2
+Function main returns int
+  Block
+    Var k : int
+      init:
+        10
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          k
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Binary +
+            k
+            5
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            useConstParam
+            arg 0:
+              k
+    Var ca : class A
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Member .x
+            ca
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            readOnly
+            arg 0:
+              ca
+    Var s : pointer to char
+      init:
+        "ok"
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Index
+            s
+            0
+    ExprStmt
+      Binary =
+        s
+        "no"
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Index
+            s
+            0
+    Var cp : pointer to class A
+      init:
+        Unary &
+          ca
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Member ->x
+            cp
+    Var m : int
+      init:
+        3
+    ExprStmt
+      Binary =
+        m
+        k
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          m
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+class A  size=4 align=4
+    +0  x (4 bytes)
+    construct: field x -> A() body
+    destroy:   ~A() body -> field x
+
+string str0  "ok"
+string str1  "no"
+
+function A__ctor$v   ; A::A
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = const 1
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+            store [%5] <- %2 :4
+            ret
+
+function readOnly$R1A   ; readOnly
+  #0 a  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +0
+    %3 = load [%2] :4
+            ret %3
+
+function useConstParam$i   ; useConstParam
+  #0 n  4 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :4
+    %2 = const 2
+    %3 = mul %1, %2
+            ret %3
+
+function main
+  #0 k  4 bytes
+  #1 ca  4 bytes
+  #2 s  8 bytes
+  #3 cp  8 bytes
+  #4 m  4 bytes
+            call __global_init()
+    %0 = const 10
+    %1 = local #0
+            store [%1] <- %0 :4
+    %2 = local #0
+    %3 = load [%2] :4
+            call print_int(%3)
+    %4 = local #0
+    %5 = load [%4] :4
+    %6 = const 5
+    %7 = add %5, %6
+            call print_int(%7)
+    %8 = local #0
+    %9 = load [%8] :4
+    %10 = call useConstParam$i(%9)
+            call print_int(%10)
+    %11 = local #1
+            call A__ctor$v(%11)
+    %12 = local #1
+    %13 = field %12 +0
+    %14 = load [%13] :4
+            call print_int(%14)
+    %15 = local #1
+    %16 = call readOnly$R1A(%15)
+            call print_int(%16)
+    %17 = straddr str0
+    %18 = local #2
+            store [%18] <- %17 :8
+    %19 = local #2
+    %20 = load [%19] :8
+    %21 = const 0
+    %22 = add %20, %21
+    %23 = load [%22] :1
+    %24 = iresize %23 :4 signed
+            call print_int(%24)
+    %25 = straddr str1
+    %26 = local #2
+            store [%26] <- %25 :8
+    %27 = local #2
+    %28 = load [%27] :8
+    %29 = const 0
+    %30 = add %28, %29
+    %31 = load [%30] :1
+    %32 = iresize %31 :4 signed
+            call print_int(%32)
+    %33 = local #1
+    %34 = local #3
+            store [%34] <- %33 :8
+    %35 = local #3
+    %36 = load [%35] :8
+    %37 = field %36 +0
+    %38 = load [%37] :4
+            call print_int(%38)
+    %39 = const 3
+    %40 = local #4
+            store [%40] <- %39 :4
+    %41 = local #0
+    %42 = load [%41] :4
+    %43 = local #4
+            store [%43] <- %42 :4
+    %44 = local #4
+    %45 = load [%44] :4
+            call print_int(%45)
+            call print_line()
+    %46 = const 0
+            ret %46
+
+function __global_init
+            ret

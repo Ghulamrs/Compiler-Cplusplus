@@ -1,0 +1,33 @@
+35_err_type_misuse.cpp:4:8: error: 'long long' is not supported in this version
+35_err_type_misuse.cpp:5:17: error: 'void' cannot be combined with signed, unsigned, short or long
+35_err_type_misuse.cpp:6:15: error: 'float' cannot be combined with signed, unsigned, short or long
+35_err_type_misuse.cpp:3:13: error: '%' needs integer operands, not double and int
+35_err_type_misuse.cpp:5:17: error: variable 'bad' cannot have type void
+35_err_type_misuse.cpp:8:10: error: cannot initialise 'double conv' from an expression of type int*
+Function main returns int
+  Block
+    Var d : double
+      init:
+        1.5 : double
+    Var m : int
+      init:
+        Binary %
+          d
+          2
+    Var big : long
+      init:
+        1
+    Var bad : void
+    Var weird : float
+    Var p : pointer to int
+    Var conv : double
+      init:
+        p
+    Var gone : bool
+      init:
+        1
+    Var t : int
+      init:
+        true
+    Return
+      0

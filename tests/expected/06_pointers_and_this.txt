@@ -1,0 +1,63 @@
+Class Node
+  Field public value : int
+  Field public next : pointer to class Node
+  Method public Node::get returns int
+    Block
+      Return
+        Member ->value
+          this
+Function main returns int
+  Block
+    Var n : class Node
+    ExprStmt
+      Binary =
+        Member .value
+          n
+        7
+    Var p : pointer to class Node
+      init:
+        Unary &
+          n
+    Return
+      Binary +
+        Member ->value
+          p
+        Call
+          Member .get
+            n
+
+class Node  size=16 align=8
+    +0  value (4 bytes)
+    +8  next (8 bytes)
+
+function Node__get$v   ; Node::get
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +0
+    %3 = load [%2] :4
+            ret %3
+
+function main
+  #0 n  16 bytes
+  #1 p  8 bytes
+            call __global_init()
+    %0 = local #0
+    %1 = const 7
+    %2 = local #0
+    %3 = field %2 +0
+            store [%3] <- %1 :4
+    %4 = local #0
+    %5 = local #1
+            store [%5] <- %4 :8
+    %6 = local #1
+    %7 = load [%6] :8
+    %8 = field %7 +0
+    %9 = load [%8] :4
+    %10 = local #0
+    %11 = call Node__get$v(%10)
+    %12 = add %9, %11
+            ret %12
+
+function __global_init
+            ret

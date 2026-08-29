@@ -1,0 +1,134 @@
+Class Base
+  Field public b : int
+Class Derived : public Base
+  Field public d : int
+Function takesBase returns int
+  param:
+    Var p : pointer to class Base
+  Block
+    Return
+      Member ->b
+        p
+Function takesRef returns int
+  param:
+    Var r : reference to class Base
+  Block
+    Return
+      Member .b
+        r
+Function makeBase returns pointer to class Base
+  Block
+    Var d : pointer to class Derived
+      init:
+        0
+    Return
+      d
+Function main returns int
+  Block
+    Var obj : class Derived
+    ExprStmt
+      Binary =
+        Member .b
+          obj
+        1
+    ExprStmt
+      Binary =
+        Member .d
+          obj
+        2
+    Var p : pointer to class Base
+      init:
+        Unary &
+          obj
+    Var r : reference to class Base
+      init:
+        obj
+    Return
+      Binary +
+        Binary +
+          Binary +
+            Call
+              takesBase
+              arg 0:
+                Unary &
+                  obj
+            Call
+              takesRef
+              arg 0:
+                obj
+          Member ->b
+            p
+        Member .b
+          r
+
+class Base  size=4 align=4
+    +0  b (4 bytes)
+
+class Derived  size=8 align=4
+    +0  b (4 bytes)  inherited from Base
+    +4  d (4 bytes)
+
+function takesBase$P4Base   ; takesBase
+  #0 p  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +0
+    %3 = load [%2] :4
+            ret %3
+
+function takesRef$R4Base   ; takesRef
+  #0 r  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +0
+    %3 = load [%2] :4
+            ret %3
+
+function makeBase$v   ; makeBase
+  #0 d  8 bytes
+    %0 = const 0
+    %1 = local #0
+            store [%1] <- %0 :8
+    %2 = local #0
+    %3 = load [%2] :8
+            ret %3
+
+function main
+  #0 obj  8 bytes
+  #1 p  8 bytes
+  #2 r  8 bytes
+            call __global_init()
+    %0 = local #0
+    %1 = const 1
+    %2 = local #0
+    %3 = field %2 +0
+            store [%3] <- %1 :4
+    %4 = const 2
+    %5 = local #0
+    %6 = field %5 +4
+            store [%6] <- %4 :4
+    %7 = local #0
+    %8 = local #1
+            store [%8] <- %7 :8
+    %9 = local #0
+    %10 = local #2
+            store [%10] <- %9 :8
+    %11 = local #0
+    %12 = call takesBase$P4Base(%11)
+    %13 = local #0
+    %14 = call takesRef$R4Base(%13)
+    %15 = add %12, %14
+    %16 = local #1
+    %17 = load [%16] :8
+    %18 = field %17 +0
+    %19 = load [%18] :4
+    %20 = add %15, %19
+    %21 = local #2
+    %22 = load [%21] :8
+    %23 = field %22 +0
+    %24 = load [%23] :4
+    %25 = add %20, %24
+            ret %25
+
+function __global_init
+            ret

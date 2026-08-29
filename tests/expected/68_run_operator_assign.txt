@@ -1,0 +1,186 @@
+Function print_int returns void
+  param:
+    Var n : int
+Function print_string returns void
+  param:
+    Var s : pointer to char
+Function print_line returns void
+Class Acc
+  Field public v : int
+  Constructor public Acc::Acc
+    Block
+      ExprStmt
+        Binary =
+          v
+          0
+  Method public Acc::operator= returns class Acc
+    param:
+      Var o : class Acc
+    Block
+      ExprStmt
+        Binary =
+          v
+          Binary +
+            Member .v
+              o
+            1000
+      ExprStmt
+        Call
+          print_string
+          arg 0:
+            "assign "
+      Return
+        o
+Class Plain
+  Field public v : int
+  Constructor public Plain::Plain
+    Block
+      ExprStmt
+        Binary =
+          v
+          0
+Function main returns int
+  Block
+    Var a : class Acc
+    ExprStmt
+      Binary =
+        Member .v
+          a
+        5
+    Var b : class Acc
+    ExprStmt
+      Binary =
+        b
+        a
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Member .v
+            b
+    ExprStmt
+      Call
+        print_line
+    Var p : class Plain
+    ExprStmt
+      Binary =
+        Member .v
+          p
+        7
+    Var q : class Plain
+    ExprStmt
+      Binary =
+        q
+        p
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Member .v
+            q
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+class Acc  size=4 align=4
+    +0  v (4 bytes)
+    construct: field v -> Acc() body
+    destroy:   ~Acc() body -> field v
+
+class Plain  size=4 align=4
+    +0  v (4 bytes)
+    construct: field v -> Plain() body
+    destroy:   ~Plain() body -> field v
+
+string str0  "assign "
+
+function Acc__ctor$v   ; Acc::Acc
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = const 0
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+            store [%5] <- %2 :4
+            ret
+
+function Acc__operator=$3Acc   ; Acc::operator=
+  #0 this  8 bytes  (param)
+  #1 __ret  8 bytes  (param)
+  #2 o  4 bytes  (param)
+    %0 = local #2
+    %1 = field %0 +0
+    %2 = load [%1] :4
+    %3 = const 1000
+    %4 = add %2, %3
+    %5 = local #0
+    %6 = load [%5] :8
+    %7 = field %6 +0
+            store [%7] <- %4 :4
+    %8 = straddr str0
+            call print_string(%8)
+    %9 = local #1
+    %10 = load [%9] :8
+    %11 = local #2
+            memcpy [%10] <- [%11] :4
+            ret %10
+
+function Plain__ctor$v   ; Plain::Plain
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = const 0
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+            store [%5] <- %2 :4
+            ret
+
+function main
+  #0 a  4 bytes
+  #1 b  4 bytes
+  #2 __result  4 bytes
+  #3 p  4 bytes
+  #4 q  4 bytes
+            call __global_init()
+    %0 = local #0
+            call Acc__ctor$v(%0)
+    %1 = const 5
+    %2 = local #0
+    %3 = field %2 +0
+            store [%3] <- %1 :4
+    %4 = local #1
+            call Acc__ctor$v(%4)
+    %5 = local #1
+    %6 = local #2
+    %7 = local #0
+    %8 = call Acc__operator=$3Acc(%5, %6, %7)
+    %9 = local #1
+    %10 = field %9 +0
+    %11 = load [%10] :4
+            call print_int(%11)
+            call print_line()
+    %12 = local #3
+            call Plain__ctor$v(%12)
+    %13 = const 7
+    %14 = local #3
+    %15 = field %14 +0
+            store [%15] <- %13 :4
+    %16 = local #4
+            call Plain__ctor$v(%16)
+    %17 = local #3
+    %18 = local #4
+            memcpy [%18] <- [%17] :4
+    %19 = local #4
+    %20 = field %19 +0
+    %21 = load [%20] :4
+            call print_int(%21)
+            call print_line()
+    %22 = const 0
+            ret %22
+
+function __global_init
+            ret

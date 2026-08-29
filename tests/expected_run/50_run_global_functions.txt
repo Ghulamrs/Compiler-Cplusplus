@@ -1,0 +1,7 @@
+50_run_global_functions.cpp:19:17: warning: narrowing double to int in the argument to 'n'
+720
+10
+99
+12
+999
+3

@@ -1,0 +1,383 @@
+Function print_int returns void
+  param:
+    Var n : int
+Function print_string returns void
+  param:
+    Var s : pointer to char
+Function print_line returns void
+Class Money
+  Field private cents : int
+  Constructor public Money::Money
+    Block
+      ExprStmt
+        Binary =
+          cents
+          0
+  Method public Money::set returns void
+    param:
+      Var c : int
+    Block
+      ExprStmt
+        Binary =
+          cents
+          c
+  Method public Money::get returns int
+    Block
+      Return
+        cents
+  Method public Money::operator+ returns class Money
+    param:
+      Var o : class Money
+    Block
+      Var r : class Money
+      ExprStmt
+        Binary =
+          Member .cents
+            r
+          Binary +
+            cents
+            Member .cents
+              o
+      Return
+        r
+Function operator* returns class Money
+  param:
+    Var m : class Money
+  param:
+    Var k : int
+  Block
+    Var r : class Money
+    ExprStmt
+      Binary =
+        Member .cents
+          r
+        Binary *
+          Member .cents
+            m
+          k
+    Return
+      r
+Function operator< returns bool
+  param:
+    Var a : class Money
+  param:
+    Var b : class Money
+  Block
+    Return
+      Binary <
+        Member .cents
+          a
+        Member .cents
+          b
+Function operator* returns class Money
+  param:
+    Var k : int
+  param:
+    Var m : class Money
+  Block
+    Var r : class Money
+    ExprStmt
+      Call
+        Member .set
+          r
+        arg 0:
+          Binary *
+            Call
+              Member .get
+                m
+            k
+    Return
+      r
+Function main returns int
+  Block
+    Var a : class Money
+    ExprStmt
+      Call
+        Member .set
+          a
+        arg 0:
+          150
+    Var b : class Money
+    ExprStmt
+      Call
+        Member .set
+          b
+        arg 0:
+          250
+    Var c : class Money
+      init:
+        Binary +
+          a
+          b
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member .get
+              c
+    ExprStmt
+      Call
+        print_line
+    Var d : class Money
+      init:
+        Binary *
+          3
+          a
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member .get
+              d
+    ExprStmt
+      Call
+        print_line
+    Var e : class Money
+      init:
+        Binary *
+          a
+          4
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member .get
+              e
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Binary <
+            a
+            b
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Binary <
+            b
+            a
+    ExprStmt
+      Call
+        print_line
+    Var f : class Money
+      init:
+        Binary +
+          Binary *
+            2
+            a
+          b
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member .get
+              f
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+class Money  size=4 align=4
+    +0  cents (4 bytes)
+    construct: field cents -> Money() body
+    destroy:   ~Money() body -> field cents
+
+function Money__ctor$v   ; Money::Money
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = const 0
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+            store [%5] <- %2 :4
+            ret
+
+function Money__set$i   ; Money::set
+  #0 this  8 bytes  (param)
+  #1 c  4 bytes  (param)
+    %0 = local #1
+    %1 = load [%0] :4
+    %2 = local #0
+    %3 = load [%2] :8
+    %4 = field %3 +0
+            store [%4] <- %1 :4
+            ret
+
+function Money__get$v   ; Money::get
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +0
+    %3 = load [%2] :4
+            ret %3
+
+function Money__operator+$5Money   ; Money::operator+
+  #0 this  8 bytes  (param)
+  #1 __ret  8 bytes  (param)
+  #2 o  4 bytes  (param)
+  #3 r  4 bytes
+    %0 = local #3
+            call Money__ctor$v(%0)
+    %1 = local #0
+    %2 = load [%1] :8
+    %3 = field %2 +0
+    %4 = load [%3] :4
+    %5 = local #2
+    %6 = field %5 +0
+    %7 = load [%6] :4
+    %8 = add %4, %7
+    %9 = local #3
+    %10 = field %9 +0
+            store [%10] <- %8 :4
+    %11 = local #1
+    %12 = load [%11] :8
+    %13 = local #3
+            memcpy [%12] <- [%13] :4
+            ret %12
+
+function operator*$5Moneyi   ; operator*
+  #0 __ret  8 bytes  (param)
+  #1 m  4 bytes  (param)
+  #2 k  4 bytes  (param)
+  #3 r  4 bytes
+    %0 = local #3
+            call Money__ctor$v(%0)
+    %1 = local #1
+    %2 = field %1 +0
+    %3 = load [%2] :4
+    %4 = local #2
+    %5 = load [%4] :4
+    %6 = mul %3, %5
+    %7 = local #3
+    %8 = field %7 +0
+            store [%8] <- %6 :4
+    %9 = local #0
+    %10 = load [%9] :8
+    %11 = local #3
+            memcpy [%10] <- [%11] :4
+            ret %10
+
+function operator<$5Money5Money   ; operator<
+  #0 a  4 bytes  (param)
+  #1 b  4 bytes  (param)
+    %0 = local #0
+    %1 = field %0 +0
+    %2 = load [%1] :4
+    %3 = local #1
+    %4 = field %3 +0
+    %5 = load [%4] :4
+    %6 = cmp.lt %2, %5
+            ret %6
+
+function operator*$i5Money   ; operator*
+  #0 __ret  8 bytes  (param)
+  #1 k  4 bytes  (param)
+  #2 m  4 bytes  (param)
+  #3 r  4 bytes
+    %0 = local #3
+            call Money__ctor$v(%0)
+    %1 = local #3
+    %2 = local #2
+    %3 = call Money__get$v(%2)
+    %4 = local #1
+    %5 = load [%4] :4
+    %6 = mul %3, %5
+            call Money__set$i(%1, %6)
+    %7 = local #0
+    %8 = load [%7] :8
+    %9 = local #3
+            memcpy [%8] <- [%9] :4
+            ret %8
+
+function main
+  #0 a  4 bytes
+  #1 b  4 bytes
+  #2 c  4 bytes
+  #3 __result  4 bytes
+  #4 d  4 bytes
+  #5 __result  4 bytes
+  #6 e  4 bytes
+  #7 __result  4 bytes
+  #8 f  4 bytes
+  #9 __result  4 bytes
+  #10 __result  4 bytes
+            call __global_init()
+    %0 = local #0
+            call Money__ctor$v(%0)
+    %1 = local #0
+    %2 = const 150
+            call Money__set$i(%1, %2)
+    %3 = local #1
+            call Money__ctor$v(%3)
+    %4 = local #1
+    %5 = const 250
+            call Money__set$i(%4, %5)
+    %6 = local #0
+    %7 = local #3
+    %8 = local #1
+    %9 = call Money__operator+$5Money(%6, %7, %8)
+    %10 = local #2
+            memcpy [%10] <- [%9] :4
+    %11 = local #2
+    %12 = call Money__get$v(%11)
+            call print_int(%12)
+            call print_line()
+    %13 = local #5
+    %14 = const 3
+    %15 = local #0
+    %16 = call operator*$i5Money(%13, %14, %15)
+    %17 = local #4
+            memcpy [%17] <- [%16] :4
+    %18 = local #4
+    %19 = call Money__get$v(%18)
+            call print_int(%19)
+            call print_line()
+    %20 = local #7
+    %21 = local #0
+    %22 = const 4
+    %23 = call operator*$5Moneyi(%20, %21, %22)
+    %24 = local #6
+            memcpy [%24] <- [%23] :4
+    %25 = local #6
+    %26 = call Money__get$v(%25)
+            call print_int(%26)
+            call print_line()
+    %27 = local #0
+    %28 = local #1
+    %29 = call operator<$5Money5Money(%27, %28)
+    %30 = iresize %29 :4 unsigned
+            call print_int(%30)
+    %31 = local #1
+    %32 = local #0
+    %33 = call operator<$5Money5Money(%31, %32)
+    %34 = iresize %33 :4 unsigned
+            call print_int(%34)
+            call print_line()
+    %35 = local #9
+    %36 = const 2
+    %37 = local #0
+    %38 = call operator*$i5Money(%35, %36, %37)
+    %39 = local #10
+    %40 = local #1
+    %41 = call Money__operator+$5Money(%38, %39, %40)
+    %42 = local #8
+            memcpy [%42] <- [%41] :4
+    %43 = local #8
+    %44 = call Money__get$v(%43)
+            call print_int(%44)
+            call print_line()
+    %45 = const 0
+            ret %45
+
+function __global_init
+            ret

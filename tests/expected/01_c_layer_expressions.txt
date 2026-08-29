@@ -1,0 +1,67 @@
+Function main returns int
+  Block
+    Var a : int
+      init:
+        Binary +
+          1
+          Binary *
+            2
+            3
+    Var b : int
+      init:
+        Binary /
+          Binary -
+            a
+            1
+          2
+    Var c : int
+      init:
+        Binary %
+          a
+          b
+    Return
+      Binary +
+        Binary +
+          a
+          b
+        c
+
+function main
+  #0 a  4 bytes
+  #1 b  4 bytes
+  #2 c  4 bytes
+            call __global_init()
+    %0 = const 1
+    %1 = const 2
+    %2 = const 3
+    %3 = mul %1, %2
+    %4 = add %0, %3
+    %5 = local #0
+            store [%5] <- %4 :4
+    %6 = local #0
+    %7 = load [%6] :4
+    %8 = const 1
+    %9 = sub %7, %8
+    %10 = const 2
+    %11 = div %9, %10
+    %12 = local #1
+            store [%12] <- %11 :4
+    %13 = local #0
+    %14 = load [%13] :4
+    %15 = local #1
+    %16 = load [%15] :4
+    %17 = mod %14, %16
+    %18 = local #2
+            store [%18] <- %17 :4
+    %19 = local #0
+    %20 = load [%19] :4
+    %21 = local #1
+    %22 = load [%21] :4
+    %23 = add %20, %22
+    %24 = local #2
+    %25 = load [%24] :4
+    %26 = add %23, %25
+            ret %26
+
+function __global_init
+            ret

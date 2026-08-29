@@ -1,0 +1,47 @@
+19_err_bad_override.cpp:8:8: error: 'f' overrides 'Base::f' but returns char instead of int
+19_err_bad_override.cpp:9:7: warning: 'g' hides 'Base::g' rather than overriding it
+19_err_bad_override.cpp:8:19: warning: narrowing int to char in this return
+Class Base
+  Method public virtual Base::f returns int
+    param:
+      Var a : int
+    Block
+      Return
+        a
+  Method public virtual Base::g returns int
+    param:
+      Var a : int
+    Block
+      Return
+        a
+Class Derived : public Base
+  Method public Derived::f returns char
+    param:
+      Var a : int
+    Block
+      Return
+        a
+  Method public Derived::g returns int
+    param:
+      Var a : int
+    param:
+      Var b : int
+    Block
+      Return
+        Binary +
+          a
+          b
+
+class Base  size=8 align=8  [has vptr]
+     +0  __vptr (8 bytes)
+    vtable[0] = Base::f
+    vtable[1] = Base::g
+    construct: set vptr
+    destroy:   reset vptr
+
+class Derived  size=8 align=8  [has vptr]
+     +0  __vptr (8 bytes)
+    vtable[0] = Base::f
+    vtable[1] = Base::g
+    construct: base Base -> set vptr
+    destroy:   reset vptr -> base Base

@@ -1,0 +1,410 @@
+Function print_int returns void
+  param:
+    Var n : int
+Function print_line returns void
+Function main returns int
+  Block
+    Var i : int
+      init:
+        5
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Unary ++ (postfix)
+            i
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          i
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Unary ++ (prefix)
+            i
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          i
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Unary -- (postfix)
+            i
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Unary -- (prefix)
+            i
+    ExprStmt
+      Call
+        print_line
+    Var a : int
+      init:
+        10
+    ExprStmt
+      Binary +=
+        a
+        5
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          a
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Binary -=
+        a
+        3
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          a
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Binary *=
+        a
+        2
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          a
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Binary /=
+        a
+        4
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          a
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Binary %=
+        a
+        4
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          a
+    ExprStmt
+      Call
+        print_line
+    Var n : int
+      init:
+        0
+    DoWhile
+      Block
+        ExprStmt
+          Unary ++ (postfix)
+            n
+      Binary <
+        n
+        3
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          n
+    ExprStmt
+      Call
+        print_line
+    Var r : int
+      init:
+        0
+    Switch
+      n
+      Block
+        case 1:
+        ExprStmt
+          Binary =
+            r
+            100
+        Break
+        case 3:
+        ExprStmt
+          Binary =
+            r
+            300
+        case 4:
+        ExprStmt
+          Binary =
+            r
+            Binary +
+              r
+              7
+        Break
+        default:
+        ExprStmt
+          Binary =
+            r
+            Unary -
+              1
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          r
+    ExprStmt
+      Call
+        print_line
+    Var d : double
+      init:
+        3.7 : double
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Cast to int
+            d
+    ExprStmt
+      Call
+        print_line
+    Var s : pointer to char
+      init:
+        "xy"
+    Var k : int
+      init:
+        0
+    While
+      Binary !=
+        Index
+          s
+          k
+        0
+      Block
+        ExprStmt
+          Unary ++ (postfix)
+            k
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          k
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+string str0  "xy"
+
+function main
+  #0 i  4 bytes
+  #1 a  4 bytes
+  #2 n  4 bytes
+  #3 r  4 bytes
+  #4 d  8 bytes
+  #5 s  8 bytes
+  #6 k  4 bytes
+            call __global_init()
+    %0 = const 5
+    %1 = local #0
+            store [%1] <- %0 :4
+    %2 = local #0
+    %3 = load [%2] :4
+    %4 = const 1
+    %5 = add %3, %4
+            store [%2] <- %5 :4
+            call print_int(%3)
+    %6 = local #0
+    %7 = load [%6] :4
+            call print_int(%7)
+            call print_line()
+    %8 = local #0
+    %9 = load [%8] :4
+    %10 = const 1
+    %11 = add %9, %10
+            store [%8] <- %11 :4
+            call print_int(%11)
+    %12 = local #0
+    %13 = load [%12] :4
+            call print_int(%13)
+            call print_line()
+    %14 = local #0
+    %15 = load [%14] :4
+    %16 = const 1
+    %17 = sub %15, %16
+            store [%14] <- %17 :4
+            call print_int(%15)
+    %18 = local #0
+    %19 = load [%18] :4
+    %20 = const 1
+    %21 = sub %19, %20
+            store [%18] <- %21 :4
+            call print_int(%21)
+            call print_line()
+    %22 = const 10
+    %23 = local #1
+            store [%23] <- %22 :4
+    %24 = local #1
+    %25 = load [%24] :4
+    %26 = const 5
+    %27 = add %25, %26
+            store [%24] <- %27 :4
+    %28 = local #1
+    %29 = load [%28] :4
+            call print_int(%29)
+            call print_line()
+    %30 = local #1
+    %31 = load [%30] :4
+    %32 = const 3
+    %33 = sub %31, %32
+            store [%30] <- %33 :4
+    %34 = local #1
+    %35 = load [%34] :4
+            call print_int(%35)
+            call print_line()
+    %36 = local #1
+    %37 = load [%36] :4
+    %38 = const 2
+    %39 = mul %37, %38
+            store [%36] <- %39 :4
+    %40 = local #1
+    %41 = load [%40] :4
+            call print_int(%41)
+            call print_line()
+    %42 = local #1
+    %43 = load [%42] :4
+    %44 = const 4
+    %45 = div %43, %44
+            store [%42] <- %45 :4
+    %46 = local #1
+    %47 = load [%46] :4
+            call print_int(%47)
+            call print_line()
+    %48 = local #1
+    %49 = load [%48] :4
+    %50 = const 4
+    %51 = mod %49, %50
+            store [%48] <- %51 :4
+    %52 = local #1
+    %53 = load [%52] :4
+            call print_int(%53)
+            call print_line()
+    %54 = const 0
+    %55 = local #2
+            store [%55] <- %54 :4
+    L0:
+    %56 = local #2
+    %57 = load [%56] :4
+    %58 = const 1
+    %59 = add %57, %58
+            store [%56] <- %59 :4
+    L1:
+    %60 = local #2
+    %61 = load [%60] :4
+    %62 = const 3
+    %63 = cmp.lt %61, %62
+            brnz %63 L0
+    L2:
+    %64 = local #2
+    %65 = load [%64] :4
+            call print_int(%65)
+            call print_line()
+    %66 = const 0
+    %67 = local #3
+            store [%67] <- %66 :4
+    %68 = local #2
+    %69 = load [%68] :4
+    %70 = const 1
+    %71 = cmp.eq %69, %70
+            brnz %71 L4
+    %72 = const 3
+    %73 = cmp.eq %69, %72
+            brnz %73 L5
+    %74 = const 4
+    %75 = cmp.eq %69, %74
+            brnz %75 L6
+            jump L7
+    L4:
+    %76 = const 100
+    %77 = local #3
+            store [%77] <- %76 :4
+            jump L3
+    L5:
+    %78 = const 300
+    %79 = local #3
+            store [%79] <- %78 :4
+    L6:
+    %80 = local #3
+    %81 = load [%80] :4
+    %82 = const 7
+    %83 = add %81, %82
+    %84 = local #3
+            store [%84] <- %83 :4
+            jump L3
+    L7:
+    %85 = const 1
+    %86 = neg %85
+    %87 = local #3
+            store [%87] <- %86 :4
+    L3:
+    %88 = local #3
+    %89 = load [%88] :4
+            call print_int(%89)
+            call print_line()
+    %90 = fconst 3.7
+    %91 = local #4
+            store [%91] <- %90 :8f
+    %92 = local #4
+    %93 = load [%92] :8f
+    %94 = ftoi %93 :4
+            call print_int(%94)
+            call print_line()
+    %95 = straddr str0
+    %96 = local #5
+            store [%96] <- %95 :8
+    %97 = const 0
+    %98 = local #6
+            store [%98] <- %97 :4
+    L8:
+    %99 = local #5
+    %100 = load [%99] :8
+    %101 = local #6
+    %102 = load [%101] :4
+    %103 = add %100, %102
+    %104 = load [%103] :1
+    %105 = const 0
+    %106 = iresize %104 :4 signed
+    %107 = cmp.ne %106, %105
+            brz %107 L9
+    %108 = local #6
+    %109 = load [%108] :4
+    %110 = const 1
+    %111 = add %109, %110
+            store [%108] <- %111 :4
+            jump L8
+    L9:
+    %112 = local #6
+    %113 = load [%112] :4
+            call print_int(%113)
+            call print_line()
+    %114 = const 0
+            ret %114
+
+function __global_init
+            ret

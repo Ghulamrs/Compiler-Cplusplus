@@ -1,0 +1,316 @@
+Function print_int returns void
+  param:
+    Var n : int
+Function print_line returns void
+Class M
+  Field private v : int
+  Constructor public M::M
+    Block
+      ExprStmt
+        Binary =
+          v
+          0
+  Method public M::set returns void
+    param:
+      Var n : int
+    Block
+      ExprStmt
+        Binary =
+          v
+          n
+  Method public M::get returns int
+    Block
+      Return
+        v
+Function operator* returns class M
+  param:
+    Var k : int
+  param:
+    Var m : class M
+  Block
+    Var r : class M
+    ExprStmt
+      Binary =
+        Member .v
+          r
+        Binary *
+          k
+          Member .v
+            m
+    Return
+      r
+Function operator* returns class M
+  param:
+    Var m : class M
+  param:
+    Var k : int
+  Block
+    Var r : class M
+    ExprStmt
+      Binary =
+        Member .v
+          r
+        Binary *
+          Member .v
+            m
+          k
+    Return
+      r
+Function operator* returns class M
+  param:
+    Var a : class M
+  param:
+    Var b : class M
+  Block
+    Var r : class M
+    ExprStmt
+      Binary =
+        Member .v
+          r
+        Binary *
+          Member .v
+            a
+          Member .v
+            b
+    Return
+      r
+Function operator< returns bool
+  param:
+    Var a : class M
+  param:
+    Var b : class M
+  Block
+    Return
+      Binary <
+        Member .v
+          a
+        Member .v
+          b
+Function main returns int
+  Block
+    Var a : class M
+    ExprStmt
+      Call
+        Member .set
+          a
+        arg 0:
+          3
+    Var b : class M
+    ExprStmt
+      Call
+        Member .set
+          b
+        arg 0:
+          4
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member .get
+              Binary *
+                2
+                a
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member .get
+              Binary *
+                a
+                5
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member .get
+              Binary *
+                a
+                b
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Binary <
+            a
+            b
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Binary <
+            b
+            a
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+class M  size=4 align=4
+    +0  v (4 bytes)
+    construct: field v -> M() body
+    destroy:   ~M() body -> field v
+
+function M__ctor$v   ; M::M
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = const 0
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+            store [%5] <- %2 :4
+            ret
+
+function M__set$i   ; M::set
+  #0 this  8 bytes  (param)
+  #1 n  4 bytes  (param)
+    %0 = local #1
+    %1 = load [%0] :4
+    %2 = local #0
+    %3 = load [%2] :8
+    %4 = field %3 +0
+            store [%4] <- %1 :4
+            ret
+
+function M__get$v   ; M::get
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +0
+    %3 = load [%2] :4
+            ret %3
+
+function operator*$i1M   ; operator*
+  #0 __ret  8 bytes  (param)
+  #1 k  4 bytes  (param)
+  #2 m  4 bytes  (param)
+  #3 r  4 bytes
+    %0 = local #3
+            call M__ctor$v(%0)
+    %1 = local #1
+    %2 = load [%1] :4
+    %3 = local #2
+    %4 = field %3 +0
+    %5 = load [%4] :4
+    %6 = mul %2, %5
+    %7 = local #3
+    %8 = field %7 +0
+            store [%8] <- %6 :4
+    %9 = local #0
+    %10 = load [%9] :8
+    %11 = local #3
+            memcpy [%10] <- [%11] :4
+            ret %10
+
+function operator*$1Mi   ; operator*
+  #0 __ret  8 bytes  (param)
+  #1 m  4 bytes  (param)
+  #2 k  4 bytes  (param)
+  #3 r  4 bytes
+    %0 = local #3
+            call M__ctor$v(%0)
+    %1 = local #1
+    %2 = field %1 +0
+    %3 = load [%2] :4
+    %4 = local #2
+    %5 = load [%4] :4
+    %6 = mul %3, %5
+    %7 = local #3
+    %8 = field %7 +0
+            store [%8] <- %6 :4
+    %9 = local #0
+    %10 = load [%9] :8
+    %11 = local #3
+            memcpy [%10] <- [%11] :4
+            ret %10
+
+function operator*$1M1M   ; operator*
+  #0 __ret  8 bytes  (param)
+  #1 a  4 bytes  (param)
+  #2 b  4 bytes  (param)
+  #3 r  4 bytes
+    %0 = local #3
+            call M__ctor$v(%0)
+    %1 = local #1
+    %2 = field %1 +0
+    %3 = load [%2] :4
+    %4 = local #2
+    %5 = field %4 +0
+    %6 = load [%5] :4
+    %7 = mul %3, %6
+    %8 = local #3
+    %9 = field %8 +0
+            store [%9] <- %7 :4
+    %10 = local #0
+    %11 = load [%10] :8
+    %12 = local #3
+            memcpy [%11] <- [%12] :4
+            ret %11
+
+function operator<$1M1M   ; operator<
+  #0 a  4 bytes  (param)
+  #1 b  4 bytes  (param)
+    %0 = local #0
+    %1 = field %0 +0
+    %2 = load [%1] :4
+    %3 = local #1
+    %4 = field %3 +0
+    %5 = load [%4] :4
+    %6 = cmp.lt %2, %5
+            ret %6
+
+function main
+  #0 a  4 bytes
+  #1 b  4 bytes
+  #2 __result  4 bytes
+  #3 __result  4 bytes
+  #4 __result  4 bytes
+            call __global_init()
+    %0 = local #0
+            call M__ctor$v(%0)
+    %1 = local #0
+    %2 = const 3
+            call M__set$i(%1, %2)
+    %3 = local #1
+            call M__ctor$v(%3)
+    %4 = local #1
+    %5 = const 4
+            call M__set$i(%4, %5)
+    %6 = local #2
+    %7 = const 2
+    %8 = local #0
+    %9 = call operator*$i1M(%6, %7, %8)
+    %10 = call M__get$v(%9)
+            call print_int(%10)
+    %11 = local #3
+    %12 = local #0
+    %13 = const 5
+    %14 = call operator*$1Mi(%11, %12, %13)
+    %15 = call M__get$v(%14)
+            call print_int(%15)
+    %16 = local #4
+    %17 = local #0
+    %18 = local #1
+    %19 = call operator*$1M1M(%16, %17, %18)
+    %20 = call M__get$v(%19)
+            call print_int(%20)
+    %21 = local #0
+    %22 = local #1
+    %23 = call operator<$1M1M(%21, %22)
+    %24 = iresize %23 :4 unsigned
+            call print_int(%24)
+    %25 = local #1
+    %26 = local #0
+    %27 = call operator<$1M1M(%25, %26)
+    %28 = iresize %27 :4 unsigned
+            call print_int(%28)
+            call print_line()
+    %29 = const 0
+            ret %29
+
+function __global_init
+            ret

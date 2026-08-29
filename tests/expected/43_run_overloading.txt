@@ -1,0 +1,264 @@
+Function print_int returns void
+  param:
+    Var n : int
+Function print_double returns void
+  param:
+    Var d : double
+Function print_line returns void
+Function twice returns int
+  param:
+    Var a : int
+  Block
+    Return
+      Binary *
+        a
+        2
+Function twice returns double
+  param:
+    Var a : double
+  Block
+    Return
+      Binary *
+        a
+        2 : double
+Function add returns int
+  param:
+    Var a : int
+  param:
+    Var b : int
+  Block
+    Return
+      Binary +
+        a
+        b
+Function add returns int
+  param:
+    Var a : int
+  param:
+    Var b : int
+  param:
+    Var c : int
+  Block
+    Return
+      Binary +
+        Binary +
+          a
+          b
+        c
+Class Box
+  Field public v : int
+  Constructor public Box::Box
+    param:
+      Var x : int
+    init member v
+      x
+    Block
+  Method public Box::get returns int
+    Block
+      Return
+        v
+  Method public Box::get returns int
+    param:
+      Var off : int
+    Block
+      Return
+        Binary +
+          v
+          off
+Function main returns int
+  Block
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            twice
+            arg 0:
+              3
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_double
+        arg 0:
+          Call
+            twice
+            arg 0:
+              2.5 : double
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            add
+            arg 0:
+              1
+            arg 1:
+              2
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            add
+            arg 0:
+              1
+            arg 1:
+              2
+            arg 2:
+              3
+    ExprStmt
+      Call
+        print_line
+    Var b : class Box
+      construct with 1 argument(s):
+        10
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member .get
+              b
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member .get
+              b
+            arg 0:
+              5
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+class Box  size=4 align=4
+    +0  v (4 bytes)
+    construct: field v -> Box() body
+    destroy:   ~Box() body -> field v
+
+function twice$i   ; twice
+  #0 a  4 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :4
+    %2 = const 2
+    %3 = mul %1, %2
+            ret %3
+
+function twice$d   ; twice
+  #0 a  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8f
+    %2 = fconst 2
+    %3 = fmul %1, %2
+            ret %3
+
+function add$ii   ; add
+  #0 a  4 bytes  (param)
+  #1 b  4 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :4
+    %2 = local #1
+    %3 = load [%2] :4
+    %4 = add %1, %3
+            ret %4
+
+function add$iii   ; add
+  #0 a  4 bytes  (param)
+  #1 b  4 bytes  (param)
+  #2 c  4 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :4
+    %2 = local #1
+    %3 = load [%2] :4
+    %4 = add %1, %3
+    %5 = local #2
+    %6 = load [%5] :4
+    %7 = add %4, %6
+            ret %7
+
+function Box__ctor$i   ; Box::Box
+  #0 this  8 bytes  (param)
+  #1 x  4 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = local #1
+    %3 = load [%2] :4
+    %4 = local #0
+    %5 = load [%4] :8
+    %6 = field %5 +0
+            store [%6] <- %3 :4
+            ret
+
+function Box__get$v   ; Box::get
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +0
+    %3 = load [%2] :4
+            ret %3
+
+function Box__get$i   ; Box::get
+  #0 this  8 bytes  (param)
+  #1 off  4 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +0
+    %3 = load [%2] :4
+    %4 = local #1
+    %5 = load [%4] :4
+    %6 = add %3, %5
+            ret %6
+
+function main
+  #0 b  4 bytes
+            call __global_init()
+    %0 = const 3
+    %1 = call twice$i(%0)
+            call print_int(%1)
+            call print_line()
+    %2 = fconst 2.5
+    %3 = call twice$d(%2)
+            call print_double(%3)
+            call print_line()
+    %4 = const 1
+    %5 = const 2
+    %6 = call add$ii(%4, %5)
+            call print_int(%6)
+            call print_line()
+    %7 = const 1
+    %8 = const 2
+    %9 = const 3
+    %10 = call add$iii(%7, %8, %9)
+            call print_int(%10)
+            call print_line()
+    %11 = local #0
+    %12 = const 10
+            call Box__ctor$i(%11, %12)
+    %13 = local #0
+    %14 = call Box__get$v(%13)
+            call print_int(%14)
+            call print_line()
+    %15 = local #0
+    %16 = const 5
+    %17 = call Box__get$i(%15, %16)
+            call print_int(%17)
+            call print_line()
+    %18 = const 0
+            ret %18
+
+function __global_init
+            ret

@@ -1,0 +1,56 @@
+72_err_friend_and_operators.cpp:10:10: error: a friend class is not supported in this version; name the function
+72_err_friend_and_operators.cpp:13:27: error: 'secret' is private in class 'Box'
+Function print_int returns void
+  param:
+    Var n : int
+Class Box
+  Field private secret : int
+  Constructor public Box::Box
+    Block
+      ExprStmt
+        Binary =
+          secret
+          1
+Function peek returns int
+  param:
+    Var b : class Box
+  Block
+    Return
+      Member .secret
+        b
+Function nosy returns int
+  param:
+    Var b : class Box
+  Block
+    Return
+      Member .secret
+        b
+Class V
+  Field public x : int
+  Method public V::operator[] returns int
+    param:
+      Var i : int
+    Block
+      Return
+        x
+Function main returns int
+  Block
+    Var b : class Box
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            nosy
+            arg 0:
+              b
+    Return
+      0
+
+class Box  size=4 align=4
+    +0  secret (4 bytes)
+    construct: field secret -> Box() body
+    destroy:   ~Box() body -> field secret
+
+class V  size=4 align=4
+    +0  x (4 bytes)

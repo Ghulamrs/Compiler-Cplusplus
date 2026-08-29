@@ -1,0 +1,222 @@
+Function print_int returns void
+  param:
+    Var n : int
+Function print_double returns void
+  param:
+    Var d : double
+Function print_string returns void
+  param:
+    Var s : pointer to char
+Function print_line returns void
+Function f returns int
+  param:
+    Var a : int
+  Block
+    Return
+      1
+Function f returns int
+  param:
+    Var a : int
+  param:
+    Var b : int
+  Block
+    Return
+      2
+Function f returns int
+  param:
+    Var a : double
+  Block
+    Return
+      3
+Function f returns int
+  param:
+    Var s : pointer to char
+  Block
+    Return
+      4
+Function f returns int
+  param:
+    Var a : int
+  param:
+    Var b : double
+  Block
+    Return
+      5
+Class K
+  Field public v : int
+  Constructor public K::K
+    Block
+      ExprStmt
+        Binary =
+          v
+          0
+Function g returns int
+  param:
+    Var k : class K
+  Block
+    Return
+      6
+Function g returns int
+  param:
+    Var n : int
+  Block
+    Return
+      7
+Function main returns int
+  Block
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            f
+            arg 0:
+              1
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            f
+            arg 0:
+              1
+            arg 1:
+              2
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            f
+            arg 0:
+              1.5 : double
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            f
+            arg 0:
+              "x"
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            f
+            arg 0:
+              1
+            arg 1:
+              2.5 : double
+    Var k : class K
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            g
+            arg 0:
+              k
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            g
+            arg 0:
+              9
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+class K  size=4 align=4
+    +0  v (4 bytes)
+    construct: field v -> K() body
+    destroy:   ~K() body -> field v
+
+string str0  "x"
+
+function f$i   ; f
+  #0 a  4 bytes  (param)
+    %0 = const 1
+            ret %0
+
+function f$ii   ; f
+  #0 a  4 bytes  (param)
+  #1 b  4 bytes  (param)
+    %0 = const 2
+            ret %0
+
+function f$d   ; f
+  #0 a  8 bytes  (param)
+    %0 = const 3
+            ret %0
+
+function f$Pc   ; f
+  #0 s  8 bytes  (param)
+    %0 = const 4
+            ret %0
+
+function f$id   ; f
+  #0 a  4 bytes  (param)
+  #1 b  8 bytes  (param)
+    %0 = const 5
+            ret %0
+
+function K__ctor$v   ; K::K
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = const 0
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+            store [%5] <- %2 :4
+            ret
+
+function g$1K   ; g
+  #0 k  4 bytes  (param)
+    %0 = const 6
+            ret %0
+
+function g$i   ; g
+  #0 n  4 bytes  (param)
+    %0 = const 7
+            ret %0
+
+function main
+  #0 k  4 bytes
+            call __global_init()
+    %0 = const 1
+    %1 = call f$i(%0)
+            call print_int(%1)
+    %2 = const 1
+    %3 = const 2
+    %4 = call f$ii(%2, %3)
+            call print_int(%4)
+    %5 = fconst 1.5
+    %6 = call f$d(%5)
+            call print_int(%6)
+    %7 = straddr str0
+    %8 = call f$Pc(%7)
+            call print_int(%8)
+    %9 = const 1
+    %10 = fconst 2.5
+    %11 = call f$id(%9, %10)
+            call print_int(%11)
+    %12 = local #0
+            call K__ctor$v(%12)
+    %13 = local #0
+    %14 = call g$1K(%13)
+            call print_int(%14)
+    %15 = const 9
+    %16 = call g$i(%15)
+            call print_int(%16)
+            call print_line()
+    %17 = const 0
+            ret %17
+
+function __global_init
+            ret

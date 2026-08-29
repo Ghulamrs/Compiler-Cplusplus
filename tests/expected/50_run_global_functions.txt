@@ -1,0 +1,378 @@
+50_run_global_functions.cpp:19:17: warning: narrowing double to int in the argument to 'n'
+Function print_int returns void
+  param:
+    Var n : int
+Function print_line returns void
+Function isOdd returns int
+  param:
+    Var n : int
+Function fact returns int
+  param:
+    Var n : int
+  Block
+    If
+      Binary <=
+        n
+        1
+    then:
+      Block
+        Return
+          1
+    Return
+      Binary *
+        n
+        Call
+          fact
+          arg 0:
+            Binary -
+              n
+              1
+Function isEven returns int
+  param:
+    Var n : int
+  Block
+    If
+      Binary ==
+        n
+        0
+    then:
+      Block
+        Return
+          1
+    Return
+      Call
+        isOdd
+        arg 0:
+          Binary -
+            n
+            1
+Function isOdd returns int
+  param:
+    Var n : int
+  Block
+    If
+      Binary ==
+        n
+        0
+    then:
+      Block
+        Return
+          0
+    Return
+      Call
+        isEven
+        arg 0:
+          Binary -
+            n
+            1
+Function area returns double
+  param:
+    Var r : double
+  Block
+    Return
+      Binary *
+        Binary *
+          3.14159 : double
+          r
+        r
+Function maxOf returns int
+  param:
+    Var a : int
+  param:
+    Var b : int
+  Block
+    If
+      Binary >
+        a
+        b
+    then:
+      Block
+        Return
+          a
+    Return
+      b
+Function maxOf returns int
+  param:
+    Var a : int
+  param:
+    Var b : int
+  param:
+    Var c : int
+  Block
+    Return
+      Call
+        maxOf
+        arg 0:
+          Call
+            maxOf
+            arg 0:
+              a
+            arg 1:
+              b
+        arg 1:
+          c
+Function shout returns void
+  Block
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          999
+    ExprStmt
+      Call
+        print_line
+Var counter : int
+  init:
+    0
+Function bump returns void
+  Block
+    ExprStmt
+      Unary ++ (postfix)
+        counter
+Function main returns int
+  Block
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            fact
+            arg 0:
+              6
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            isEven
+            arg 0:
+              10
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            isOdd
+            arg 0:
+              10
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            maxOf
+            arg 0:
+              3
+            arg 1:
+              9
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            maxOf
+            arg 0:
+              3
+            arg 1:
+              9
+            arg 2:
+              5
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            area
+            arg 0:
+              2 : double
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        shout
+    ExprStmt
+      Call
+        bump
+    ExprStmt
+      Call
+        bump
+    ExprStmt
+      Call
+        bump
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          counter
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+global counter  4 bytes
+
+function fact$i   ; fact
+  #0 n  4 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :4
+    %2 = const 1
+    %3 = cmp.le %1, %2
+            brz %3 L0
+    %4 = const 1
+            ret %4
+    L0:
+    %5 = local #0
+    %6 = load [%5] :4
+    %7 = local #0
+    %8 = load [%7] :4
+    %9 = const 1
+    %10 = sub %8, %9
+    %11 = call fact$i(%10)
+    %12 = mul %6, %11
+            ret %12
+
+function isEven$i   ; isEven
+  #0 n  4 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :4
+    %2 = const 0
+    %3 = cmp.eq %1, %2
+            brz %3 L0
+    %4 = const 1
+            ret %4
+    L0:
+    %5 = local #0
+    %6 = load [%5] :4
+    %7 = const 1
+    %8 = sub %6, %7
+    %9 = call isOdd$i(%8)
+            ret %9
+
+function isOdd$i   ; isOdd
+  #0 n  4 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :4
+    %2 = const 0
+    %3 = cmp.eq %1, %2
+            brz %3 L0
+    %4 = const 0
+            ret %4
+    L0:
+    %5 = local #0
+    %6 = load [%5] :4
+    %7 = const 1
+    %8 = sub %6, %7
+    %9 = call isEven$i(%8)
+            ret %9
+
+function area$d   ; area
+  #0 r  8 bytes  (param)
+    %0 = fconst 3.14159
+    %1 = local #0
+    %2 = load [%1] :8f
+    %3 = fmul %0, %2
+    %4 = local #0
+    %5 = load [%4] :8f
+    %6 = fmul %3, %5
+            ret %6
+
+function maxOf$ii   ; maxOf
+  #0 a  4 bytes  (param)
+  #1 b  4 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :4
+    %2 = local #1
+    %3 = load [%2] :4
+    %4 = cmp.gt %1, %3
+            brz %4 L0
+    %5 = local #0
+    %6 = load [%5] :4
+            ret %6
+    L0:
+    %7 = local #1
+    %8 = load [%7] :4
+            ret %8
+
+function maxOf$iii   ; maxOf
+  #0 a  4 bytes  (param)
+  #1 b  4 bytes  (param)
+  #2 c  4 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :4
+    %2 = local #1
+    %3 = load [%2] :4
+    %4 = call maxOf$ii(%1, %3)
+    %5 = local #2
+    %6 = load [%5] :4
+    %7 = call maxOf$ii(%4, %6)
+            ret %7
+
+function shout$v   ; shout
+    %0 = const 999
+            call print_int(%0)
+            call print_line()
+            ret
+
+function bump$v   ; bump
+    %0 = global counter
+    %1 = load [%0] :4
+    %2 = const 1
+    %3 = add %1, %2
+            store [%0] <- %3 :4
+            ret
+
+function main
+            call __global_init()
+    %0 = const 6
+    %1 = call fact$i(%0)
+            call print_int(%1)
+            call print_line()
+    %2 = const 10
+    %3 = call isEven$i(%2)
+            call print_int(%3)
+    %4 = const 10
+    %5 = call isOdd$i(%4)
+            call print_int(%5)
+            call print_line()
+    %6 = const 3
+    %7 = const 9
+    %8 = call maxOf$ii(%6, %7)
+            call print_int(%8)
+    %9 = const 3
+    %10 = const 9
+    %11 = const 5
+    %12 = call maxOf$iii(%9, %10, %11)
+            call print_int(%12)
+            call print_line()
+    %13 = fconst 2
+    %14 = call area$d(%13)
+    %15 = ftoi %14 :4
+            call print_int(%15)
+            call print_line()
+            call shout$v()
+            call bump$v()
+            call bump$v()
+            call bump$v()
+    %16 = global counter
+    %17 = load [%16] :4
+            call print_int(%17)
+            call print_line()
+    %18 = const 0
+            ret %18
+
+function __global_init
+    %0 = global counter
+    %1 = const 0
+            store [%0] <- %1 :4
+            ret

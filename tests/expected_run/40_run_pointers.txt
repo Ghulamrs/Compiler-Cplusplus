@@ -1,0 +1,7 @@
+40_run_pointers.cpp:15:13: warning: narrowing long to int in the argument to 'n'
+10
+20
+97
+99
+98
+2

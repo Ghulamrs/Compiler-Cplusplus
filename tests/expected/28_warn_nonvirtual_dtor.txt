@@ -1,0 +1,86 @@
+28_warn_nonvirtual_dtor.cpp:5:3: warning: class 'Base' has virtual functions but a non-virtual destructor
+28_warn_nonvirtual_dtor.cpp:14:3: warning: deleting through 'Base*' with a non-virtual destructor
+Class Base
+  Field public b : int
+  Method public virtual Base::get returns int
+    Block
+      Return
+        b
+  Destructor public Base::~Base
+    Block
+Class Derived : public Base
+  Field public d : int
+  Method public virtual overriding Derived::get returns int
+    Block
+      Return
+        d
+Function main returns int
+  Block
+    Var p : pointer to class Base
+      init:
+        New class Derived
+    ExprStmt
+      Delete
+        p
+    Return
+      0
+
+class Base  size=16 align=8  [has vptr]
+     +0  __vptr (8 bytes)
+    +8  b (4 bytes)
+    vtable[0] = Base::get
+    construct: set vptr -> field b -> Base() body
+    destroy:   ~Base() body -> field b -> reset vptr
+
+class Derived  size=24 align=8  [has vptr]
+     +0  __vptr (8 bytes)
+    +8  b (4 bytes)  inherited from Base
+    +16  d (4 bytes)
+    vtable[0] = Derived::get
+    construct: base Base -> set vptr -> field d
+    destroy:   field d -> reset vptr -> base Base
+
+vtable Base__vtable
+    [0] Base__get$v
+
+vtable Derived__vtable
+    [0] Derived__get$v
+
+function Base__get$v   ; Base::get
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +8
+    %3 = load [%2] :4
+            ret %3
+
+function Base__dtor   ; Base::~Base
+  #0 this  8 bytes  (param)
+            ret
+
+function Derived__get$v   ; Derived::get
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +16
+    %3 = load [%2] :4
+            ret %3
+
+function main
+  #0 p  8 bytes
+            call __global_init()
+    %0 = alloc 24
+    %1 = global Derived__vtable
+    %2 = field %0 +0
+            store [%2] <- %1 :8
+    %3 = local #0
+            store [%3] <- %0 :8
+    %4 = local #0
+    %5 = load [%4] :8
+            call Base__dtor(%5)
+            free %5
+    %6 = const 0
+            ret %6
+
+function __global_init
+            ret

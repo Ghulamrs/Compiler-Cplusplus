@@ -1,0 +1,128 @@
+Function print_string returns void
+  param:
+    Var s : pointer to char
+Function print_line returns void
+Class T
+  Constructor public T::T
+    Block
+      ExprStmt
+        Call
+          print_string
+          arg 0:
+            "+"
+  Destructor public T::~T
+    Block
+      ExprStmt
+        Call
+          print_string
+          arg 0:
+            "-"
+Function main returns int
+  Block
+    Block
+      Var i : int
+        init:
+          0
+      For
+        Binary <
+          i
+          3
+        Binary =
+          i
+          Binary +
+            i
+            1
+        Block
+          Var t : class T
+          If
+            Binary ==
+              i
+              0
+          then:
+            Block
+              Continue
+          If
+            Binary ==
+              i
+              2
+          then:
+            Block
+              Break
+          [on exit: destroy t]
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+class T  size=1 align=1
+    construct: T() body
+    destroy:   ~T() body
+
+string str0  "+"
+string str1  "-"
+
+function T__ctor$v   ; T::T
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = straddr str0
+            call print_string(%2)
+            ret
+
+function T__dtor   ; T::~T
+  #0 this  8 bytes  (param)
+    %0 = straddr str1
+            call print_string(%0)
+            ret
+
+function main
+  #0 i  4 bytes
+  #1 t  1 bytes
+            call __global_init()
+    %0 = const 0
+    %1 = local #0
+            store [%1] <- %0 :4
+    L0:
+    %2 = local #0
+    %3 = load [%2] :4
+    %4 = const 3
+    %5 = cmp.lt %3, %4
+            brz %5 L2
+    %6 = local #1
+            call T__ctor$v(%6)
+    %7 = local #0
+    %8 = load [%7] :4
+    %9 = const 0
+    %10 = cmp.eq %8, %9
+            brz %10 L3
+    %11 = local #1
+            call T__dtor(%11)
+            jump L1
+    L3:
+    %12 = local #0
+    %13 = load [%12] :4
+    %14 = const 2
+    %15 = cmp.eq %13, %14
+            brz %15 L4
+    %16 = local #1
+            call T__dtor(%16)
+            jump L2
+    L4:
+    %17 = local #1
+            call T__dtor(%17)
+    L1:
+    %18 = local #0
+    %19 = load [%18] :4
+    %20 = const 1
+    %21 = add %19, %20
+    %22 = local #0
+            store [%22] <- %21 :4
+            jump L0
+    L2:
+            call print_line()
+    %23 = const 0
+            ret %23
+
+function __global_init
+            ret

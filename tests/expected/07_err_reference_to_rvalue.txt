@@ -1,0 +1,8 @@
+07_err_reference_to_rvalue.cpp:2:8: error: cannot bind reference 's' of type int& to a non-lvalue initialiser
+Function main returns int
+  Block
+    Var s : reference to int
+      init:
+        1
+    Return
+      0

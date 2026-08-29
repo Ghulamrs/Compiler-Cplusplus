@@ -1,0 +1,331 @@
+Function print_int returns void
+  param:
+    Var n : int
+Function print_string returns void
+  param:
+    Var s : pointer to char
+Function print_line returns void
+Class Shape
+  Field public side : int
+  Constructor public Shape::Shape
+    param:
+      Var s : int
+    init member side
+      s
+    Block
+  Method public virtual Shape::area returns int
+    Block
+      Return
+        0
+  Destructor public virtual Shape::~Shape
+    Block
+      ExprStmt
+        Call
+          print_string
+          arg 0:
+            "~Shape "
+Class Square : public Shape
+  Constructor public Square::Square
+    param:
+      Var s : int
+    init base Shape
+      s
+    Block
+  Method public virtual overriding Square::area returns int
+    Block
+      Return
+        Binary *
+          side
+          side
+  Destructor public virtual overriding Square::~Square
+    Block
+      ExprStmt
+        Call
+          print_string
+          arg 0:
+            "~Square "
+Class Cube : public Square
+  Constructor public Cube::Cube
+    param:
+      Var s : int
+    init base Square
+      s
+    Block
+  Method public virtual overriding Cube::area returns int
+    Block
+      Return
+        Binary *
+          Binary *
+            side
+            side
+          side
+  Destructor public virtual overriding Cube::~Cube
+    Block
+      ExprStmt
+        Call
+          print_string
+          arg 0:
+            "~Cube "
+Function main returns int
+  Block
+    Var c : class Cube
+      construct with 1 argument(s):
+        3
+    Var s : pointer to class Shape
+      init:
+        Unary &
+          c
+    ExprStmt
+      Call
+        print_string
+        arg 0:
+          "virtual through base: "
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member ->area
+              s
+    ExprStmt
+      Call
+        print_line
+    Var heap : pointer to class Shape
+      init:
+        New class Square
+          4
+    ExprStmt
+      Call
+        print_string
+        arg 0:
+          "heap dispatch: "
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member ->area
+              heap
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_string
+        arg 0:
+          "delete runs: "
+    ExprStmt
+      Delete
+        heap
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_string
+        arg 0:
+          "scope exit runs: "
+    Return
+      Call
+        Member ->area
+          s
+    [on exit: destroy c]
+
+class Cube  size=16 align=8  [has vptr]
+     +0  __vptr (8 bytes)
+    +8  side (4 bytes)  inherited from Shape
+    vtable[0] = Cube::area
+    vtable[1] = Cube::~Cube
+    construct: base Square -> set vptr -> Cube() body
+    destroy:   ~Cube() body -> reset vptr -> base Square
+
+class Shape  size=16 align=8  [has vptr]
+     +0  __vptr (8 bytes)
+    +8  side (4 bytes)
+    vtable[0] = Shape::area
+    vtable[1] = Shape::~Shape
+    construct: set vptr -> field side -> Shape() body
+    destroy:   ~Shape() body -> field side -> reset vptr
+
+class Square  size=16 align=8  [has vptr]
+     +0  __vptr (8 bytes)
+    +8  side (4 bytes)  inherited from Shape
+    vtable[0] = Square::area
+    vtable[1] = Square::~Square
+    construct: base Shape -> set vptr -> Square() body
+    destroy:   ~Square() body -> reset vptr -> base Shape
+
+string str0  "~Shape "
+string str1  "~Square "
+string str2  "~Cube "
+string str3  "virtual through base: "
+string str4  "heap dispatch: "
+string str5  "delete runs: "
+string str6  "scope exit runs: "
+
+vtable Cube__vtable
+    [0] Cube__area$v
+    [1] Cube__dtor
+
+vtable Shape__vtable
+    [0] Shape__area$v
+    [1] Shape__dtor
+
+vtable Square__vtable
+    [0] Square__area$v
+    [1] Square__dtor
+
+function Shape__ctor$i   ; Shape::Shape
+  #0 this  8 bytes  (param)
+  #1 s  4 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = global Shape__vtable
+    %3 = field %1 +0
+            store [%3] <- %2 :8
+    %4 = local #1
+    %5 = load [%4] :4
+    %6 = local #0
+    %7 = load [%6] :8
+    %8 = field %7 +8
+            store [%8] <- %5 :4
+            ret
+
+function Shape__area$v   ; Shape::area
+  #0 this  8 bytes  (param)
+    %0 = const 0
+            ret %0
+
+function Shape__dtor   ; Shape::~Shape
+  #0 this  8 bytes  (param)
+    %0 = straddr str0
+            call print_string(%0)
+            ret
+
+function Square__ctor$i   ; Square::Square
+  #0 this  8 bytes  (param)
+  #1 s  4 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = local #1
+    %3 = load [%2] :4
+            call Shape__ctor$i(%1, %3)
+    %4 = global Square__vtable
+    %5 = field %1 +0
+            store [%5] <- %4 :8
+            ret
+
+function Square__area$v   ; Square::area
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +8
+    %3 = load [%2] :4
+    %4 = local #0
+    %5 = load [%4] :8
+    %6 = field %5 +8
+    %7 = load [%6] :4
+    %8 = mul %3, %7
+            ret %8
+
+function Square__dtor   ; Square::~Square
+  #0 this  8 bytes  (param)
+    %0 = straddr str1
+            call print_string(%0)
+    %1 = local #0
+    %2 = load [%1] :8
+            call Shape__dtor(%2)
+            ret
+
+function Cube__ctor$i   ; Cube::Cube
+  #0 this  8 bytes  (param)
+  #1 s  4 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = local #1
+    %3 = load [%2] :4
+            call Square__ctor$i(%1, %3)
+    %4 = global Cube__vtable
+    %5 = field %1 +0
+            store [%5] <- %4 :8
+            ret
+
+function Cube__area$v   ; Cube::area
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +8
+    %3 = load [%2] :4
+    %4 = local #0
+    %5 = load [%4] :8
+    %6 = field %5 +8
+    %7 = load [%6] :4
+    %8 = mul %3, %7
+    %9 = local #0
+    %10 = load [%9] :8
+    %11 = field %10 +8
+    %12 = load [%11] :4
+    %13 = mul %8, %12
+            ret %13
+
+function Cube__dtor   ; Cube::~Cube
+  #0 this  8 bytes  (param)
+    %0 = straddr str2
+            call print_string(%0)
+    %1 = local #0
+    %2 = load [%1] :8
+            call Square__dtor(%2)
+            ret
+
+function main
+  #0 c  16 bytes
+  #1 s  8 bytes
+  #2 heap  8 bytes
+            call __global_init()
+    %0 = local #0
+    %1 = const 3
+            call Cube__ctor$i(%0, %1)
+    %2 = local #0
+    %3 = local #1
+            store [%3] <- %2 :8
+    %4 = straddr str3
+            call print_string(%4)
+    %5 = local #1
+    %6 = load [%5] :8
+    %7 = vtable [%6] slot 0
+    %8 = call.ind %7(%6)
+            call print_int(%8)
+            call print_line()
+    %9 = alloc 16
+    %10 = const 4
+            call Square__ctor$i(%9, %10)
+    %11 = local #2
+            store [%11] <- %9 :8
+    %12 = straddr str4
+            call print_string(%12)
+    %13 = local #2
+    %14 = load [%13] :8
+    %15 = vtable [%14] slot 0
+    %16 = call.ind %15(%14)
+            call print_int(%16)
+            call print_line()
+    %17 = straddr str5
+            call print_string(%17)
+    %18 = local #2
+    %19 = load [%18] :8
+    %20 = vtable [%19] slot 1
+            call.ind %20(%19)
+            free %19
+            call print_line()
+    %21 = straddr str6
+            call print_string(%21)
+    %22 = local #1
+    %23 = load [%22] :8
+    %24 = vtable [%23] slot 0
+    %25 = call.ind %24(%23)
+    %26 = local #0
+            call Cube__dtor(%26)
+            ret %25
+
+function __global_init
+            ret

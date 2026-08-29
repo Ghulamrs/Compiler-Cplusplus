@@ -1,0 +1,89 @@
+90_err_const_methods_pointers.cpp:12:14: error: only a member function may be const
+90_err_const_methods_pointers.cpp:7:24: error: cannot modify a const object
+90_err_const_methods_pointers.cpp:10:29: error: 'bump' is not const, and 'A' here is
+90_err_const_methods_pointers.cpp:11:29: error: 'bump' is not const, and 'A' here is
+90_err_const_methods_pointers.cpp:15:4: error: 'bump' is not const, and 'A' here is
+90_err_const_methods_pointers.cpp:17:5: error: cannot assign to char* const
+90_err_const_methods_pointers.cpp:19:8: error: cannot assign to const char
+Class A
+  Field public x : int
+  Constructor public A::A
+    Block
+      ExprStmt
+        Binary =
+          x
+          1
+  Method public A::get returns int
+    Block
+      Return
+        x
+  Method public A::bad returns int
+    Block
+      ExprStmt
+        Binary =
+          x
+          5
+      Return
+        x
+  Method public A::bump returns void
+    Block
+      ExprStmt
+        Binary =
+          x
+          Binary +
+            x
+            1
+Function touchRef returns int
+  param:
+    Var a : reference to class A
+  Block
+    ExprStmt
+      Call
+        Member .bump
+          a
+    Return
+      0
+Function touchPtr returns int
+  param:
+    Var p : pointer to class A
+  Block
+    ExprStmt
+      Call
+        Member ->bump
+          p
+    Return
+      0
+Function freeFn returns int
+  Block
+    Return
+      1
+Function main returns int
+  Block
+    Var c : class A
+    ExprStmt
+      Call
+        Member .bump
+          c
+    Var p : pointer to char
+      init:
+        "ab"
+    ExprStmt
+      Binary =
+        p
+        "cd"
+    Var q : pointer to char
+      init:
+        "cd"
+    ExprStmt
+      Binary =
+        Index
+          q
+          0
+        122 : char
+    Return
+      0
+
+class A  size=4 align=4
+    +0  x (4 bytes)
+    construct: field x -> A() body
+    destroy:   ~A() body -> field x

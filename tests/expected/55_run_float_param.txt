@@ -1,0 +1,78 @@
+Function print_double returns void
+  param:
+    Var d : double
+Function print_line returns void
+Function idf returns double
+  param:
+    Var f : float
+  Block
+    Return
+      f
+Function scale returns float
+  param:
+    Var f : float
+  Block
+    Return
+      Binary *
+        f
+        2 : float
+Function main returns int
+  Block
+    ExprStmt
+      Call
+        print_double
+        arg 0:
+          Call
+            idf
+            arg 0:
+              1.5 : double
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_double
+        arg 0:
+          Call
+            scale
+            arg 0:
+              1.25 : double
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+function idf$f   ; idf
+  #0 f  4 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :4f
+    %2 = fresize %1 :8
+            ret %2
+
+function scale$f   ; scale
+  #0 f  4 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :4f
+    %2 = fconst 2
+    %3 = fmul %1, %2
+            ret %3
+
+function main
+            call __global_init()
+    %0 = fconst 1.5
+    %1 = fresize %0 :4
+    %2 = call idf$f(%1)
+            call print_double(%2)
+            call print_line()
+    %3 = fconst 1.25
+    %4 = fresize %3 :4
+    %5 = call scale$f(%4)
+    %6 = fresize %5 :8
+            call print_double(%6)
+            call print_line()
+    %7 = const 0
+            ret %7
+
+function __global_init
+            ret

@@ -1,0 +1,406 @@
+Function print_int returns void
+  param:
+    Var n : int
+Function print_string returns void
+  param:
+    Var s : pointer to char
+Function print_line returns void
+Class Node
+  Field public value : int
+  Field public next : pointer to class Node
+  Constructor public Node::Node
+    param:
+      Var v : int
+    init member value
+      v
+    Block
+      ExprStmt
+        Binary =
+          next
+          0
+  Method public virtual Node::get returns int
+    Block
+      Return
+        value
+  Destructor public virtual Node::~Node
+    Block
+      ExprStmt
+        Call
+          print_string
+          arg 0:
+            "~Node "
+Class Doubled : public Node
+  Constructor public Doubled::Doubled
+    param:
+      Var v : int
+    init base Node
+      v
+    Block
+  Method public virtual overriding Doubled::get returns int
+    Block
+      Return
+        Binary *
+          value
+          2
+  Destructor public virtual overriding Doubled::~Doubled
+    Block
+      ExprStmt
+        Call
+          print_string
+          arg 0:
+            "~Doubled "
+Function main returns int
+  Block
+    Var a : pointer to class Node
+      init:
+        New class Node
+          5
+    Var b : pointer to class Node
+      init:
+        New class Doubled
+          5
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member ->get
+              a
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member ->get
+              b
+    ExprStmt
+      Call
+        print_line
+    Var head : pointer to class Node
+      init:
+        New class Node
+          1
+    ExprStmt
+      Binary =
+        Member ->next
+          head
+        New class Node
+          2
+    ExprStmt
+      Binary =
+        Member ->next
+          Member ->next
+            head
+        New class Node
+          3
+    Var total : int
+      init:
+        0
+    Var p : pointer to class Node
+      init:
+        head
+    While
+      Binary !=
+        p
+        0
+      Block
+        ExprStmt
+          Binary +=
+            total
+            Member ->value
+              p
+        ExprStmt
+          Binary =
+            p
+            Member ->next
+              p
+    ExprStmt
+      Call
+        print_string
+        arg 0:
+          "sum="
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          total
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_string
+        arg 0:
+          "deleting: "
+    ExprStmt
+      Delete
+        b
+    ExprStmt
+      Delete
+        a
+    ExprStmt
+      Call
+        print_line
+    Var i : int
+      init:
+        0
+    While
+      Binary <
+        i
+        20
+      Block
+        Var t : pointer to class Node
+          init:
+            New class Node
+              i
+        ExprStmt
+          Delete
+            t
+        ExprStmt
+          Unary ++ (postfix)
+            i
+    ExprStmt
+      Call
+        print_string
+        arg 0:
+          "20 new/delete cycles survived"
+    ExprStmt
+      Call
+        print_line
+    Return
+      total
+
+class Doubled  size=24 align=8  [has vptr]
+     +0  __vptr (8 bytes)
+    +8  value (4 bytes)  inherited from Node
+    +16  next (8 bytes)  inherited from Node
+    vtable[0] = Doubled::get
+    vtable[1] = Doubled::~Doubled
+    construct: base Node -> set vptr -> Doubled() body
+    destroy:   ~Doubled() body -> reset vptr -> base Node
+
+class Node  size=24 align=8  [has vptr]
+     +0  __vptr (8 bytes)
+    +8  value (4 bytes)
+    +16  next (8 bytes)
+    vtable[0] = Node::get
+    vtable[1] = Node::~Node
+    construct: set vptr -> field value -> field next -> Node() body
+    destroy:   ~Node() body -> field next -> field value -> reset vptr
+
+string str0  "~Node "
+string str1  "~Doubled "
+string str2  "sum="
+string str3  "deleting: "
+string str4  "20 new/delete cycles survived"
+
+vtable Doubled__vtable
+    [0] Doubled__get$v
+    [1] Doubled__dtor
+
+vtable Node__vtable
+    [0] Node__get$v
+    [1] Node__dtor
+
+function Node__ctor$i   ; Node::Node
+  #0 this  8 bytes  (param)
+  #1 v  4 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = global Node__vtable
+    %3 = field %1 +0
+            store [%3] <- %2 :8
+    %4 = local #1
+    %5 = load [%4] :4
+    %6 = local #0
+    %7 = load [%6] :8
+    %8 = field %7 +8
+            store [%8] <- %5 :4
+    %9 = const 0
+    %10 = local #0
+    %11 = load [%10] :8
+    %12 = field %11 +16
+            store [%12] <- %9 :8
+            ret
+
+function Node__get$v   ; Node::get
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +8
+    %3 = load [%2] :4
+            ret %3
+
+function Node__dtor   ; Node::~Node
+  #0 this  8 bytes  (param)
+    %0 = straddr str0
+            call print_string(%0)
+            ret
+
+function Doubled__ctor$i   ; Doubled::Doubled
+  #0 this  8 bytes  (param)
+  #1 v  4 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = local #1
+    %3 = load [%2] :4
+            call Node__ctor$i(%1, %3)
+    %4 = global Doubled__vtable
+    %5 = field %1 +0
+            store [%5] <- %4 :8
+            ret
+
+function Doubled__get$v   ; Doubled::get
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +8
+    %3 = load [%2] :4
+    %4 = const 2
+    %5 = mul %3, %4
+            ret %5
+
+function Doubled__dtor   ; Doubled::~Doubled
+  #0 this  8 bytes  (param)
+    %0 = straddr str1
+            call print_string(%0)
+    %1 = local #0
+    %2 = load [%1] :8
+            call Node__dtor(%2)
+            ret
+
+function main
+  #0 a  8 bytes
+  #1 b  8 bytes
+  #2 head  8 bytes
+  #3 total  4 bytes
+  #4 p  8 bytes
+  #5 i  4 bytes
+  #6 t  8 bytes
+            call __global_init()
+    %0 = alloc 24
+    %1 = const 5
+            call Node__ctor$i(%0, %1)
+    %2 = local #0
+            store [%2] <- %0 :8
+    %3 = alloc 24
+    %4 = const 5
+            call Doubled__ctor$i(%3, %4)
+    %5 = local #1
+            store [%5] <- %3 :8
+    %6 = local #0
+    %7 = load [%6] :8
+    %8 = vtable [%7] slot 0
+    %9 = call.ind %8(%7)
+            call print_int(%9)
+    %10 = local #1
+    %11 = load [%10] :8
+    %12 = vtable [%11] slot 0
+    %13 = call.ind %12(%11)
+            call print_int(%13)
+            call print_line()
+    %14 = alloc 24
+    %15 = const 1
+            call Node__ctor$i(%14, %15)
+    %16 = local #2
+            store [%16] <- %14 :8
+    %17 = alloc 24
+    %18 = const 2
+            call Node__ctor$i(%17, %18)
+    %19 = local #2
+    %20 = load [%19] :8
+    %21 = field %20 +16
+            store [%21] <- %17 :8
+    %22 = alloc 24
+    %23 = const 3
+            call Node__ctor$i(%22, %23)
+    %24 = local #2
+    %25 = load [%24] :8
+    %26 = field %25 +16
+    %27 = load [%26] :8
+    %28 = field %27 +16
+            store [%28] <- %22 :8
+    %29 = const 0
+    %30 = local #3
+            store [%30] <- %29 :4
+    %31 = local #2
+    %32 = load [%31] :8
+    %33 = local #4
+            store [%33] <- %32 :8
+    L0:
+    %34 = local #4
+    %35 = load [%34] :8
+    %36 = const 0
+    %37 = cmp.ne %35, %36
+            brz %37 L1
+    %38 = local #3
+    %39 = load [%38] :4
+    %40 = local #4
+    %41 = load [%40] :8
+    %42 = field %41 +8
+    %43 = load [%42] :4
+    %44 = add %39, %43
+            store [%38] <- %44 :4
+    %45 = local #4
+    %46 = load [%45] :8
+    %47 = field %46 +16
+    %48 = load [%47] :8
+    %49 = local #4
+            store [%49] <- %48 :8
+            jump L0
+    L1:
+    %50 = straddr str2
+            call print_string(%50)
+    %51 = local #3
+    %52 = load [%51] :4
+            call print_int(%52)
+            call print_line()
+    %53 = straddr str3
+            call print_string(%53)
+    %54 = local #1
+    %55 = load [%54] :8
+    %56 = vtable [%55] slot 1
+            call.ind %56(%55)
+            free %55
+    %57 = local #0
+    %58 = load [%57] :8
+    %59 = vtable [%58] slot 1
+            call.ind %59(%58)
+            free %58
+            call print_line()
+    %60 = const 0
+    %61 = local #5
+            store [%61] <- %60 :4
+    L2:
+    %62 = local #5
+    %63 = load [%62] :4
+    %64 = const 20
+    %65 = cmp.lt %63, %64
+            brz %65 L3
+    %66 = alloc 24
+    %67 = local #5
+    %68 = load [%67] :4
+            call Node__ctor$i(%66, %68)
+    %69 = local #6
+            store [%69] <- %66 :8
+    %70 = local #6
+    %71 = load [%70] :8
+    %72 = vtable [%71] slot 1
+            call.ind %72(%71)
+            free %71
+    %73 = local #5
+    %74 = load [%73] :4
+    %75 = const 1
+    %76 = add %74, %75
+            store [%73] <- %76 :4
+            jump L2
+    L3:
+    %77 = straddr str4
+            call print_string(%77)
+            call print_line()
+    %78 = local #3
+    %79 = load [%78] :4
+            ret %79
+
+function __global_init
+            ret

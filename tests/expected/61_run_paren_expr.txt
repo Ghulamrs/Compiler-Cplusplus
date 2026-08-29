@@ -1,0 +1,103 @@
+Function print_int returns void
+  param:
+    Var n : int
+Function print_line returns void
+Function ident returns int
+  param:
+    Var x : int
+  Block
+    Return
+      x
+Function main returns int
+  Block
+    Var x : int
+      init:
+        7
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Binary +
+            x
+            1
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            ident
+            arg 0:
+              5
+    ExprStmt
+      Call
+        print_line
+    Var y : int
+      init:
+        x
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          y
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Binary *
+            x
+            y
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+function ident$i   ; ident
+  #0 x  4 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :4
+            ret %1
+
+function main
+  #0 x  4 bytes
+  #1 y  4 bytes
+            call __global_init()
+    %0 = const 7
+    %1 = local #0
+            store [%1] <- %0 :4
+    %2 = local #0
+    %3 = load [%2] :4
+    %4 = const 1
+    %5 = add %3, %4
+            call print_int(%5)
+            call print_line()
+    %6 = const 5
+    %7 = call ident$i(%6)
+            call print_int(%7)
+            call print_line()
+    %8 = local #0
+    %9 = load [%8] :4
+    %10 = local #1
+            store [%10] <- %9 :4
+    %11 = local #1
+    %12 = load [%11] :4
+            call print_int(%12)
+            call print_line()
+    %13 = local #0
+    %14 = load [%13] :4
+    %15 = local #1
+    %16 = load [%15] :4
+    %17 = mul %14, %16
+            call print_int(%17)
+            call print_line()
+    %18 = const 0
+            ret %18
+
+function __global_init
+            ret

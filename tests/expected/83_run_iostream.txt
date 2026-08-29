@@ -1,0 +1,377 @@
+Function main returns int
+  Block
+    ExprStmt
+      Binary <<
+        Binary <<
+          cout
+          "Hello, world!"
+        endl
+    ExprStmt
+      Binary <<
+        Binary <<
+          Binary <<
+            Binary <<
+              cout
+              42
+            " "
+          3.5 : double
+        endl
+    Var a : int
+      init:
+        7
+    ExprStmt
+      Binary <<
+        Binary <<
+          Binary <<
+            Binary <<
+              Binary <<
+                cout
+                "a = "
+              a
+            ", a*2 = "
+          Binary *
+            a
+            2
+        endl
+    Var c : char
+      init:
+        88 : char
+    ExprStmt
+      Binary <<
+        Binary <<
+          cout
+          c
+        endl
+    Var t : bool
+      init:
+        true
+    ExprStmt
+      Binary <<
+        Binary <<
+          cout
+          t
+        endl
+    Var r : double
+      init:
+        2 : double
+    ExprStmt
+      Binary <<
+        Binary <<
+          Binary <<
+            cout
+            "area "
+          Binary *
+            Binary *
+              3.14159 : double
+              r
+            r
+        endl
+    ExprStmt
+      Binary <<
+        Binary <<
+          cerr
+          "to cerr"
+        endl
+    Return
+      0
+
+class __endl_t  size=4 align=4
+    +0  _ (4 bytes)
+    construct: field _ -> __endl_t() body
+    destroy:   ~__endl_t() body -> field _
+
+class ostream  size=4 align=4
+    +0  _ (4 bytes)
+    construct: field _ -> ostream() body
+    destroy:   ~ostream() body -> field _
+
+string str0  "Hello, world!"
+string str1  " "
+string str2  "a = "
+string str3  ", a*2 = "
+string str4  "area "
+string str5  "to cerr"
+
+global endl  4 bytes
+global cout  4 bytes
+global cerr  4 bytes
+
+function __endl_t__ctor$v   ; __endl_t::__endl_t
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = const 0
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+            store [%5] <- %2 :4
+            ret
+
+function ostream__ctor$v   ; ostream::ostream
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = const 0
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+            store [%5] <- %2 :4
+            ret
+
+function ostream__operator<<$i   ; ostream::operator<<
+  #0 this  8 bytes  (param)
+  #1 __ret  8 bytes  (param)
+  #2 n  4 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :4
+            call print_int(%1)
+    %2 = local #1
+    %3 = load [%2] :8
+    %4 = local #0
+    %5 = load [%4] :8
+            memcpy [%3] <- [%5] :4
+            ret %3
+
+function ostream__operator<<$l   ; ostream::operator<<
+  #0 this  8 bytes  (param)
+  #1 __ret  8 bytes  (param)
+  #2 n  8 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :8
+    %2 = iresize %1 :4 signed
+            call print_int(%2)
+    %3 = local #1
+    %4 = load [%3] :8
+    %5 = local #0
+    %6 = load [%5] :8
+            memcpy [%4] <- [%6] :4
+            ret %4
+
+function ostream__operator<<$s   ; ostream::operator<<
+  #0 this  8 bytes  (param)
+  #1 __ret  8 bytes  (param)
+  #2 n  2 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :2
+    %2 = iresize %1 :4 signed
+            call print_int(%2)
+    %3 = local #1
+    %4 = load [%3] :8
+    %5 = local #0
+    %6 = load [%5] :8
+            memcpy [%4] <- [%6] :4
+            ret %4
+
+function ostream__operator<<$d   ; ostream::operator<<
+  #0 this  8 bytes  (param)
+  #1 __ret  8 bytes  (param)
+  #2 d  8 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :8f
+            call print_double(%1)
+    %2 = local #1
+    %3 = load [%2] :8
+    %4 = local #0
+    %5 = load [%4] :8
+            memcpy [%3] <- [%5] :4
+            ret %3
+
+function ostream__operator<<$f   ; ostream::operator<<
+  #0 this  8 bytes  (param)
+  #1 __ret  8 bytes  (param)
+  #2 f  4 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :4f
+    %2 = fresize %1 :8
+            call print_double(%2)
+    %3 = local #1
+    %4 = load [%3] :8
+    %5 = local #0
+    %6 = load [%5] :8
+            memcpy [%4] <- [%6] :4
+            ret %4
+
+function ostream__operator<<$c   ; ostream::operator<<
+  #0 this  8 bytes  (param)
+  #1 __ret  8 bytes  (param)
+  #2 c  1 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :1
+    %2 = iresize %1 :4 signed
+            call print_char(%2)
+    %3 = local #1
+    %4 = load [%3] :8
+    %5 = local #0
+    %6 = load [%5] :8
+            memcpy [%4] <- [%6] :4
+            ret %4
+
+function ostream__operator<<$Pc   ; ostream::operator<<
+  #0 this  8 bytes  (param)
+  #1 __ret  8 bytes  (param)
+  #2 s  8 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :8
+            call print_string(%1)
+    %2 = local #1
+    %3 = load [%2] :8
+    %4 = local #0
+    %5 = load [%4] :8
+            memcpy [%3] <- [%5] :4
+            ret %3
+
+function ostream__operator<<$b   ; ostream::operator<<
+  #0 this  8 bytes  (param)
+  #1 __ret  8 bytes  (param)
+  #2 b  1 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :1
+    %2 = iresize %1 :4 unsigned
+            call print_int(%2)
+    %3 = local #1
+    %4 = load [%3] :8
+    %5 = local #0
+    %6 = load [%5] :8
+            memcpy [%4] <- [%6] :4
+            ret %4
+
+function ostream__operator<<$8__endl_t   ; ostream::operator<<
+  #0 this  8 bytes  (param)
+  #1 __ret  8 bytes  (param)
+  #2 e  4 bytes  (param)
+            call print_line()
+    %0 = local #1
+    %1 = load [%0] :8
+    %2 = local #0
+    %3 = load [%2] :8
+            memcpy [%1] <- [%3] :4
+            ret %1
+
+function main
+  #0 __result  4 bytes
+  #1 __result  4 bytes
+  #2 __result  4 bytes
+  #3 __result  4 bytes
+  #4 __result  4 bytes
+  #5 __result  4 bytes
+  #6 a  4 bytes
+  #7 __result  4 bytes
+  #8 __result  4 bytes
+  #9 __result  4 bytes
+  #10 __result  4 bytes
+  #11 __result  4 bytes
+  #12 c  1 bytes
+  #13 __result  4 bytes
+  #14 __result  4 bytes
+  #15 t  1 bytes
+  #16 __result  4 bytes
+  #17 __result  4 bytes
+  #18 r  8 bytes
+  #19 __result  4 bytes
+  #20 __result  4 bytes
+  #21 __result  4 bytes
+  #22 __result  4 bytes
+  #23 __result  4 bytes
+            call __global_init()
+    %0 = global cout
+    %1 = local #0
+    %2 = straddr str0
+    %3 = call ostream__operator<<$Pc(%0, %1, %2)
+    %4 = local #1
+    %5 = global endl
+    %6 = call ostream__operator<<$8__endl_t(%3, %4, %5)
+    %7 = global cout
+    %8 = local #2
+    %9 = const 42
+    %10 = call ostream__operator<<$i(%7, %8, %9)
+    %11 = local #3
+    %12 = straddr str1
+    %13 = call ostream__operator<<$Pc(%10, %11, %12)
+    %14 = local #4
+    %15 = fconst 3.5
+    %16 = call ostream__operator<<$d(%13, %14, %15)
+    %17 = local #5
+    %18 = global endl
+    %19 = call ostream__operator<<$8__endl_t(%16, %17, %18)
+    %20 = const 7
+    %21 = local #6
+            store [%21] <- %20 :4
+    %22 = global cout
+    %23 = local #7
+    %24 = straddr str2
+    %25 = call ostream__operator<<$Pc(%22, %23, %24)
+    %26 = local #8
+    %27 = local #6
+    %28 = load [%27] :4
+    %29 = call ostream__operator<<$i(%25, %26, %28)
+    %30 = local #9
+    %31 = straddr str3
+    %32 = call ostream__operator<<$Pc(%29, %30, %31)
+    %33 = local #10
+    %34 = local #6
+    %35 = load [%34] :4
+    %36 = const 2
+    %37 = mul %35, %36
+    %38 = call ostream__operator<<$i(%32, %33, %37)
+    %39 = local #11
+    %40 = global endl
+    %41 = call ostream__operator<<$8__endl_t(%38, %39, %40)
+    %42 = const 88
+    %43 = local #12
+            store [%43] <- %42 :1
+    %44 = global cout
+    %45 = local #13
+    %46 = local #12
+    %47 = load [%46] :1
+    %48 = call ostream__operator<<$c(%44, %45, %47)
+    %49 = local #14
+    %50 = global endl
+    %51 = call ostream__operator<<$8__endl_t(%48, %49, %50)
+    %52 = const 1
+    %53 = local #15
+            store [%53] <- %52 :1
+    %54 = global cout
+    %55 = local #16
+    %56 = local #15
+    %57 = load [%56] :1
+    %58 = call ostream__operator<<$b(%54, %55, %57)
+    %59 = local #17
+    %60 = global endl
+    %61 = call ostream__operator<<$8__endl_t(%58, %59, %60)
+    %62 = fconst 2
+    %63 = local #18
+            store [%63] <- %62 :8f
+    %64 = global cout
+    %65 = local #19
+    %66 = straddr str4
+    %67 = call ostream__operator<<$Pc(%64, %65, %66)
+    %68 = local #20
+    %69 = fconst 3.14159
+    %70 = local #18
+    %71 = load [%70] :8f
+    %72 = fmul %69, %71
+    %73 = local #18
+    %74 = load [%73] :8f
+    %75 = fmul %72, %74
+    %76 = call ostream__operator<<$d(%67, %68, %75)
+    %77 = local #21
+    %78 = global endl
+    %79 = call ostream__operator<<$8__endl_t(%76, %77, %78)
+    %80 = global cerr
+    %81 = local #22
+    %82 = straddr str5
+    %83 = call ostream__operator<<$Pc(%80, %81, %82)
+    %84 = local #23
+    %85 = global endl
+    %86 = call ostream__operator<<$8__endl_t(%83, %84, %85)
+    %87 = const 0
+            ret %87
+
+function __global_init
+    %0 = global endl
+            call __endl_t__ctor$v(%0)
+    %1 = global cout
+            call ostream__ctor$v(%1)
+    %2 = global cerr
+            call ostream__ctor$v(%2)
+            ret

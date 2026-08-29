@@ -1,0 +1,111 @@
+34_warn_narrowing.cpp:4:10: warning: narrowing double to int in the initialisation of 'i'
+34_warn_narrowing.cpp:5:10: warning: narrowing int to char in the initialisation of 'c'
+34_warn_narrowing.cpp:6:10: warning: narrowing int to short in the initialisation of 's'
+34_warn_narrowing.cpp:7:16: warning: narrowing int to unsigned int in the initialisation of 'u'
+34_warn_narrowing.cpp:10:21: warning: narrowing int to char in the argument to 'c'
+Function narrow returns int
+  param:
+    Var c : char
+  Block
+    Return
+      c
+Function main returns int
+  Block
+    Var d : double
+      init:
+        3.9 : double
+    Var i : int
+      init:
+        d
+    Var c : char
+      init:
+        300
+    Var s : short
+      init:
+        70000
+    Var u : unsigned int
+      init:
+        Unary -
+          1
+    Var ok : float
+      init:
+        1 : double
+    Var fits : short
+      init:
+        1
+    Var r : int
+      init:
+        Call
+          narrow
+          arg 0:
+            i
+    ExprStmt
+      Binary =
+        d
+        i
+    Return
+      i
+
+function narrow$c   ; narrow
+  #0 c  1 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :1
+    %2 = iresize %1 :4 signed
+            ret %2
+
+function main
+  #0 d  8 bytes
+  #1 i  4 bytes
+  #2 c  1 bytes
+  #3 s  2 bytes
+  #4 u  4 bytes
+  #5 ok  4 bytes
+  #6 fits  2 bytes
+  #7 r  4 bytes
+            call __global_init()
+    %0 = fconst 3.9
+    %1 = local #0
+            store [%1] <- %0 :8f
+    %2 = local #0
+    %3 = load [%2] :8f
+    %4 = ftoi %3 :4
+    %5 = local #1
+            store [%5] <- %4 :4
+    %6 = const 300
+    %7 = iresize %6 :1 signed
+    %8 = local #2
+            store [%8] <- %7 :1
+    %9 = const 70000
+    %10 = iresize %9 :2 signed
+    %11 = local #3
+            store [%11] <- %10 :2
+    %12 = const 1
+    %13 = neg %12
+    %14 = iresize %13 :4 signed
+    %15 = local #4
+            store [%15] <- %14 :4
+    %16 = fconst 1
+    %17 = fresize %16 :4
+    %18 = local #5
+            store [%18] <- %17 :4f
+    %19 = const 1
+    %20 = iresize %19 :2 signed
+    %21 = local #6
+            store [%21] <- %20 :2
+    %22 = local #1
+    %23 = load [%22] :4
+    %24 = iresize %23 :1 signed
+    %25 = call narrow$c(%24)
+    %26 = local #7
+            store [%26] <- %25 :4
+    %27 = local #1
+    %28 = load [%27] :4
+    %29 = itof %28
+    %30 = local #0
+            store [%30] <- %29 :8f
+    %31 = local #1
+    %32 = load [%31] :4
+            ret %32
+
+function __global_init
+            ret

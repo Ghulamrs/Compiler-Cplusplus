@@ -1,0 +1,27 @@
+27_err_ctor_dtor_form.cpp:7:3: error: class 'P' already has a destructor
+27_err_ctor_dtor_form.cpp:5:11: error: a constructor cannot be virtual
+27_err_ctor_dtor_form.cpp:6:3: error: a destructor cannot take parameters
+27_err_ctor_dtor_form.cpp:4:9: error: a constructor or destructor cannot return a value
+Class P
+  Field public x : int
+  Constructor public P::P
+    Block
+      Return
+        5
+  Constructor public P::P
+    param:
+      Var a : int
+    init member x
+      a
+    Block
+  Destructor public P::~P
+    param:
+      Var a : int
+    Block
+  Destructor public P::~P
+    Block
+
+class P  size=4 align=4
+    +0  x (4 bytes)
+    construct: field x -> P() body
+    destroy:   ~P() body -> field x

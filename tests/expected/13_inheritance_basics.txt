@@ -1,0 +1,102 @@
+Class Shape
+  Field public x : int
+  Field public y : int
+  Field protected tag : int
+Class Box : public Shape
+  Field public w : int
+  Field public h : int
+  Method public Box::area returns int
+    Block
+      Return
+        Binary *
+          w
+          h
+  Method public Box::useTag returns int
+    Block
+      Return
+        tag
+Function main returns int
+  Block
+    Var b : class Box
+    ExprStmt
+      Binary =
+        Member .x
+          b
+        1
+    ExprStmt
+      Binary =
+        Member .w
+          b
+        2
+    ExprStmt
+      Binary =
+        Member .h
+          b
+        3
+    Return
+      Binary +
+        Call
+          Member .area
+            b
+        Call
+          Member .useTag
+            b
+
+class Box  size=20 align=4
+    +0  x (4 bytes)  inherited from Shape
+    +4  y (4 bytes)  inherited from Shape
+    +8  tag (4 bytes)  inherited from Shape
+    +12  w (4 bytes)
+    +16  h (4 bytes)
+
+class Shape  size=12 align=4
+    +0  x (4 bytes)
+    +4  y (4 bytes)
+    +8  tag (4 bytes)
+
+function Box__area$v   ; Box::area
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +12
+    %3 = load [%2] :4
+    %4 = local #0
+    %5 = load [%4] :8
+    %6 = field %5 +16
+    %7 = load [%6] :4
+    %8 = mul %3, %7
+            ret %8
+
+function Box__useTag$v   ; Box::useTag
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +8
+    %3 = load [%2] :4
+            ret %3
+
+function main
+  #0 b  20 bytes
+            call __global_init()
+    %0 = local #0
+    %1 = const 1
+    %2 = local #0
+    %3 = field %2 +0
+            store [%3] <- %1 :4
+    %4 = const 2
+    %5 = local #0
+    %6 = field %5 +12
+            store [%6] <- %4 :4
+    %7 = const 3
+    %8 = local #0
+    %9 = field %8 +16
+            store [%9] <- %7 :4
+    %10 = local #0
+    %11 = call Box__area$v(%10)
+    %12 = local #0
+    %13 = call Box__useTag$v(%12)
+    %14 = add %11, %13
+            ret %14
+
+function __global_init
+            ret

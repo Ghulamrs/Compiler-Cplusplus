@@ -1,0 +1,272 @@
+Function print_string returns void
+  param:
+    Var s : pointer to char
+Function print_int returns void
+  param:
+    Var n : int
+Function print_line returns void
+Class String
+  Field public data : pointer to char
+  Field public len : int
+  Constructor public String::String
+    param:
+      Var s : pointer to char
+    Block
+      ExprStmt
+        Binary =
+          data
+          s
+      ExprStmt
+        Binary =
+          len
+          0
+      While
+        Binary !=
+          Index
+            data
+            len
+          0
+        Block
+          ExprStmt
+            Binary =
+              len
+              Binary +
+                len
+                1
+  Method public String::length returns int
+    Block
+      Return
+        len
+  Method public String::at returns char
+    param:
+      Var i : int
+    Block
+      Return
+        Index
+          data
+          i
+  Destructor public virtual String::~String
+    Block
+Function main returns int
+  Block
+    Var s : class String
+      construct with 1 argument(s):
+        "compiler"
+    ExprStmt
+      Call
+        print_string
+        arg 0:
+          "text:   "
+    ExprStmt
+      Call
+        print_string
+        arg 0:
+          Member .data
+            s
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_string
+        arg 0:
+          "length: "
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member .length
+              s
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_string
+        arg 0:
+          "s[0]:   "
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member .at
+              s
+            arg 0:
+              0
+    ExprStmt
+      Call
+        print_line
+    Var heap : pointer to class String
+      init:
+        New class String
+          "heap"
+    ExprStmt
+      Call
+        print_string
+        arg 0:
+          "heap:   "
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member ->length
+              heap
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Delete
+        heap
+    Return
+      Call
+        Member .length
+          s
+    [on exit: destroy s]
+
+class String  size=24 align=8  [has vptr]
+     +0  __vptr (8 bytes)
+    +8  data (8 bytes)
+    +16  len (4 bytes)
+    vtable[0] = String::~String
+    construct: set vptr -> field data -> field len -> String() body
+    destroy:   ~String() body -> field len -> field data -> reset vptr
+
+string str0  "compiler"
+string str1  "text:   "
+string str2  "length: "
+string str3  "s[0]:   "
+string str4  "heap"
+string str5  "heap:   "
+
+vtable String__vtable
+    [0] String__dtor
+
+function String__ctor$Pc   ; String::String
+  #0 this  8 bytes  (param)
+  #1 s  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = global String__vtable
+    %3 = field %1 +0
+            store [%3] <- %2 :8
+    %4 = local #1
+    %5 = load [%4] :8
+    %6 = local #0
+    %7 = load [%6] :8
+    %8 = field %7 +8
+            store [%8] <- %5 :8
+    %9 = const 0
+    %10 = local #0
+    %11 = load [%10] :8
+    %12 = field %11 +16
+            store [%12] <- %9 :4
+    L0:
+    %13 = local #0
+    %14 = load [%13] :8
+    %15 = field %14 +8
+    %16 = load [%15] :8
+    %17 = local #0
+    %18 = load [%17] :8
+    %19 = field %18 +16
+    %20 = load [%19] :4
+    %21 = add %16, %20
+    %22 = load [%21] :1
+    %23 = const 0
+    %24 = iresize %22 :4 signed
+    %25 = cmp.ne %24, %23
+            brz %25 L1
+    %26 = local #0
+    %27 = load [%26] :8
+    %28 = field %27 +16
+    %29 = load [%28] :4
+    %30 = const 1
+    %31 = add %29, %30
+    %32 = local #0
+    %33 = load [%32] :8
+    %34 = field %33 +16
+            store [%34] <- %31 :4
+            jump L0
+    L1:
+            ret
+
+function String__length$v   ; String::length
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +16
+    %3 = load [%2] :4
+            ret %3
+
+function String__at$i   ; String::at
+  #0 this  8 bytes  (param)
+  #1 i  4 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +8
+    %3 = load [%2] :8
+    %4 = local #1
+    %5 = load [%4] :4
+    %6 = add %3, %5
+    %7 = load [%6] :1
+            ret %7
+
+function String__dtor   ; String::~String
+  #0 this  8 bytes  (param)
+            ret
+
+function main
+  #0 s  24 bytes
+  #1 heap  8 bytes
+            call __global_init()
+    %0 = local #0
+    %1 = straddr str0
+            call String__ctor$Pc(%0, %1)
+    %2 = straddr str1
+            call print_string(%2)
+    %3 = local #0
+    %4 = field %3 +8
+    %5 = load [%4] :8
+            call print_string(%5)
+            call print_line()
+    %6 = straddr str2
+            call print_string(%6)
+    %7 = local #0
+    %8 = call String__length$v(%7)
+            call print_int(%8)
+            call print_line()
+    %9 = straddr str3
+            call print_string(%9)
+    %10 = local #0
+    %11 = const 0
+    %12 = call String__at$i(%10, %11)
+    %13 = iresize %12 :4 signed
+            call print_int(%13)
+            call print_line()
+    %14 = alloc 24
+    %15 = straddr str4
+            call String__ctor$Pc(%14, %15)
+    %16 = local #1
+            store [%16] <- %14 :8
+    %17 = straddr str5
+            call print_string(%17)
+    %18 = local #1
+    %19 = load [%18] :8
+    %20 = call String__length$v(%19)
+            call print_int(%20)
+            call print_line()
+    %21 = local #1
+    %22 = load [%21] :8
+    %23 = vtable [%22] slot 0
+            call.ind %23(%22)
+            free %22
+    %24 = local #0
+    %25 = call String__length$v(%24)
+    %26 = local #0
+            call String__dtor(%26)
+            ret %25
+
+function __global_init
+            ret

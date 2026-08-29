@@ -1,0 +1,85 @@
+88_err_const_violations.cpp:3:39: error: cannot modify a const object
+88_err_const_violations.cpp:4:33: error: cannot assign to const int
+88_err_const_violations.cpp:7:5: error: cannot assign to const int
+88_err_const_violations.cpp:8:4: error: cannot apply '++ (postfix)' to const int
+88_err_const_violations.cpp:9:3: error: cannot apply '-- (prefix)' to const int
+88_err_const_violations.cpp:11:8: error: cannot modify a const object
+88_err_const_violations.cpp:12:13: error: const 'missing' must be initialised
+88_err_const_violations.cpp:14:9: error: cannot modify a const object
+88_err_const_violations.cpp:16:8: error: cannot assign to const char
+Class A
+  Field public x : int
+  Constructor public A::A
+    Block
+      ExprStmt
+        Binary =
+          x
+          1
+Function writeThroughRef returns int
+  param:
+    Var a : reference to class A
+  Block
+    ExprStmt
+      Binary =
+        Member .x
+          a
+        99
+    Return
+      0
+Function writeParam returns int
+  param:
+    Var n : int
+  Block
+    ExprStmt
+      Binary =
+        n
+        5
+    Return
+      n
+Function main returns int
+  Block
+    Var k : int
+      init:
+        10
+    ExprStmt
+      Binary =
+        k
+        1
+    ExprStmt
+      Unary ++ (postfix)
+        k
+    ExprStmt
+      Unary -- (prefix)
+        k
+    Var ca : class A
+    ExprStmt
+      Binary =
+        Member .x
+          ca
+        3
+    Var missing : int
+    Var cp : pointer to class A
+      init:
+        Unary &
+          ca
+    ExprStmt
+      Binary =
+        Member ->x
+          cp
+        4
+    Var s : pointer to char
+      init:
+        "ab"
+    ExprStmt
+      Binary =
+        Index
+          s
+          0
+        88
+    Return
+      0
+
+class A  size=4 align=4
+    +0  x (4 bytes)
+    construct: field x -> A() body
+    destroy:   ~A() body -> field x

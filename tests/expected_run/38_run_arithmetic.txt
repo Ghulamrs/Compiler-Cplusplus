@@ -1,0 +1,14 @@
+38_run_arithmetic.cpp:16:41: warning: narrowing unsigned int to int in the argument to 'n'
+38_run_arithmetic.cpp:21:42: warning: narrowing int to char in the argument to 'c'
+38_run_arithmetic.cpp:23:39: warning: narrowing double to int in the argument to 'n'
+i/2   = 3
+i%2   = 1
+u/3   = 3
+i+d   = 9.5
+f*2.0 = 3
+d>i   = 0
+char  = A
+c+1   = B
+short = 300
+(int)d= 2
+neg   = -2.5

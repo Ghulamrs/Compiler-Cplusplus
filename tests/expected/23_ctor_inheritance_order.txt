@@ -1,0 +1,202 @@
+Class Base
+  Field public b : int
+  Constructor public Base::Base
+    init member b
+      0
+    Block
+  Constructor public Base::Base
+    param:
+      Var v : int
+    init member b
+      v
+    Block
+  Method public virtual Base::get returns int
+    Block
+      Return
+        b
+  Destructor public virtual Base::~Base
+    Block
+Class Derived : public Base
+  Field public d : int
+  Field public e : int
+  Constructor public Derived::Derived
+    param:
+      Var v : int
+    init base Base
+      v
+    init member d
+      v
+    init member e
+      v
+    Block
+  Destructor public virtual overriding Derived::~Derived
+    Block
+  Method public virtual overriding Derived::get returns int
+    Block
+      Return
+        Binary +
+          Binary +
+            b
+            d
+          e
+Function main returns int
+  Block
+    Var obj : class Derived
+      construct with 1 argument(s):
+        5
+    Var p : pointer to class Base
+      init:
+        New class Derived
+          7
+    ExprStmt
+      Delete
+        p
+    Return
+      Call
+        Member .get
+          obj
+    [on exit: destroy obj]
+
+class Base  size=16 align=8  [has vptr]
+     +0  __vptr (8 bytes)
+    +8  b (4 bytes)
+    vtable[0] = Base::get
+    vtable[1] = Base::~Base
+    construct: set vptr -> field b -> Base() body
+    destroy:   ~Base() body -> field b -> reset vptr
+
+class Derived  size=24 align=8  [has vptr]
+     +0  __vptr (8 bytes)
+    +8  b (4 bytes)  inherited from Base
+    +16  d (4 bytes)
+    +20  e (4 bytes)
+    vtable[0] = Derived::get
+    vtable[1] = Derived::~Derived
+    construct: base Base -> set vptr -> field d -> field e -> Derived() body
+    destroy:   ~Derived() body -> field e -> field d -> reset vptr -> base Base
+
+vtable Base__vtable
+    [0] Base__get$v
+    [1] Base__dtor
+
+vtable Derived__vtable
+    [0] Derived__get$v
+    [1] Derived__dtor
+
+function Base__ctor$v   ; Base::Base
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = global Base__vtable
+    %3 = field %1 +0
+            store [%3] <- %2 :8
+    %4 = const 0
+    %5 = local #0
+    %6 = load [%5] :8
+    %7 = field %6 +8
+            store [%7] <- %4 :4
+            ret
+
+function Base__ctor$i   ; Base::Base
+  #0 this  8 bytes  (param)
+  #1 v  4 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = global Base__vtable
+    %3 = field %1 +0
+            store [%3] <- %2 :8
+    %4 = local #1
+    %5 = load [%4] :4
+    %6 = local #0
+    %7 = load [%6] :8
+    %8 = field %7 +8
+            store [%8] <- %5 :4
+            ret
+
+function Base__get$v   ; Base::get
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +8
+    %3 = load [%2] :4
+            ret %3
+
+function Base__dtor   ; Base::~Base
+  #0 this  8 bytes  (param)
+            ret
+
+function Derived__ctor$i   ; Derived::Derived
+  #0 this  8 bytes  (param)
+  #1 v  4 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = local #1
+    %3 = load [%2] :4
+            call Base__ctor$i(%1, %3)
+    %4 = global Derived__vtable
+    %5 = field %1 +0
+            store [%5] <- %4 :8
+    %6 = local #1
+    %7 = load [%6] :4
+    %8 = local #0
+    %9 = load [%8] :8
+    %10 = field %9 +16
+            store [%10] <- %7 :4
+    %11 = local #1
+    %12 = load [%11] :4
+    %13 = local #0
+    %14 = load [%13] :8
+    %15 = field %14 +20
+            store [%15] <- %12 :4
+            ret
+
+function Derived__dtor   ; Derived::~Derived
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+            call Base__dtor(%1)
+            ret
+
+function Derived__get$v   ; Derived::get
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +8
+    %3 = load [%2] :4
+    %4 = local #0
+    %5 = load [%4] :8
+    %6 = field %5 +16
+    %7 = load [%6] :4
+    %8 = add %3, %7
+    %9 = local #0
+    %10 = load [%9] :8
+    %11 = field %10 +20
+    %12 = load [%11] :4
+    %13 = add %8, %12
+            ret %13
+
+function main
+  #0 obj  24 bytes
+  #1 p  8 bytes
+            call __global_init()
+    %0 = local #0
+    %1 = const 5
+            call Derived__ctor$i(%0, %1)
+    %2 = alloc 24
+    %3 = const 7
+            call Derived__ctor$i(%2, %3)
+    %4 = local #1
+            store [%4] <- %2 :8
+    %5 = local #1
+    %6 = load [%5] :8
+    %7 = vtable [%6] slot 1
+            call.ind %7(%6)
+            free %6
+    %8 = local #0
+    %9 = call Derived__get$v(%8)
+    %10 = local #0
+            call Derived__dtor(%10)
+            ret %9
+
+function __global_init
+            ret

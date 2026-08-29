@@ -1,0 +1,15 @@
+Class Base
+  Method public Base::f returns int
+    Block
+      Return
+        1
+Class Derived : public Base
+  Method public virtual Derived::g returns int
+    Block
+      Return
+        2
+
+21_err_virtual_below_nonvirtual_base.cpp:2:1: error: class 'Derived' adds a virtual function but base 'Base' has none
+class Base  size=1 align=1
+
+class Derived  size=1 align=1

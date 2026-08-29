@@ -1,0 +1,60 @@
+65_err_excluded_features.cpp:3:2: error: '#ifdef' is not supported in this version
+65_err_excluded_features.cpp:4:1: error: namespaces are not supported in this version
+65_err_excluded_features.cpp:5:1: error: 'typedef' is not supported in this version
+65_err_excluded_features.cpp:6:1: error: 'enum' is not supported in this version
+65_err_excluded_features.cpp:7:1: error: 'union' is not supported in this version
+65_err_excluded_features.cpp:8:1: error: templates are not supported in this version
+65_err_excluded_features.cpp:9:20: error: default arguments are not supported in this version
+65_err_excluded_features.cpp:10:14: error: variadic functions are not supported in this version
+65_err_excluded_features.cpp:11:26: error: 'static' is not supported in this version
+65_err_excluded_features.cpp:12:12: error: nested classes are not supported in this version
+65_err_excluded_features.cpp:15:19: error: multiple inheritance is not supported in this version
+65_err_excluded_features.cpp:17:3: error: exceptions are not supported in this version
+65_err_excluded_features.cpp:18:8: error: 'long long' is not supported in this version
+65_err_excluded_features.cpp:19:7: error: function pointers are not supported in this version
+65_err_excluded_features.cpp:20:3: error: 'goto' is not supported in this version
+65_err_excluded_features.cpp:21:5: error: labels are not supported in this version
+65_err_excluded_features.cpp:22:10: error: 'sizeof' is not supported in this version
+65_err_excluded_features.cpp:22:3: error: return with no value in a function returning int
+Function f returns int
+  param:
+    Var a : int
+  param:
+    Var b : int
+  Block
+    Return
+      Binary +
+        a
+        b
+Function g returns int
+  param:
+    Var a : int
+  Block
+    Return
+      a
+Class A
+  Field public x : int
+  Method public A::operator[] returns int
+    param:
+      Var i : int
+    Block
+      Return
+        x
+Class B
+  Field public y : int
+Class C : public A
+Function main returns int
+  Block
+    Var big : long
+      init:
+        1
+    Return
+
+class A  size=4 align=4
+    +0  x (4 bytes)
+
+class B  size=4 align=4
+    +0  y (4 bytes)
+
+class C  size=4 align=4
+    +0  x (4 bytes)  inherited from A

@@ -1,0 +1,208 @@
+Function print_int returns void
+  param:
+    Var n : int
+Function print_line returns void
+Function set returns void
+  param:
+    Var r : reference to int
+  Block
+    ExprStmt
+      Binary =
+        r
+        5
+Function main returns int
+  Block
+    Var a : int
+      init:
+        1
+    Var b : int
+      init:
+        2
+    ExprStmt
+      Call
+        set
+        arg 0:
+          a
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          a
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          b
+    ExprStmt
+      Call
+        print_line
+    Var arr : array[3] of int
+    ExprStmt
+      Binary =
+        Index
+          arr
+          0
+        7
+    ExprStmt
+      Binary =
+        Index
+          arr
+          1
+        8
+    ExprStmt
+      Binary =
+        Index
+          arr
+          2
+        9
+    ExprStmt
+      Call
+        set
+        arg 0:
+          Index
+            arr
+            1
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Index
+            arr
+            0
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Index
+            arr
+            1
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Index
+            arr
+            2
+    ExprStmt
+      Call
+        print_line
+    Var r : reference to int
+      init:
+        a
+    ExprStmt
+      Binary =
+        r
+        11
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          a
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          b
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+function set$Ri   ; set
+  #0 r  8 bytes  (param)
+    %0 = const 5
+    %1 = local #0
+    %2 = load [%1] :8
+            store [%2] <- %0 :4
+            ret
+
+function main
+  #0 a  4 bytes
+  #1 b  4 bytes
+  #2 arr  12 bytes
+  #3 r  8 bytes
+            call __global_init()
+    %0 = const 1
+    %1 = local #0
+            store [%1] <- %0 :4
+    %2 = const 2
+    %3 = local #1
+            store [%3] <- %2 :4
+    %4 = local #0
+            call set$Ri(%4)
+    %5 = local #0
+    %6 = load [%5] :4
+            call print_int(%6)
+    %7 = local #1
+    %8 = load [%7] :4
+            call print_int(%8)
+            call print_line()
+    %9 = const 7
+    %10 = local #2
+    %11 = const 0
+    %12 = const 4
+    %13 = mul %11, %12
+    %14 = add %10, %13
+            store [%14] <- %9 :4
+    %15 = const 8
+    %16 = local #2
+    %17 = const 1
+    %18 = const 4
+    %19 = mul %17, %18
+    %20 = add %16, %19
+            store [%20] <- %15 :4
+    %21 = const 9
+    %22 = local #2
+    %23 = const 2
+    %24 = const 4
+    %25 = mul %23, %24
+    %26 = add %22, %25
+            store [%26] <- %21 :4
+    %27 = local #2
+    %28 = const 1
+    %29 = const 4
+    %30 = mul %28, %29
+    %31 = add %27, %30
+            call set$Ri(%31)
+    %32 = local #2
+    %33 = const 0
+    %34 = const 4
+    %35 = mul %33, %34
+    %36 = add %32, %35
+    %37 = load [%36] :4
+            call print_int(%37)
+    %38 = local #2
+    %39 = const 1
+    %40 = const 4
+    %41 = mul %39, %40
+    %42 = add %38, %41
+    %43 = load [%42] :4
+            call print_int(%43)
+    %44 = local #2
+    %45 = const 2
+    %46 = const 4
+    %47 = mul %45, %46
+    %48 = add %44, %47
+    %49 = load [%48] :4
+            call print_int(%49)
+            call print_line()
+    %50 = local #0
+    %51 = local #3
+            store [%51] <- %50 :8
+    %52 = const 11
+    %53 = local #3
+    %54 = load [%53] :8
+            store [%54] <- %52 :4
+    %55 = local #0
+    %56 = load [%55] :4
+            call print_int(%56)
+    %57 = local #1
+    %58 = load [%57] :4
+            call print_int(%58)
+            call print_line()
+    %59 = const 0
+            ret %59
+
+function __global_init
+            ret

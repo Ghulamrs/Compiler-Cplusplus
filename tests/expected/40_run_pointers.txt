@@ -1,0 +1,169 @@
+40_run_pointers.cpp:15:13: warning: narrowing long to int in the argument to 'n'
+Function print_int returns void
+  param:
+    Var n : int
+Function print_line returns void
+Function main returns int
+  Block
+    Var a : int
+      init:
+        10
+    Var p : pointer to int
+      init:
+        Unary &
+          a
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Unary *
+            p
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Binary =
+        Unary *
+          p
+        20
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          a
+    ExprStmt
+      Call
+        print_line
+    Var s : pointer to char
+      init:
+        "abc"
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Index
+            s
+            0
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Index
+            s
+            2
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Unary *
+            Binary +
+              s
+              1
+    ExprStmt
+      Call
+        print_line
+    Var t : pointer to char
+      init:
+        Binary +
+          s
+          2
+    Var d : long
+      init:
+        Binary -
+          t
+          s
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          d
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+string str0  "abc"
+
+function main
+  #0 a  4 bytes
+  #1 p  8 bytes
+  #2 s  8 bytes
+  #3 t  8 bytes
+  #4 d  8 bytes
+            call __global_init()
+    %0 = const 10
+    %1 = local #0
+            store [%1] <- %0 :4
+    %2 = local #0
+    %3 = local #1
+            store [%3] <- %2 :8
+    %4 = local #1
+    %5 = load [%4] :8
+    %6 = load [%5] :4
+            call print_int(%6)
+            call print_line()
+    %7 = const 20
+    %8 = local #1
+    %9 = load [%8] :8
+            store [%9] <- %7 :4
+    %10 = local #0
+    %11 = load [%10] :4
+            call print_int(%11)
+            call print_line()
+    %12 = straddr str0
+    %13 = local #2
+            store [%13] <- %12 :8
+    %14 = local #2
+    %15 = load [%14] :8
+    %16 = const 0
+    %17 = add %15, %16
+    %18 = load [%17] :1
+    %19 = iresize %18 :4 signed
+            call print_int(%19)
+            call print_line()
+    %20 = local #2
+    %21 = load [%20] :8
+    %22 = const 2
+    %23 = add %21, %22
+    %24 = load [%23] :1
+    %25 = iresize %24 :4 signed
+            call print_int(%25)
+            call print_line()
+    %26 = local #2
+    %27 = load [%26] :8
+    %28 = const 1
+    %29 = add %27, %28
+    %30 = load [%29] :1
+    %31 = iresize %30 :4 signed
+            call print_int(%31)
+            call print_line()
+    %32 = local #2
+    %33 = load [%32] :8
+    %34 = const 2
+    %35 = add %33, %34
+    %36 = local #3
+            store [%36] <- %35 :8
+    %37 = local #3
+    %38 = load [%37] :8
+    %39 = local #2
+    %40 = load [%39] :8
+    %41 = sub %38, %40
+    %42 = local #4
+            store [%42] <- %41 :8
+    %43 = local #4
+    %44 = load [%43] :8
+    %45 = iresize %44 :4 signed
+            call print_int(%45)
+            call print_line()
+    %46 = const 0
+            ret %46
+
+function __global_init
+            ret

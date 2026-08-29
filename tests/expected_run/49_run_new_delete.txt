@@ -1,0 +1,4 @@
+510
+sum=6
+deleting: ~Doubled ~Node ~Node 
+~Node ~Node ~Node ~Node ~Node ~Node ~Node ~Node ~Node ~Node ~Node ~Node ~Node ~Node ~Node ~Node ~Node ~Node ~Node ~Node 20 new/delete cycles survived

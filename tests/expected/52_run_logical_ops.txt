@@ -1,0 +1,213 @@
+Function print_int returns void
+  param:
+    Var n : int
+Function print_line returns void
+Function main returns int
+  Block
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Binary &&
+            2
+            4
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Binary ||
+            0
+            7
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Binary &&
+            0
+            5
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Binary ||
+            0
+            0
+    ExprStmt
+      Call
+        print_line
+    Var a : int
+      init:
+        3
+    Var b : int
+      init:
+        Binary &&
+          Binary >
+            a
+            1
+          Binary <
+            a
+            10
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          b
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Unary !
+            5
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Unary !
+            0
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+function main
+  #0 __sc  4 bytes
+  #1 __sc  4 bytes
+  #2 __sc  4 bytes
+  #3 __sc  4 bytes
+  #4 a  4 bytes
+  #5 b  4 bytes
+  #6 __sc  4 bytes
+            call __global_init()
+    %0 = const 2
+    %1 = const 0
+    %2 = cmp.ne %0, %1
+    %3 = local #0
+            store [%3] <- %2 :4
+            brz %2 L0
+    %4 = const 4
+    %5 = const 0
+    %6 = cmp.ne %4, %5
+    %7 = local #0
+            store [%7] <- %6 :4
+    L0:
+    %8 = local #0
+    %9 = load [%8] :4
+    %10 = iresize %9 :4 unsigned
+            call print_int(%10)
+            call print_line()
+    %11 = const 0
+    %12 = const 0
+    %13 = cmp.ne %11, %12
+    %14 = local #1
+            store [%14] <- %13 :4
+            brnz %13 L1
+    %15 = const 7
+    %16 = const 0
+    %17 = cmp.ne %15, %16
+    %18 = local #1
+            store [%18] <- %17 :4
+    L1:
+    %19 = local #1
+    %20 = load [%19] :4
+    %21 = iresize %20 :4 unsigned
+            call print_int(%21)
+            call print_line()
+    %22 = const 0
+    %23 = const 0
+    %24 = cmp.ne %22, %23
+    %25 = local #2
+            store [%25] <- %24 :4
+            brz %24 L2
+    %26 = const 5
+    %27 = const 0
+    %28 = cmp.ne %26, %27
+    %29 = local #2
+            store [%29] <- %28 :4
+    L2:
+    %30 = local #2
+    %31 = load [%30] :4
+    %32 = iresize %31 :4 unsigned
+            call print_int(%32)
+            call print_line()
+    %33 = const 0
+    %34 = const 0
+    %35 = cmp.ne %33, %34
+    %36 = local #3
+            store [%36] <- %35 :4
+            brnz %35 L3
+    %37 = const 0
+    %38 = const 0
+    %39 = cmp.ne %37, %38
+    %40 = local #3
+            store [%40] <- %39 :4
+    L3:
+    %41 = local #3
+    %42 = load [%41] :4
+    %43 = iresize %42 :4 unsigned
+            call print_int(%43)
+            call print_line()
+    %44 = const 3
+    %45 = local #4
+            store [%45] <- %44 :4
+    %46 = local #4
+    %47 = load [%46] :4
+    %48 = const 1
+    %49 = cmp.gt %47, %48
+    %50 = const 0
+    %51 = cmp.ne %49, %50
+    %52 = local #6
+            store [%52] <- %51 :4
+            brz %51 L4
+    %53 = local #4
+    %54 = load [%53] :4
+    %55 = const 10
+    %56 = cmp.lt %54, %55
+    %57 = const 0
+    %58 = cmp.ne %56, %57
+    %59 = local #6
+            store [%59] <- %58 :4
+    L4:
+    %60 = local #6
+    %61 = load [%60] :4
+    %62 = iresize %61 :4 unsigned
+    %63 = local #5
+            store [%63] <- %62 :4
+    %64 = local #5
+    %65 = load [%64] :4
+            call print_int(%65)
+            call print_line()
+    %66 = const 5
+    %67 = const 0
+    %68 = cmp.ne %66, %67
+    %69 = not %68
+    %70 = iresize %69 :4 unsigned
+            call print_int(%70)
+            call print_line()
+    %71 = const 0
+    %72 = const 0
+    %73 = cmp.ne %71, %72
+    %74 = not %73
+    %75 = iresize %74 :4 unsigned
+            call print_int(%75)
+            call print_line()
+    %76 = const 0
+            ret %76
+
+function __global_init
+            ret

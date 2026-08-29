@@ -1,0 +1,17 @@
+47_err_bool_is_cxx.cpp:2:8: error: expected a name in declaration
+Var ok : bool
+  init:
+    true
+Var p : pointer to bool
+Function main returns int
+  Block
+    Var b : bool
+      init:
+        true
+    ExprStmt
+      Binary =
+        b
+        1.5 : double
+    Var arr : array[2] of bool
+    Return
+      b

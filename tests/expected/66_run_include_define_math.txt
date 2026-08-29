@@ -1,0 +1,250 @@
+Function sqrt returns double
+  param:
+    Var x : double
+Function pow returns double
+  param:
+    Var b : double
+  param:
+    Var e : double
+Function atan2 returns double
+  param:
+    Var y : double
+  param:
+    Var x : double
+Function fabs returns double
+  param:
+    Var x : double
+Function floor returns double
+  param:
+    Var x : double
+Function abs returns int
+  param:
+    Var n : int
+Function print_double returns void
+  param:
+    Var d : double
+Function print_int returns void
+  param:
+    Var n : int
+Function print_string returns void
+  param:
+    Var s : pointer to char
+Function print_line returns void
+Function main returns int
+  Block
+    ExprStmt
+      Call
+        print_double
+        arg 0:
+          3.14159 : double
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          2
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_double
+        arg 0:
+          Binary *
+            2
+            3.14159 : double
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_string
+        arg 0:
+          "PI stays text in here"
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_double
+        arg 0:
+          Call
+            sqrt
+            arg 0:
+              16 : double
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_double
+        arg 0:
+          Call
+            pow
+            arg 0:
+              2 : double
+            arg 1:
+              10 : double
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_double
+        arg 0:
+          Call
+            atan2
+            arg 0:
+              0 : double
+            arg 1:
+              1 : double
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_double
+        arg 0:
+          Call
+            fabs
+            arg 0:
+              Unary -
+                2.5 : double
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_double
+        arg 0:
+          Call
+            floor
+            arg 0:
+              3.7 : double
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            abs
+            arg 0:
+              Unary -
+                7
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_double
+        arg 0:
+          Call
+            sqrt
+            arg 0:
+              Binary +
+                Call
+                  pow
+                  arg 0:
+                    3 : double
+                  arg 1:
+                    2 : double
+                Call
+                  pow
+                  arg 0:
+                    4 : double
+                  arg 1:
+                    2 : double
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_double
+        arg 0:
+          Binary *
+            3.14159 : double
+            Call
+              pow
+              arg 0:
+                2 : double
+              arg 1:
+                2 : double
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+string str0  "PI stays text in here"
+
+function main
+            call __global_init()
+    %0 = fconst 3.14159
+            call print_double(%0)
+            call print_line()
+    %1 = const 2
+            call print_int(%1)
+            call print_line()
+    %2 = const 2
+    %3 = fconst 3.14159
+    %4 = itof %2
+    %5 = fmul %4, %3
+            call print_double(%5)
+            call print_line()
+    %6 = straddr str0
+            call print_string(%6)
+            call print_line()
+    %7 = fconst 16
+    %8 = call sqrt(%7)
+            call print_double(%8)
+            call print_line()
+    %9 = fconst 2
+    %10 = fconst 10
+    %11 = call pow(%9, %10)
+            call print_double(%11)
+            call print_line()
+    %12 = fconst 0
+    %13 = fconst 1
+    %14 = call atan2(%12, %13)
+            call print_double(%14)
+            call print_line()
+    %15 = fconst 2.5
+    %16 = fneg %15
+    %17 = call fabs(%16)
+            call print_double(%17)
+            call print_line()
+    %18 = fconst 3.7
+    %19 = call floor(%18)
+            call print_double(%19)
+            call print_line()
+    %20 = const 7
+    %21 = neg %20
+    %22 = call abs(%21)
+            call print_int(%22)
+            call print_line()
+    %23 = fconst 3
+    %24 = fconst 2
+    %25 = call pow(%23, %24)
+    %26 = fconst 4
+    %27 = fconst 2
+    %28 = call pow(%26, %27)
+    %29 = fadd %25, %28
+    %30 = call sqrt(%29)
+            call print_double(%30)
+            call print_line()
+    %31 = fconst 3.14159
+    %32 = fconst 2
+    %33 = fconst 2
+    %34 = call pow(%32, %33)
+    %35 = fmul %31, %34
+            call print_double(%35)
+            call print_line()
+    %36 = const 0
+            ret %36
+
+function __global_init
+            ret

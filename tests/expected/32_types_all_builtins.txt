@@ -1,0 +1,142 @@
+Function nothing returns void
+  Block
+Var gi : int
+  init:
+    1
+Var gc : char
+  init:
+    65 : char
+Var gs : short
+  init:
+    2
+Var gl : long
+  init:
+    3
+Var gu : unsigned int
+  init:
+    4
+Var gul : unsigned long
+  init:
+    5
+Var gsc : signed char
+  init:
+    6
+Var guc : unsigned char
+  init:
+    7
+Var gus : unsigned short
+  init:
+    8
+Var gf : float
+  init:
+    1.5 : float
+Var gd : double
+  init:
+    2.5 : double
+Var gp : pointer to int
+Var gstr : pointer to char
+  init:
+    "hello
+"
+Var gpp : pointer to pointer to int
+Var reordered : unsigned long
+  init:
+    9
+Function main returns int
+  Block
+    Var e : double
+      init:
+        1000 : double
+    Var nl : char
+      init:
+        10 : char
+    Return
+      gi
+
+string str0  "hello
+"
+
+global gi  4 bytes
+global gc  1 bytes
+global gs  2 bytes
+global gl  8 bytes
+global gu  4 bytes
+global gul  8 bytes
+global gsc  1 bytes
+global guc  1 bytes
+global gus  2 bytes
+global gf  4 bytes
+global gd  8 bytes
+global gp  8 bytes
+global gstr  8 bytes
+global gpp  8 bytes
+global reordered  8 bytes
+
+function nothing$v   ; nothing
+            ret
+
+function main
+  #0 e  8 bytes
+  #1 nl  1 bytes
+            call __global_init()
+    %0 = fconst 1000
+    %1 = local #0
+            store [%1] <- %0 :8f
+    %2 = const 10
+    %3 = local #1
+            store [%3] <- %2 :1
+    %4 = global gi
+    %5 = load [%4] :4
+            ret %5
+
+function __global_init
+    %0 = global gi
+    %1 = const 1
+            store [%0] <- %1 :4
+    %2 = global gc
+    %3 = const 65
+            store [%2] <- %3 :1
+    %4 = global gs
+    %5 = const 2
+    %6 = iresize %5 :2 signed
+            store [%4] <- %6 :2
+    %7 = global gl
+    %8 = const 3
+    %9 = iresize %8 :8 signed
+            store [%7] <- %9 :8
+    %10 = global gu
+    %11 = const 4
+    %12 = iresize %11 :4 signed
+            store [%10] <- %12 :4
+    %13 = global gul
+    %14 = const 5
+    %15 = iresize %14 :8 signed
+            store [%13] <- %15 :8
+    %16 = global gsc
+    %17 = const 6
+    %18 = iresize %17 :1 signed
+            store [%16] <- %18 :1
+    %19 = global guc
+    %20 = const 7
+    %21 = iresize %20 :1 signed
+            store [%19] <- %21 :1
+    %22 = global gus
+    %23 = const 8
+    %24 = iresize %23 :2 signed
+            store [%22] <- %24 :2
+    %25 = global gf
+    %26 = fconst 1.5
+            store [%25] <- %26 :4f
+    %27 = global gd
+    %28 = fconst 2.5
+            store [%27] <- %28 :8f
+    %29 = global gp
+    %30 = global gstr
+    %31 = straddr str0
+            store [%30] <- %31 :8
+    %32 = global gpp
+    %33 = global reordered
+    %34 = const 9
+    %35 = iresize %34 :8 signed
+            store [%33] <- %35 :8
+            ret

@@ -1,0 +1,29 @@
+08_err_lvalue_and_types.cpp:4:5: error: left side of assignment is not an lvalue
+08_err_lvalue_and_types.cpp:5:7: error: cannot initialise 'int q' from an expression of type Point
+08_err_lvalue_and_types.cpp:6:10: error: unknown type 'Widget' in declaration of 'w'
+08_err_lvalue_and_types.cpp:7:4: error: no member named 'zzz' in class 'Point'
+08_err_lvalue_and_types.cpp:8:10: error: undeclared identifier 'undefinedName'
+Class Point
+  Field public x : int
+Function main returns int
+  Block
+    Var p : class Point
+    ExprStmt
+      Binary =
+        1
+        Member .x
+          p
+    Var q : int
+      init:
+        p
+    Var w : class Widget
+    ExprStmt
+      Binary =
+        Member .zzz
+          p
+        4
+    Return
+      undefinedName
+
+class Point  size=4 align=4
+    +0  x (4 bytes)

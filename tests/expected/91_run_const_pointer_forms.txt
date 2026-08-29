@@ -1,0 +1,150 @@
+Function print_int returns void
+  param:
+    Var n : int
+Function print_line returns void
+Function main returns int
+  Block
+    Var a : int
+      init:
+        1
+    Var b : int
+      init:
+        2
+    Var p : pointer to int
+      init:
+        Unary &
+          a
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Unary *
+            p
+    ExprStmt
+      Binary =
+        p
+        Unary &
+          b
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Unary *
+            p
+    Var q : pointer to int
+      init:
+        Unary &
+          a
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Unary *
+            q
+    ExprStmt
+      Binary =
+        Unary *
+          q
+        7
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Unary *
+            q
+    Var r : pointer to int
+      init:
+        Unary &
+          b
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Unary *
+            r
+    Var c : int
+      init:
+        3
+    Var s : pointer to int
+      init:
+        Unary &
+          c
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Unary *
+            s
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+function main
+  #0 a  4 bytes
+  #1 b  4 bytes
+  #2 p  8 bytes
+  #3 q  8 bytes
+  #4 r  8 bytes
+  #5 c  4 bytes
+  #6 s  8 bytes
+            call __global_init()
+    %0 = const 1
+    %1 = local #0
+            store [%1] <- %0 :4
+    %2 = const 2
+    %3 = local #1
+            store [%3] <- %2 :4
+    %4 = local #0
+    %5 = local #2
+            store [%5] <- %4 :8
+    %6 = local #2
+    %7 = load [%6] :8
+    %8 = load [%7] :4
+            call print_int(%8)
+    %9 = local #1
+    %10 = local #2
+            store [%10] <- %9 :8
+    %11 = local #2
+    %12 = load [%11] :8
+    %13 = load [%12] :4
+            call print_int(%13)
+    %14 = local #0
+    %15 = local #3
+            store [%15] <- %14 :8
+    %16 = local #3
+    %17 = load [%16] :8
+    %18 = load [%17] :4
+            call print_int(%18)
+    %19 = const 7
+    %20 = local #3
+    %21 = load [%20] :8
+            store [%21] <- %19 :4
+    %22 = local #3
+    %23 = load [%22] :8
+    %24 = load [%23] :4
+            call print_int(%24)
+    %25 = local #1
+    %26 = local #4
+            store [%26] <- %25 :8
+    %27 = local #4
+    %28 = load [%27] :8
+    %29 = load [%28] :4
+            call print_int(%29)
+    %30 = const 3
+    %31 = local #5
+            store [%31] <- %30 :4
+    %32 = local #5
+    %33 = local #6
+            store [%33] <- %32 :8
+    %34 = local #6
+    %35 = load [%34] :8
+    %36 = load [%35] :4
+            call print_int(%36)
+            call print_line()
+    %37 = const 0
+            ret %37
+
+function __global_init
+            ret

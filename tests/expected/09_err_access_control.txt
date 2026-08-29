@@ -1,0 +1,19 @@
+09_err_access_control.cpp:9:4: error: 'secret' is private in class 'Point'
+Class Point
+  Field public x : int
+  Field private secret : int
+Function main returns int
+  Block
+    Var p : class Point
+    ExprStmt
+      Binary =
+        Member .secret
+          p
+        1
+    Return
+      Member .x
+        p
+
+class Point  size=8 align=4
+    +0  x (4 bytes)
+    +4  secret (4 bytes)

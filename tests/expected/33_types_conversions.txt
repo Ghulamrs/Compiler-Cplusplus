@@ -1,0 +1,191 @@
+Function main returns int
+  Block
+    Var i : int
+      init:
+        3
+    Var d : double
+      init:
+        2.5 : double
+    Var f : float
+      init:
+        1.5 : float
+    Var c : char
+      init:
+        65 : char
+    Var u : unsigned int
+      init:
+        7
+    Var mix : double
+      init:
+        Binary +
+          i
+          d
+    Var ff : double
+      init:
+        Binary *
+          f
+          d
+    Var ic : int
+      init:
+        Binary +
+          c
+          i
+    Var ud : unsigned int
+      init:
+        Binary /
+          u
+          2
+    Var lt : int
+      init:
+        Binary <
+          i
+          d
+    Var eq : int
+      init:
+        Binary ==
+          c
+          65
+    Var neg : int
+      init:
+        Unary -
+          i
+    Var fneg : double
+      init:
+        Unary -
+          d
+    Var mod : int
+      init:
+        Binary %
+          i
+          2
+    Var logic : int
+      init:
+        Binary &&
+          i
+          u
+    Return
+      ic
+
+function main
+  #0 i  4 bytes
+  #1 d  8 bytes
+  #2 f  4 bytes
+  #3 c  1 bytes
+  #4 u  4 bytes
+  #5 mix  8 bytes
+  #6 ff  8 bytes
+  #7 ic  4 bytes
+  #8 ud  4 bytes
+  #9 lt  4 bytes
+  #10 eq  4 bytes
+  #11 neg  4 bytes
+  #12 fneg  8 bytes
+  #13 mod  4 bytes
+  #14 logic  4 bytes
+  #15 __sc  4 bytes
+            call __global_init()
+    %0 = const 3
+    %1 = local #0
+            store [%1] <- %0 :4
+    %2 = fconst 2.5
+    %3 = local #1
+            store [%3] <- %2 :8f
+    %4 = fconst 1.5
+    %5 = local #2
+            store [%5] <- %4 :4f
+    %6 = const 65
+    %7 = local #3
+            store [%7] <- %6 :1
+    %8 = const 7
+    %9 = iresize %8 :4 signed
+    %10 = local #4
+            store [%10] <- %9 :4
+    %11 = local #0
+    %12 = load [%11] :4
+    %13 = local #1
+    %14 = load [%13] :8f
+    %15 = itof %12
+    %16 = fadd %15, %14
+    %17 = local #5
+            store [%17] <- %16 :8f
+    %18 = local #2
+    %19 = load [%18] :4f
+    %20 = local #1
+    %21 = load [%20] :8f
+    %22 = fresize %19 :8
+    %23 = fmul %22, %21
+    %24 = local #6
+            store [%24] <- %23 :8f
+    %25 = local #3
+    %26 = load [%25] :1
+    %27 = local #0
+    %28 = load [%27] :4
+    %29 = iresize %26 :4 signed
+    %30 = add %29, %28
+    %31 = local #7
+            store [%31] <- %30 :4
+    %32 = local #4
+    %33 = load [%32] :4
+    %34 = const 2
+    %35 = iresize %34 :4 signed
+    %36 = udiv %33, %35
+    %37 = local #8
+            store [%37] <- %36 :4
+    %38 = local #0
+    %39 = load [%38] :4
+    %40 = local #1
+    %41 = load [%40] :8f
+    %42 = itof %39
+    %43 = fcmp.lt %42, %41
+    %44 = iresize %43 :4 unsigned
+    %45 = local #9
+            store [%45] <- %44 :4
+    %46 = local #3
+    %47 = load [%46] :1
+    %48 = const 65
+    %49 = iresize %47 :4 signed
+    %50 = cmp.eq %49, %48
+    %51 = iresize %50 :4 unsigned
+    %52 = local #10
+            store [%52] <- %51 :4
+    %53 = local #0
+    %54 = load [%53] :4
+    %55 = neg %54
+    %56 = local #11
+            store [%56] <- %55 :4
+    %57 = local #1
+    %58 = load [%57] :8f
+    %59 = fneg %58
+    %60 = local #12
+            store [%60] <- %59 :8f
+    %61 = local #0
+    %62 = load [%61] :4
+    %63 = const 2
+    %64 = mod %62, %63
+    %65 = local #13
+            store [%65] <- %64 :4
+    %66 = local #0
+    %67 = load [%66] :4
+    %68 = const 0
+    %69 = cmp.ne %67, %68
+    %70 = local #15
+            store [%70] <- %69 :4
+            brz %69 L0
+    %71 = local #4
+    %72 = load [%71] :4
+    %73 = const 0
+    %74 = cmp.ne %72, %73
+    %75 = local #15
+            store [%75] <- %74 :4
+    L0:
+    %76 = local #15
+    %77 = load [%76] :4
+    %78 = iresize %77 :4 unsigned
+    %79 = local #14
+            store [%79] <- %78 :4
+    %80 = local #7
+    %81 = load [%80] :4
+            ret %81
+
+function __global_init
+            ret

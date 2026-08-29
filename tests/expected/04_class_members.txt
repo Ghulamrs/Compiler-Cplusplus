@@ -1,0 +1,81 @@
+Class Point
+  Field public x : int
+  Field public y : int
+  Method public Point::getX returns int
+    Block
+      Return
+        x
+  Method public Point::sum returns int
+    Block
+      Return
+        Binary +
+          x
+          y
+Function main returns int
+  Block
+    Var p : class Point
+    ExprStmt
+      Binary =
+        Member .x
+          p
+        3
+    ExprStmt
+      Binary =
+        Member .y
+          p
+        4
+    Return
+      Binary +
+        Call
+          Member .getX
+            p
+        Call
+          Member .sum
+            p
+
+class Point  size=8 align=4
+    +0  x (4 bytes)
+    +4  y (4 bytes)
+
+function Point__getX$v   ; Point::getX
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +0
+    %3 = load [%2] :4
+            ret %3
+
+function Point__sum$v   ; Point::sum
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +0
+    %3 = load [%2] :4
+    %4 = local #0
+    %5 = load [%4] :8
+    %6 = field %5 +4
+    %7 = load [%6] :4
+    %8 = add %3, %7
+            ret %8
+
+function main
+  #0 p  8 bytes
+            call __global_init()
+    %0 = local #0
+    %1 = const 3
+    %2 = local #0
+    %3 = field %2 +0
+            store [%3] <- %1 :4
+    %4 = const 4
+    %5 = local #0
+    %6 = field %5 +4
+            store [%6] <- %4 :4
+    %7 = local #0
+    %8 = call Point__getX$v(%7)
+    %9 = local #0
+    %10 = call Point__sum$v(%9)
+    %11 = add %8, %10
+            ret %11
+
+function __global_init
+            ret

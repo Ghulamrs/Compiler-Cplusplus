@@ -1,0 +1,48 @@
+Class Point
+  Field public x : int
+Function main returns int
+  Block
+    Var p : class Point
+    ExprStmt
+      Binary =
+        Member .x
+          p
+        1
+    Var r : reference to int
+      init:
+        Member .x
+          p
+    ExprStmt
+      Binary =
+        r
+        5
+    Return
+      r
+
+class Point  size=4 align=4
+    +0  x (4 bytes)
+
+function main
+  #0 p  4 bytes
+  #1 r  8 bytes
+            call __global_init()
+    %0 = local #0
+    %1 = const 1
+    %2 = local #0
+    %3 = field %2 +0
+            store [%3] <- %1 :4
+    %4 = local #0
+    %5 = field %4 +0
+    %6 = local #1
+            store [%6] <- %5 :8
+    %7 = const 5
+    %8 = local #1
+    %9 = load [%8] :8
+            store [%9] <- %7 :4
+    %10 = local #1
+    %11 = load [%10] :8
+    %12 = load [%11] :4
+            ret %12
+
+function __global_init
+            ret

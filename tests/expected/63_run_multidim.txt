@@ -1,0 +1,551 @@
+Function print_int returns void
+  param:
+    Var n : int
+Function print_line returns void
+Class Grid
+  Field public cell : array[2] of array[3] of int
+  Field public n : int
+  Constructor public Grid::Grid
+    Block
+      ExprStmt
+        Binary =
+          n
+          6
+Function sum returns int
+  param:
+    Var p : pointer to int
+  param:
+    Var n : int
+  Block
+    Var t : int
+      init:
+        0
+    Block
+      Var i : int
+        init:
+          0
+      For
+        Binary <
+          i
+          n
+        Unary ++ (postfix)
+          i
+        Block
+          ExprStmt
+            Binary +=
+              t
+              Index
+                p
+                i
+    Return
+      t
+Function main returns int
+  Block
+    Var a : array[4] of int
+    ExprStmt
+      Binary =
+        Index
+          a
+          2
+        7
+    Var b : array[2] of array[3] of int
+    ExprStmt
+      Binary =
+        Index
+          Index
+            b
+            1
+          2
+        42
+    Var c : array[2] of array[3] of array[4] of int
+    ExprStmt
+      Binary =
+        Index
+          Index
+            Index
+              c
+              1
+            2
+          3
+        99
+    Var d : array[2] of array[2] of array[2] of array[2] of int
+    ExprStmt
+      Binary =
+        Index
+          Index
+            Index
+              Index
+                d
+                1
+              1
+            1
+          1
+        5
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Index
+            a
+            2
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Index
+            Index
+              b
+              1
+            2
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Index
+            Index
+              Index
+                c
+                1
+              2
+            3
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Index
+            Index
+              Index
+                Index
+                  d
+                  1
+                1
+              1
+            1
+    ExprStmt
+      Call
+        print_line
+    Var g : class Grid
+    ExprStmt
+      Binary =
+        Index
+          Index
+            Member .cell
+              g
+            1
+          2
+        8
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Index
+            Index
+              Member .cell
+                g
+              1
+            2
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Member .n
+            g
+    ExprStmt
+      Call
+        print_line
+    Var m : array[2] of array[3] of int
+    Block
+      Var i : int
+        init:
+          0
+      For
+        Binary <
+          i
+          2
+        Unary ++ (postfix)
+          i
+        Block
+          Block
+            Var j : int
+              init:
+                0
+            For
+              Binary <
+                j
+                3
+              Unary ++ (postfix)
+                j
+              Block
+                ExprStmt
+                  Binary =
+                    Index
+                      Index
+                        m
+                        i
+                      j
+                    Binary +
+                      Binary *
+                        i
+                        3
+                      j
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            sum
+            arg 0:
+              Index
+                m
+                0
+            arg 1:
+              3
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            sum
+            arg 0:
+              Index
+                m
+                1
+            arg 1:
+              3
+    Var names : array[2] of pointer to char
+    ExprStmt
+      Binary =
+        Index
+          names
+          0
+        "ab"
+    ExprStmt
+      Binary =
+        Index
+          names
+          1
+        "cd"
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Index
+            Index
+              names
+              1
+            0
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+class Grid  size=28 align=4
+    +0  cell (24 bytes)
+    +24  n (4 bytes)
+    construct: field cell -> field n -> Grid() body
+    destroy:   ~Grid() body -> field n -> field cell
+
+string str0  "ab"
+string str1  "cd"
+
+function Grid__ctor$v   ; Grid::Grid
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = const 6
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +24
+            store [%5] <- %2 :4
+            ret
+
+function sum$Pii   ; sum
+  #0 p  8 bytes  (param)
+  #1 n  4 bytes  (param)
+  #2 t  4 bytes
+  #3 i  4 bytes
+    %0 = const 0
+    %1 = local #2
+            store [%1] <- %0 :4
+    %2 = const 0
+    %3 = local #3
+            store [%3] <- %2 :4
+    L0:
+    %4 = local #3
+    %5 = load [%4] :4
+    %6 = local #1
+    %7 = load [%6] :4
+    %8 = cmp.lt %5, %7
+            brz %8 L2
+    %9 = local #2
+    %10 = load [%9] :4
+    %11 = local #0
+    %12 = load [%11] :8
+    %13 = local #3
+    %14 = load [%13] :4
+    %15 = const 4
+    %16 = mul %14, %15
+    %17 = add %12, %16
+    %18 = load [%17] :4
+    %19 = add %10, %18
+            store [%9] <- %19 :4
+    L1:
+    %20 = local #3
+    %21 = load [%20] :4
+    %22 = const 1
+    %23 = add %21, %22
+            store [%20] <- %23 :4
+            jump L0
+    L2:
+    %24 = local #2
+    %25 = load [%24] :4
+            ret %25
+
+function main
+  #0 a  16 bytes
+  #1 b  24 bytes
+  #2 c  96 bytes
+  #3 d  64 bytes
+  #4 g  28 bytes
+  #5 m  24 bytes
+  #6 i  4 bytes
+  #7 j  4 bytes
+  #8 names  16 bytes
+            call __global_init()
+    %0 = const 7
+    %1 = local #0
+    %2 = const 2
+    %3 = const 4
+    %4 = mul %2, %3
+    %5 = add %1, %4
+            store [%5] <- %0 :4
+    %6 = const 42
+    %7 = local #1
+    %8 = const 1
+    %9 = const 12
+    %10 = mul %8, %9
+    %11 = add %7, %10
+    %12 = const 2
+    %13 = const 4
+    %14 = mul %12, %13
+    %15 = add %11, %14
+            store [%15] <- %6 :4
+    %16 = const 99
+    %17 = local #2
+    %18 = const 1
+    %19 = const 48
+    %20 = mul %18, %19
+    %21 = add %17, %20
+    %22 = const 2
+    %23 = const 16
+    %24 = mul %22, %23
+    %25 = add %21, %24
+    %26 = const 3
+    %27 = const 4
+    %28 = mul %26, %27
+    %29 = add %25, %28
+            store [%29] <- %16 :4
+    %30 = const 5
+    %31 = local #3
+    %32 = const 1
+    %33 = const 32
+    %34 = mul %32, %33
+    %35 = add %31, %34
+    %36 = const 1
+    %37 = const 16
+    %38 = mul %36, %37
+    %39 = add %35, %38
+    %40 = const 1
+    %41 = const 8
+    %42 = mul %40, %41
+    %43 = add %39, %42
+    %44 = const 1
+    %45 = const 4
+    %46 = mul %44, %45
+    %47 = add %43, %46
+            store [%47] <- %30 :4
+    %48 = local #0
+    %49 = const 2
+    %50 = const 4
+    %51 = mul %49, %50
+    %52 = add %48, %51
+    %53 = load [%52] :4
+            call print_int(%53)
+    %54 = local #1
+    %55 = const 1
+    %56 = const 12
+    %57 = mul %55, %56
+    %58 = add %54, %57
+    %59 = const 2
+    %60 = const 4
+    %61 = mul %59, %60
+    %62 = add %58, %61
+    %63 = load [%62] :4
+            call print_int(%63)
+    %64 = local #2
+    %65 = const 1
+    %66 = const 48
+    %67 = mul %65, %66
+    %68 = add %64, %67
+    %69 = const 2
+    %70 = const 16
+    %71 = mul %69, %70
+    %72 = add %68, %71
+    %73 = const 3
+    %74 = const 4
+    %75 = mul %73, %74
+    %76 = add %72, %75
+    %77 = load [%76] :4
+            call print_int(%77)
+    %78 = local #3
+    %79 = const 1
+    %80 = const 32
+    %81 = mul %79, %80
+    %82 = add %78, %81
+    %83 = const 1
+    %84 = const 16
+    %85 = mul %83, %84
+    %86 = add %82, %85
+    %87 = const 1
+    %88 = const 8
+    %89 = mul %87, %88
+    %90 = add %86, %89
+    %91 = const 1
+    %92 = const 4
+    %93 = mul %91, %92
+    %94 = add %90, %93
+    %95 = load [%94] :4
+            call print_int(%95)
+            call print_line()
+    %96 = local #4
+            call Grid__ctor$v(%96)
+    %97 = const 8
+    %98 = local #4
+    %99 = field %98 +0
+    %100 = const 1
+    %101 = const 12
+    %102 = mul %100, %101
+    %103 = add %99, %102
+    %104 = const 2
+    %105 = const 4
+    %106 = mul %104, %105
+    %107 = add %103, %106
+            store [%107] <- %97 :4
+    %108 = local #4
+    %109 = field %108 +0
+    %110 = const 1
+    %111 = const 12
+    %112 = mul %110, %111
+    %113 = add %109, %112
+    %114 = const 2
+    %115 = const 4
+    %116 = mul %114, %115
+    %117 = add %113, %116
+    %118 = load [%117] :4
+            call print_int(%118)
+    %119 = local #4
+    %120 = field %119 +24
+    %121 = load [%120] :4
+            call print_int(%121)
+            call print_line()
+    %122 = const 0
+    %123 = local #6
+            store [%123] <- %122 :4
+    L0:
+    %124 = local #6
+    %125 = load [%124] :4
+    %126 = const 2
+    %127 = cmp.lt %125, %126
+            brz %127 L2
+    %128 = const 0
+    %129 = local #7
+            store [%129] <- %128 :4
+    L3:
+    %130 = local #7
+    %131 = load [%130] :4
+    %132 = const 3
+    %133 = cmp.lt %131, %132
+            brz %133 L5
+    %134 = local #6
+    %135 = load [%134] :4
+    %136 = const 3
+    %137 = mul %135, %136
+    %138 = local #7
+    %139 = load [%138] :4
+    %140 = add %137, %139
+    %141 = local #5
+    %142 = local #6
+    %143 = load [%142] :4
+    %144 = const 12
+    %145 = mul %143, %144
+    %146 = add %141, %145
+    %147 = local #7
+    %148 = load [%147] :4
+    %149 = const 4
+    %150 = mul %148, %149
+    %151 = add %146, %150
+            store [%151] <- %140 :4
+    L4:
+    %152 = local #7
+    %153 = load [%152] :4
+    %154 = const 1
+    %155 = add %153, %154
+            store [%152] <- %155 :4
+            jump L3
+    L5:
+    L1:
+    %156 = local #6
+    %157 = load [%156] :4
+    %158 = const 1
+    %159 = add %157, %158
+            store [%156] <- %159 :4
+            jump L0
+    L2:
+    %160 = local #5
+    %161 = const 0
+    %162 = const 12
+    %163 = mul %161, %162
+    %164 = add %160, %163
+    %165 = const 3
+    %166 = call sum$Pii(%164, %165)
+            call print_int(%166)
+    %167 = local #5
+    %168 = const 1
+    %169 = const 12
+    %170 = mul %168, %169
+    %171 = add %167, %170
+    %172 = const 3
+    %173 = call sum$Pii(%171, %172)
+            call print_int(%173)
+    %174 = straddr str0
+    %175 = local #8
+    %176 = const 0
+    %177 = const 8
+    %178 = mul %176, %177
+    %179 = add %175, %178
+            store [%179] <- %174 :8
+    %180 = straddr str1
+    %181 = local #8
+    %182 = const 1
+    %183 = const 8
+    %184 = mul %182, %183
+    %185 = add %181, %184
+            store [%185] <- %180 :8
+    %186 = local #8
+    %187 = const 1
+    %188 = const 8
+    %189 = mul %187, %188
+    %190 = add %186, %189
+    %191 = load [%190] :8
+    %192 = const 0
+    %193 = add %191, %192
+    %194 = load [%193] :1
+    %195 = iresize %194 :4 signed
+            call print_int(%195)
+            call print_line()
+    %196 = const 0
+            ret %196
+
+function __global_init
+            ret

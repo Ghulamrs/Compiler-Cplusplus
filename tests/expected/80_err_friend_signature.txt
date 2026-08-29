@@ -1,0 +1,48 @@
+80_err_friend_signature.cpp:12:38: error: 'secret' is private in class 'Box'
+Function print_int returns void
+  param:
+    Var n : int
+Class Box
+  Field private secret : int
+  Constructor public Box::Box
+    Block
+      ExprStmt
+        Binary =
+          secret
+          7
+Function peek returns int
+  param:
+    Var b : class Box
+  Block
+    Return
+      Member .secret
+        b
+Function peek returns int
+  param:
+    Var b : class Box
+  param:
+    Var extra : int
+  Block
+    Return
+      Member .secret
+        b
+Function main returns int
+  Block
+    Var b : class Box
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            peek
+            arg 0:
+              b
+            arg 1:
+              1
+    Return
+      0
+
+class Box  size=4 align=4
+    +0  secret (4 bytes)
+    construct: field secret -> Box() body
+    destroy:   ~Box() body -> field secret

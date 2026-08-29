@@ -1,0 +1,4 @@
+text:   compiler
+length: 8
+s[0]:   99
+heap:   4

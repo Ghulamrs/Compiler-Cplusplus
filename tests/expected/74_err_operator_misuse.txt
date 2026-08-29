@@ -1,0 +1,60 @@
+74_err_operator_misuse.cpp:8:5: error: no 'operator+=' for V
+74_err_operator_misuse.cpp:10:11: error: invalid operands to '+': W and W
+Function print_int returns void
+  param:
+    Var n : int
+Class V
+  Field public x : int
+  Constructor public V::V
+    Block
+      ExprStmt
+        Binary =
+          x
+          0
+  Method public V::operator+ returns class V
+    param:
+      Var o : class V
+    Block
+      Return
+        o
+Class W
+  Field public y : int
+  Constructor public W::W
+    Block
+      ExprStmt
+        Binary =
+          y
+          0
+Function main returns int
+  Block
+    Var a : class V
+    Var b : class V
+    ExprStmt
+      Binary +=
+        a
+        b
+    Var c : class W
+    Var d : class W
+    Var e : class W
+      init:
+        Binary +
+          c
+          d
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Member .x
+            a
+    Return
+      0
+
+class V  size=4 align=4
+    +0  x (4 bytes)
+    construct: field x -> V() body
+    destroy:   ~V() body -> field x
+
+class W  size=4 align=4
+    +0  y (4 bytes)
+    construct: field y -> W() body
+    destroy:   ~W() body -> field y

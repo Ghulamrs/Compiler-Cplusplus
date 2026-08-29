@@ -1,0 +1,94 @@
+Class Res
+  Field public h : int
+  Constructor public Res::Res
+    init member h
+      0
+    Block
+  Destructor public Res::~Res
+    Block
+Function main returns int
+  Block
+    Var a : class Res
+    Block
+      Var b : class Res
+      Var c : class Res
+      [on exit: destroy c]
+      [on exit: destroy b]
+    Var d : class Res
+    If
+      Member .h
+        a
+    then:
+      Block
+        Var e : class Res
+        Return
+          1
+        [on exit: destroy e]
+    Return
+      0
+    [on exit: destroy d]
+    [on exit: destroy a]
+
+class Res  size=4 align=4
+    +0  h (4 bytes)
+    construct: field h -> Res() body
+    destroy:   ~Res() body -> field h
+
+function Res__ctor$v   ; Res::Res
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = const 0
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+            store [%5] <- %2 :4
+            ret
+
+function Res__dtor   ; Res::~Res
+  #0 this  8 bytes  (param)
+            ret
+
+function main
+  #0 a  4 bytes
+  #1 b  4 bytes
+  #2 c  4 bytes
+  #3 d  4 bytes
+  #4 e  4 bytes
+            call __global_init()
+    %0 = local #0
+            call Res__ctor$v(%0)
+    %1 = local #1
+            call Res__ctor$v(%1)
+    %2 = local #2
+            call Res__ctor$v(%2)
+    %3 = local #2
+            call Res__dtor(%3)
+    %4 = local #1
+            call Res__dtor(%4)
+    %5 = local #3
+            call Res__ctor$v(%5)
+    %6 = local #0
+    %7 = field %6 +0
+    %8 = load [%7] :4
+            brz %8 L0
+    %9 = local #4
+            call Res__ctor$v(%9)
+    %10 = const 1
+    %11 = local #4
+            call Res__dtor(%11)
+    %12 = local #3
+            call Res__dtor(%12)
+    %13 = local #0
+            call Res__dtor(%13)
+            ret %10
+    L0:
+    %14 = const 0
+    %15 = local #3
+            call Res__dtor(%15)
+    %16 = local #0
+            call Res__dtor(%16)
+            ret %14
+
+function __global_init
+            ret

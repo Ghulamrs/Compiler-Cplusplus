@@ -1,0 +1,102 @@
+Function print_int returns void
+  param:
+    Var n : int
+Function print_line returns void
+Class Box
+  Field private secret : int
+  Constructor public Box::Box
+    Block
+      ExprStmt
+        Binary =
+          secret
+          42
+Function twice returns int
+  param:
+    Var b : class Box
+  Block
+    Return
+      Binary *
+        Member .secret
+          b
+        2
+Function peek returns int
+  param:
+    Var b : class Box
+  Block
+    Return
+      Member .secret
+        b
+Function main returns int
+  Block
+    Var b : class Box
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            peek
+            arg 0:
+              b
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            twice
+            arg 0:
+              b
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+class Box  size=4 align=4
+    +0  secret (4 bytes)
+    construct: field secret -> Box() body
+    destroy:   ~Box() body -> field secret
+
+function Box__ctor$v   ; Box::Box
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = const 42
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+            store [%5] <- %2 :4
+            ret
+
+function twice$3Box   ; twice
+  #0 b  4 bytes  (param)
+    %0 = local #0
+    %1 = field %0 +0
+    %2 = load [%1] :4
+    %3 = const 2
+    %4 = mul %2, %3
+            ret %4
+
+function peek$3Box   ; peek
+  #0 b  4 bytes  (param)
+    %0 = local #0
+    %1 = field %0 +0
+    %2 = load [%1] :4
+            ret %2
+
+function main
+  #0 b  4 bytes
+            call __global_init()
+    %0 = local #0
+            call Box__ctor$v(%0)
+    %1 = local #0
+    %2 = call peek$3Box(%1)
+            call print_int(%2)
+    %3 = local #0
+    %4 = call twice$3Box(%3)
+            call print_int(%4)
+            call print_line()
+    %5 = const 0
+            ret %5
+
+function __global_init
+            ret

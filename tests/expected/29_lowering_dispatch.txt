@@ -1,0 +1,196 @@
+Class Shape
+  Field public side : int
+  Constructor public Shape::Shape
+    param:
+      Var s : int
+    init member side
+      s
+    Block
+  Method public virtual Shape::area returns int
+    Block
+      Return
+        0
+  Destructor public virtual Shape::~Shape
+    Block
+Class Square : public Shape
+  Field public extra : int
+  Constructor public Square::Square
+    param:
+      Var s : int
+    init base Shape
+      s
+    init member extra
+      1
+    Block
+  Method public virtual overriding Square::area returns int
+    Block
+      Return
+        Binary *
+          side
+          side
+  Destructor public virtual overriding Square::~Square
+    Block
+Function main returns int
+  Block
+    Var sq : class Square
+      construct with 1 argument(s):
+        4
+    Var s : pointer to class Shape
+      init:
+        Unary &
+          sq
+    Var direct : int
+      init:
+        Call
+          Member .area
+            sq
+    Var virt : int
+      init:
+        Call
+          Member ->area
+            s
+    Var heap : pointer to class Shape
+      init:
+        New class Square
+          5
+    ExprStmt
+      Delete
+        heap
+    Return
+      Binary +
+        direct
+        virt
+    [on exit: destroy sq]
+
+class Shape  size=16 align=8  [has vptr]
+     +0  __vptr (8 bytes)
+    +8  side (4 bytes)
+    vtable[0] = Shape::area
+    vtable[1] = Shape::~Shape
+    construct: set vptr -> field side -> Shape() body
+    destroy:   ~Shape() body -> field side -> reset vptr
+
+class Square  size=24 align=8  [has vptr]
+     +0  __vptr (8 bytes)
+    +8  side (4 bytes)  inherited from Shape
+    +16  extra (4 bytes)
+    vtable[0] = Square::area
+    vtable[1] = Square::~Square
+    construct: base Shape -> set vptr -> field extra -> Square() body
+    destroy:   ~Square() body -> field extra -> reset vptr -> base Shape
+
+vtable Shape__vtable
+    [0] Shape__area$v
+    [1] Shape__dtor
+
+vtable Square__vtable
+    [0] Square__area$v
+    [1] Square__dtor
+
+function Shape__ctor$i   ; Shape::Shape
+  #0 this  8 bytes  (param)
+  #1 s  4 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = global Shape__vtable
+    %3 = field %1 +0
+            store [%3] <- %2 :8
+    %4 = local #1
+    %5 = load [%4] :4
+    %6 = local #0
+    %7 = load [%6] :8
+    %8 = field %7 +8
+            store [%8] <- %5 :4
+            ret
+
+function Shape__area$v   ; Shape::area
+  #0 this  8 bytes  (param)
+    %0 = const 0
+            ret %0
+
+function Shape__dtor   ; Shape::~Shape
+  #0 this  8 bytes  (param)
+            ret
+
+function Square__ctor$i   ; Square::Square
+  #0 this  8 bytes  (param)
+  #1 s  4 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = local #1
+    %3 = load [%2] :4
+            call Shape__ctor$i(%1, %3)
+    %4 = global Square__vtable
+    %5 = field %1 +0
+            store [%5] <- %4 :8
+    %6 = const 1
+    %7 = local #0
+    %8 = load [%7] :8
+    %9 = field %8 +16
+            store [%9] <- %6 :4
+            ret
+
+function Square__area$v   ; Square::area
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +8
+    %3 = load [%2] :4
+    %4 = local #0
+    %5 = load [%4] :8
+    %6 = field %5 +8
+    %7 = load [%6] :4
+    %8 = mul %3, %7
+            ret %8
+
+function Square__dtor   ; Square::~Square
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+            call Shape__dtor(%1)
+            ret
+
+function main
+  #0 sq  24 bytes
+  #1 s  8 bytes
+  #2 direct  4 bytes
+  #3 virt  4 bytes
+  #4 heap  8 bytes
+            call __global_init()
+    %0 = local #0
+    %1 = const 4
+            call Square__ctor$i(%0, %1)
+    %2 = local #0
+    %3 = local #1
+            store [%3] <- %2 :8
+    %4 = local #0
+    %5 = call Square__area$v(%4)
+    %6 = local #2
+            store [%6] <- %5 :4
+    %7 = local #1
+    %8 = load [%7] :8
+    %9 = vtable [%8] slot 0
+    %10 = call.ind %9(%8)
+    %11 = local #3
+            store [%11] <- %10 :4
+    %12 = alloc 24
+    %13 = const 5
+            call Square__ctor$i(%12, %13)
+    %14 = local #4
+            store [%14] <- %12 :8
+    %15 = local #4
+    %16 = load [%15] :8
+    %17 = vtable [%16] slot 1
+            call.ind %17(%16)
+            free %16
+    %18 = local #2
+    %19 = load [%18] :4
+    %20 = local #3
+    %21 = load [%20] :4
+    %22 = add %19, %21
+    %23 = local #0
+            call Square__dtor(%23)
+            ret %22
+
+function __global_init
+            ret
