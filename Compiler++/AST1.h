@@ -97,11 +97,14 @@ struct MethodDecl : public Function {
     MethodDecl *overrides;      // 0 when this overrides nothing
     bool isConstructor;
     bool isDestructor;
+    // `int get() const` -- the const applies to *this, so the method promises
+    // not to modify the object, and only such a method may be called on one.
+    bool isConstMethod;
     std::vector<MemberInit> memberInits;    // constructors only
 
     MethodDecl(Type *r, const std::string &n, Access a)
         : Function(r, n), access(a), isVirtual(false), overrides(0),
-          isConstructor(false), isDestructor(false) {}
+          isConstructor(false), isDestructor(false), isConstMethod(false) {}
     ~MethodDecl();
     // Only the first printed line differs from a plain function.
     void printSignature(int indent);

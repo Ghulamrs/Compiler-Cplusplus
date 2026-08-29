@@ -13,7 +13,8 @@
 #include <sstream>
 
 SemanticAnalyzer::SemanticAnalyzer(Diagnostics &d)
-    : diag(d), currentReturnType(0), currentFunction(0), currentIsCtorOrDtor(false), loopDepth(0),
+    : diag(d), currentReturnType(0), currentFunction(0), currentMethodIsConst(false),
+      currentIsCtorOrDtor(false), loopDepth(0),
       switchDepth(0) {}
 
 SemanticAnalyzer::~SemanticAnalyzer() {
@@ -379,8 +380,30 @@ void SemanticAnalyzer::resolveBases() {
 // The member an operator expression calls, if the left operand is an object
 // that declares one.  A class without the operator is not an error here: the
 // builtin rules below will say what is actually wrong with it.
+// The object a method call is made on: `a.f()` uses a itself, `p->f()` uses
+// what p points at.
+bool SemanticAnalyzer::objectIsConst(cxx::MemberAccessExpr *ma) {
+    if (!ma || !ma->base) return false;
+    if (!ma->isArrow) return isConstExpr(ma->base);
+    cc::Type *bt = stripReference(ma->base->resolvedType);
+    cc::PointerType *pt = dynamic_cast<cc::PointerType*>(bt);
+    return pt && pt->base && pt->base->isConst;
+}
+
 bool SemanticAnalyzer::isConstExpr(cc::Expr *e) {
     if (!e) return false;
+
+    // Inside a const member function, *this is const -- so every field of it
+    // is, whether written `x` or `this->x`.
+    if (currentMethodIsConst) {
+        if (cxx::MemberAccessExpr *tm = dynamic_cast<cxx::MemberAccessExpr*>(e)) {
+            if (dynamic_cast<cxx::ThisExpr*>(tm->base)) return true;
+        }
+        if (cc::IdentExpr *id = dynamic_cast<cc::IdentExpr*>(e)) {
+            Symbol *sym = symbols.lookup(id->name);
+            if (sym && sym->kind == SYM_Field) return true;
+        }
+    }
 
     // A member is const when the object is, whatever the field says.
     if (cxx::MemberAccessExpr *ma = dynamic_cast<cxx::MemberAccessExpr*>(e)) {
@@ -393,9 +416,12 @@ bool SemanticAnalyzer::isConstExpr(cc::Expr *e) {
             if (pt && pt->base && pt->base->isConst) return true;
         }
     }
-    // An element is const when the array is.
+    // An element of a const ARRAY is const.  Through a POINTER it is not:
+    // `char* const p` freezes p, not what p points at, so p[0] stays writable
+    // and the pointee's own const decides.
     if (cc::IndexExpr *ix = dynamic_cast<cc::IndexExpr*>(e)) {
-        if (isConstExpr(ix->base)) return true;
+        cc::Type *bt = ix->base ? stripReference(ix->base->resolvedType) : 0;
+        if (dynamic_cast<cc::ArrayType*>(bt) && isConstExpr(ix->base)) return true;
     }
 
     cc::Type *t = stripReference(e->resolvedType);
@@ -1129,6 +1155,8 @@ void SemanticAnalyzer::analyzeFunction(cc::Function *fn) {
     const std::string savedClass = currentClass;
     cc::Function *const savedFunction = currentFunction;
     const bool savedCtorDtor = currentIsCtorOrDtor;
+    const bool savedMethodConst = currentMethodIsConst;
+    currentMethodIsConst = (md && md->isConstMethod);
     currentReturnType = fn->retType;
     currentClass = md ? md->ownerClass : std::string();
     currentFunction = fn;
@@ -1161,6 +1189,7 @@ void SemanticAnalyzer::analyzeFunction(cc::Function *fn) {
     currentReturnType = savedReturn;
     currentClass = savedClass;
     currentFunction = savedFunction;
+    currentMethodIsConst = savedMethodConst;
     currentIsCtorOrDtor = savedCtorDtor;
 }
 
@@ -1684,6 +1713,14 @@ cc::Type *SemanticAnalyzer::analyzeExprImpl(cc::Expr *e, bool &isLValue) {
             }
             fn = resolveOverload(cands, call, cma->member);
             if (!fn) return 0;
+
+            // A const object may only be asked for a const method: anything
+            // else is free to modify it.
+            cxx::MethodDecl *chosen = dynamic_cast<cxx::MethodDecl*>(fn);
+            if (chosen && !chosen->isConstMethod && objectIsConst(cma)) {
+                error(cma, "'" + cma->member + "' is not const, and '"
+                           + ct->className + "' here is");
+            }
         }
         // Recorded so lowering does not resolve the call a second time.
         call->resolved = fn;

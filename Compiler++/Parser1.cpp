@@ -507,6 +507,18 @@ cc::Type *Parser::parseType() {
 // question about the hierarchy, which is the semantic pass's business.
 void Parser::parseFunctionTail(cc::Function *fn) {
     MethodDecl *md = dynamic_cast<MethodDecl*>(fn);
+
+    // int get() const -- a promise about *this, so only a member may make it.
+    if (cur.kind == TOK_CONST) {
+        if (md && !md->isConstructor && !md->isDestructor) {
+            md->isConstMethod = true;
+            advance();
+        } else {
+            errorAtCurrent("only a member function may be const");
+            advance();
+        }
+    }
+
     if (cur.kind != TOK_COLON) return;
     if (!md || !md->isConstructor) {
         errorAtCurrent("only a constructor may have an initialiser list");

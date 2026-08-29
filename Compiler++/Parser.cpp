@@ -273,12 +273,7 @@ void Parser::parseFunctionParamsAndBody(Function *fn) {
     }
     expect(TOK_RPAREN, "after parameter list");
 
-    // int get() const  -- named rather than left to fail as a missing body.
-    if (cur.kind == TOK_CONST) {
-        errorAtCurrent("const member functions are not supported in this version");
-        advance();
-    }
-
+    // A trailing const is a C++ member-function thing, so the hook takes it.
     parseFunctionTail(fn);                          // virtual: C++ adds  : x(1)
 
     if (match(TOK_SEMI)) return;                    // a declaration only
@@ -549,6 +544,10 @@ Type *Parser::parsePointerSuffixes(Type *base) {
     while (cur.kind == TOK_STAR) {
         advance();
         base = new PointerType(base);
+        // `char* const p` -- the const after the star belongs to the POINTER,
+        // which may then not be moved.  `const char* p` put it on the value
+        // instead, and the two are different promises.
+        if (match(TOK_CONST)) base->isConst = true;
     }
     return base;
 }
