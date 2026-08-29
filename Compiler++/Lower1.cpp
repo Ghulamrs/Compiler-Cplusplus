@@ -188,8 +188,8 @@ bool Lowering::lowerLayerValue(cc::Expr *e, IRReg &out) {
     // operand is the object, the right is the single argument.  Semantic chose
     // the member; nothing is re-resolved here.
     if (cc::BinaryExpr *be = dynamic_cast<cc::BinaryExpr*>(e)) {
-        if (MethodDecl *op = dynamic_cast<MethodDecl*>(be->resolvedOperator)) {
-            out = emitOperatorCall(op, be->lhs, be->rhs, be->line);
+        if (be->resolvedOperator) {
+            out = emitOperatorCall(be->resolvedOperator, be->lhs, be->rhs, be->line);
             return true;
         }
     }
@@ -478,28 +478,40 @@ bool Lowering::isBoolType(cc::Type *t) {
 
 // object.operatorX(argument) -- with the object passed as `this`, and the
 // argument obeying the same by-reference rule every other parameter does.
-IRReg Lowering::emitOperatorCall(MethodDecl *op, cc::Expr *lhsExpr,
+// One operand at a time, each obeying the rule its parameter declares.
+IRReg Lowering::lowerOperandFor(cc::Type *want, cc::Expr *e, int line) {
+    if (want && isReferenceType(want)) return lowerAddress(e);
+    // By value: an object's ADDRESS goes over and the VM copies it into the
+    // parameter's own slot, which is the copy the callee owns.
+    if (want && isObjectType(want))    return lowerObjectValue(e);
+    IRReg v = lowerValue(e);
+    if (want) v = convert(v, referentType(typeOf(e)), want, line);
+    return v;
+}
+
+// A member operator is a method call on the left operand.  A non-member is an
+// ordinary two-argument call -- and the only form that can take a class on the
+// RIGHT, which is what makes  3 * v  work.
+IRReg Lowering::emitOperatorCall(cc::Function *op, cc::Expr *lhsExpr,
                                  cc::Expr *rhsExpr, int line) {
+    MethodDecl *asMember = dynamic_cast<MethodDecl*>(op);
     std::vector<IRReg> args;
-    args.push_back(lowerObjectValue(lhsExpr));
-    if (returnsObject(op)) args.push_back(allocReturnSlot(op, line));
 
-    cc::Type *want = op->params.empty() ? 0 : op->params[0]->type;
-    IRReg v;
-    if (want && isReferenceType(want)) {
-        v = lowerAddress(rhsExpr);
-    } else if (want && isObjectType(want)) {
-        // By value: the address goes over and the VM copies the object into
-        // the parameter's slot, which is the copy the callee owns.
-        v = lowerObjectValue(rhsExpr);
-    } else {
-        v = lowerValue(rhsExpr);
-        if (want) v = convert(v, referentType(typeOf(rhsExpr)), want, line);
+    if (asMember) {
+        args.push_back(lowerObjectValue(lhsExpr));          // `this`
+        if (returnsObject(op)) args.push_back(allocReturnSlot(op, line));
+        args.push_back(lowerOperandFor(op->params.empty() ? 0 : op->params[0]->type,
+                                       rhsExpr, line));
+        return fn->emitCall(mangleOverload(asMember->ownerClass, op->name, op->params),
+                            args, true, line);
     }
-    args.push_back(v);
 
-    return fn->emitCall(mangleOverload(op->ownerClass, op->name, op->params),
-                        args, true, line);
+    if (returnsObject(op)) args.push_back(allocReturnSlot(op, line));
+    args.push_back(lowerOperandFor(op->params.size() > 0 ? op->params[0]->type : 0,
+                                   lhsExpr, line));
+    args.push_back(lowerOperandFor(op->params.size() > 1 ? op->params[1]->type : 0,
+                                   rhsExpr, line));
+    return fn->emitCall(symbolFor(op, ""), args, true, line);
 }
 
 IRReg Lowering::lowerCall(cc::CallExpr *e, bool wantsResult) {

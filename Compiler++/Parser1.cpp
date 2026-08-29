@@ -9,13 +9,42 @@
 namespace cxx {
 
 // The base constructor creates the lexer and primes the first token.
-Parser::Parser(const std::string &s, Diagnostics &d) : cc::Parser(s, d) {}
+Parser::Parser(const std::string &s, Diagnostics &d)
+    : cc::Parser(s, d), classBeingParsed(0) {}
 
 // Only the class form is new; the rest goes back to the base class.
 cc::Decl *Parser::parseDeclaration() {
     if (cur.kind == TOK_CLASS || cur.kind == TOK_STRUCT) return parseClass();
+    // Out-of-line definitions are tried FIRST: `Point::~Point()` must not be
+    // handed to a speculative parseType(), whose qualified-name rule would
+    // swallow the name and report on the '~'.
     if (Decl *d = parseOutOfLineDefinition()) return d;
+    if (Decl *d = parseOperatorFunction()) return d;
     return cc::Parser::parseDeclaration();
+}
+
+// A type followed by the `operator` keyword, and nothing else in the grammar
+// looks like that -- so the attempt is speculative only up to that point.
+Decl *Parser::parseOperatorFunction() {
+    const State st = save();
+    cc::Type *ret = parseType();                // virtual: knows C++ types
+    if (!ret) { restore(st); return 0; }
+    if (!(cur.kind == TOK_RESERVED && cur.text == "operator")) {
+        delete ret;
+        restore(st);
+        return 0;
+    }
+
+    const int line = cur.line, col = cur.col;
+    advance();                                  // consume 'operator'
+    const std::string name = operatorMemberName();
+    if (name.empty()) { delete ret; skipConstruct(); suppressSync = true; return 0; }
+
+    cc::Function *fn = new cc::Function(ret, name);
+    fn->line = line;
+    fn->col = col;
+    parseFunctionParamsAndBody(fn);
+    return fn;
 }
 
 // A qualified name at file scope means a member defined outside its class.
@@ -127,6 +156,9 @@ ClassDecl *Parser::parseClass() {
 
     if (!expect(TOK_LBRACE, "to open a class body")) return cd;
 
+    ClassDecl *savedBeing = classBeingParsed;
+    classBeingParsed = cd;
+
     Access access = defaultAccess;
     while (cur.kind != TOK_RBRACE && cur.kind != TOK_EOF) {
         // an access specifier:  public:  private:  protected:
@@ -158,6 +190,8 @@ ClassDecl *Parser::parseClass() {
         if (lexer->tell().offset == posBefore && cur.kind != TOK_EOF) advance();
     }
 
+    classBeingParsed = savedBeing;
+
     expect(TOK_RBRACE, "to close a class body");
     expect(TOK_SEMI, "after a class definition");
     return cd;
@@ -175,6 +209,12 @@ bool Parser::looksLikeConstructor(const std::string &className) {
 }
 
 Decl *Parser::parseMemberDecl(const std::string &className, Access access) {
+    // `friend` is a grant of access, not a member: it produces nothing here.
+    if (cur.kind == TOK_RESERVED && cur.text == "friend") {
+        parseFriend();
+        suppressSync = true;                    // parseFriend consumed the whole thing
+        return 0;
+    }
     if (skipReservedConstruct()) return 0;
     // `virtual` precedes the return type and is meaningful only on a method.
     const bool sawVirtual = (cur.kind == TOK_VIRTUAL);
@@ -278,6 +318,55 @@ Decl *Parser::parseMemberDecl(const std::string &className, Access access) {
     fd->col = col;
     expect(TOK_SEMI, ("after field " + name).c_str());
     return fd;
+}
+
+// friend <type> <name> ( params ) ;      -- a grant, defined elsewhere
+// friend <type> <name> ( params ) { ... } -- a grant AND the definition, which
+//                                            is hoisted to file scope
+void Parser::parseFriend() {
+    const int line = cur.line, col = cur.col;
+    advance();                                  // consume 'friend'
+
+    if (cur.kind == TOK_CLASS || cur.kind == TOK_STRUCT) {
+        errorAtCurrent("a friend class is not supported in this version; name the function");
+        skipConstruct();
+        return;
+    }
+
+    cc::Type *ret = parseType();                // virtual: knows C++ types
+    if (!ret) {
+        errorAtCurrent("expected a return type after 'friend'");
+        skipConstruct();
+        return;
+    }
+
+    std::string name;
+    if (cur.kind == TOK_RESERVED && cur.text == "operator") {
+        advance();
+        name = operatorMemberName();
+        if (name.empty()) { delete ret; skipConstruct(); return; }
+    } else if (cur.kind == TOK_IDENTIFIER) {
+        name = cur.text;
+        advance();
+    } else {
+        errorAtCurrent("expected a function name after 'friend'");
+        delete ret;
+        skipConstruct();
+        return;
+    }
+
+    if (classBeingParsed) classBeingParsed->friends.push_back(name);
+
+    cc::Function *fn = new cc::Function(ret, name);
+    fn->line = line;
+    fn->col = col;
+    parseFunctionParamsAndBody(fn);             // handles both ';' and '{'
+
+    // A body makes this the definition, and a definition belongs at file
+    // scope.  Without one the grant stands alone and the function is defined
+    // somewhere else, so there is nothing to hoist.
+    if (fn->body) pending.push_back(fn);
+    else delete fn;
 }
 
 // The token(s) after `operator`, as the member's name: "operator+".  An

@@ -45,6 +45,14 @@ private:
     bool namesAClass(const std::string &n) const;
     // The name of an operator member, read after the `operator` keyword.
     std::string operatorMemberName();
+    // `friend` grants access; it declares no member.  An inline definition is
+    // hoisted to file scope, which is where the function actually lives.
+    void parseFriend();
+    // V operator*(int k, V v) { ... } at file scope.  Only a non-member can
+    // put the class on the RIGHT of the operator, which is the whole reason
+    // this form exists.
+    Decl *parseOperatorFunction();
+    ClassDecl *classBeingParsed;        // set while a class body is parsed
 
     // extension points taken over from the C layer.
     // C++98 has no `override` keyword -- each signature must match

@@ -159,6 +159,9 @@ std::vector<Decl*> Parser::parseTranslationUnit() {
         suppressSync = false;
         Decl *d = parseDeclaration();       // virtual
         if (d) units.push_back(d);
+        // Anything hoisted out of that declaration follows it.
+        for (std::size_t k = 0; k < pending.size(); ++k) units.push_back(pending[k]);
+        pending.clear();
         if (suppressSync) { suppressSync = false; continue; }
         // Only a FAILED parse resynchronises: one that produced a node left the
         // parser somewhere sensible even if it also reported.  The progress

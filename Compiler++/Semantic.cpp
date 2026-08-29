@@ -370,8 +370,56 @@ void SemanticAnalyzer::resolveBases() {
 // The member an operator expression calls, if the left operand is an object
 // that declares one.  A class without the operator is not an error here: the
 // builtin rules below will say what is actually wrong with it.
-cxx::MethodDecl *SemanticAnalyzer::findOperator(cc::Type *lt, cc::BinaryOp op,
-                                                cc::ASTNode *at) {
+bool SemanticAnalyzer::isClassType(cc::Type *t) {
+    return dynamic_cast<cxx::ClassType*>(stripReference(t)) != 0;
+}
+
+// An operator expression looks for a function only when an operand is an
+// object: overloading for two builtins is not a thing C++ allows either.
+cc::Function *SemanticAnalyzer::findOperator(cc::Expr *lhs, cc::Type *lt,
+                                             cc::Expr *rhs, cc::Type *rt,
+                                             cc::BinaryOp op, cc::ASTNode *at) {
+    if (!isClassType(lt) && !isClassType(rt)) return 0;
+
+    // A member is preferred, and only exists when the object is on the left.
+    if (cxx::MethodDecl *m = findMemberOperator(lt, op, at)) return m;
+
+    // operator= must be a member; C++ says so, and a non-member one could not
+    // be generated for a class that never mentioned it.
+    if (op == cc::BIN_Assign) return 0;
+
+    return findFreeOperator(lhs, lt, rhs, rt, std::string("operator") + cc::binaryOpText(op));
+}
+
+// The file-scope operator whose two parameters accept these two operands.
+cc::Function *SemanticAnalyzer::findFreeOperator(cc::Expr *lhs, cc::Type *lt,
+                                                 cc::Expr *rhs, cc::Type *rt,
+                                                 const std::string &name) {
+    std::map<std::string, std::vector<cc::Function*> >::const_iterator it =
+        overloads.find(name);
+    if (it == overloads.end()) return 0;
+
+    const std::vector<cc::Function*> &cands = it->second;
+    cc::Function *exact = 0;
+    cc::Function *viable = 0;
+    for (std::size_t i = 0; i < cands.size(); ++i) {
+        cc::Function *f = cands[i];
+        if (f->params.size() != 2) continue;
+        cc::Type *p0 = f->params[0]->type;
+        cc::Type *p1 = f->params[1]->type;
+        if (sameType(lt, stripReference(p0)) && sameType(rt, stripReference(p1))) {
+            if (!exact) exact = f;
+            continue;
+        }
+        if (convertible(lhs, lt, p0) && convertible(rhs, rt, p1)) {
+            if (!viable) viable = f;
+        }
+    }
+    return exact ? exact : viable;
+}
+
+cxx::MethodDecl *SemanticAnalyzer::findMemberOperator(cc::Type *lt, cc::BinaryOp op,
+                                                      cc::ASTNode *at) {
     cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(stripReference(lt));
     if (!ct) return 0;
     cxx::ClassDecl *cd = findClass(ct->className);
@@ -426,9 +474,21 @@ bool SemanticAnalyzer::isDerivedFrom(cxx::ClassDecl *derived, cxx::ClassDecl *ba
     return false;
 }
 
+// A friend is granted access by name, so the question is simply whether the
+// function we are inside is one the class named.
+bool SemanticAnalyzer::isFriendOf(cxx::ClassDecl *owner) const {
+    if (!owner || currentFunction.empty()) return false;
+    for (std::size_t i = 0; i < owner->friends.size(); ++i) {
+        if (owner->friends[i] == currentFunction) return true;
+    }
+    return false;
+}
+
 bool SemanticAnalyzer::memberIsAccessible(cc::Decl *m, cxx::ClassDecl *owner) const {
     const cxx::Access a = memberAccess(m);
     if (a == cxx::ACC_Public) return true;
+    // A friend sees everything, from wherever it is written.
+    if (isFriendOf(owner)) return true;
     if (currentClass.empty()) return false;
     // const, so findClass() is off limits.
     std::map<std::string, cxx::ClassDecl*>::const_iterator it = classes.find(currentClass);
@@ -945,9 +1005,11 @@ void SemanticAnalyzer::analyzeFunction(cc::Function *fn) {
 
     cc::Type *savedReturn = currentReturnType;
     const std::string savedClass = currentClass;
+    const std::string savedFunction = currentFunction;
     const bool savedCtorDtor = currentIsCtorOrDtor;
     currentReturnType = fn->retType;
     currentClass = md ? md->ownerClass : std::string();
+    currentFunction = fn->name;
     currentIsCtorOrDtor = md && (md->isConstructor || md->isDestructor);
 
     if (md) pushClassScope(findClass(md->ownerClass));
@@ -976,6 +1038,7 @@ void SemanticAnalyzer::analyzeFunction(cc::Function *fn) {
 
     currentReturnType = savedReturn;
     currentClass = savedClass;
+    currentFunction = savedFunction;
     currentIsCtorOrDtor = savedCtorDtor;
 }
 
@@ -1565,8 +1628,9 @@ cc::Type *SemanticAnalyzer::analyzeExprImpl(cc::Expr *e, bool &isLValue) {
         // An operand that is an object sends the whole expression looking for
         // a member named for the operator.  Found, this is a call, and every
         // rule below belongs to the builtin operators it is not.
-        if (cxx::MethodDecl *op = findOperator(lt, be->op, be)) {
-            if (!checkOperatorOperand(op, be->rhs, rt, be)) return 0;
+        if (cc::Function *op = findOperator(be->lhs, lt, be->rhs, rt, be->op, be)) {
+            cxx::MethodDecl *asMember = dynamic_cast<cxx::MethodDecl*>(op);
+            if (asMember && !checkOperatorOperand(asMember, be->rhs, rt, be)) return 0;
             be->resolvedOperator = op;
             isLValue = false;
             return op->retType;

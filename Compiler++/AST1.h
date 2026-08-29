@@ -120,6 +120,10 @@ struct ClassDecl : public Decl {
     // because they share one name; they are selected by argument count.
     std::vector<MethodDecl*> ctors;
     MethodDecl *dtor;               // 0 when the class declares none
+    // Names granted access to the private parts.  By NAME, not by signature:
+    // a friend declaration here makes every overload of that name a friend,
+    // which is looser than C++ and simpler to explain.
+    std::vector<std::string> friends;
     ClassDecl(const std::string &n)
         : name(n), baseAccess(ACC_Public), base(0), dtor(0) {}
     ~ClassDecl();

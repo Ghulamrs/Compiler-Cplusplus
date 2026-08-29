@@ -47,6 +47,11 @@ private:
     // Context for the function being analysed.
     cc::Type *currentReturnType;
     std::string currentClass;       // empty outside a method body
+    // The function being analysed, by name.  Access control needs it: a
+    // friend is named, and the only way to know whether we are inside one is
+    // to know which function we are inside.
+    std::string currentFunction;
+    bool isFriendOf(cxx::ClassDecl *owner) const;
     // A ctor/dtor has no return type at all, which is not the same as void.
     bool currentIsCtorOrDtor;
     int loopDepth;                  // break/continue legality
@@ -93,9 +98,19 @@ private:
     cxx::ClassDecl *findClass(const std::string &name);
     // Overloaded operators: the member an expression calls, and the check that
     // its one argument fits.
-    cxx::MethodDecl *findOperator(cc::Type *lt, cc::BinaryOp op, cc::ASTNode *at);
+    // The function an operator expression calls: a member when the LEFT
+    // operand is the object, otherwise a non-member -- which is the only form
+    // that can put the class on the right, as in  3 * v.
+    cc::Function *findOperator(cc::Expr *lhs, cc::Type *lt,
+                               cc::Expr *rhs, cc::Type *rt,
+                               cc::BinaryOp op, cc::ASTNode *at);
+    cxx::MethodDecl *findMemberOperator(cc::Type *lt, cc::BinaryOp op, cc::ASTNode *at);
+    cc::Function *findFreeOperator(cc::Expr *lhs, cc::Type *lt,
+                                   cc::Expr *rhs, cc::Type *rt,
+                                   const std::string &name);
     bool checkOperatorOperand(cxx::MethodDecl *op, cc::Expr *rhs, cc::Type *rt,
                               cc::ASTNode *at);
+    bool isClassType(cc::Type *t);
     // Walks the base chain, most derived first -- which IS name hiding.
     // `foundIn` receives the class it was found in, for the diagnostic.
     cc::Decl *findMember(cxx::ClassDecl *cd, const std::string &member,

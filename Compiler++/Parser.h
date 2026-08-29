@@ -53,6 +53,10 @@ protected:
     // braces so a body is stepped over whole.
     void skipConstruct();
     // Steps over a balanced ( ... ), for a reserved word used as an operator.
+    // A declaration made as a side effect of another: a friend function
+    // defined inside a class body belongs at FILE scope, not in the class.
+    std::vector<Decl*> pending;
+
     void skipParenGroup();
     bool peekIsStar();
     // Set by skipReservedConstruct so the caller does not resynchronise on top
