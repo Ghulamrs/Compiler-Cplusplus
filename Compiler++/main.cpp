@@ -14,6 +14,7 @@
 //  Usage:   Compiler++ [options] [source-file]
 //             -ast        print the syntax tree
 //             -layout     print each class's object layout and vtable
+//             -ir         print the lowered intermediate representation
 //             -q          diagnostics only, no banner
 //
 //  With no file it reads DEFAULT_INPUT below.  Xcode runs the binary with its
@@ -38,7 +39,9 @@
 #include "AST.h"
 #include "AST1.h"
 #include "Diagnostics.h"
+#include "IR.h"
 #include "Layout.h"
+#include "Lower1.h"
 #include "Parser.h"
 #include "Parser1.h"
 #include "Semantic.h"
@@ -67,6 +70,7 @@ static std::string baseName(const std::string &path) {
 int main(int argc, char **argv) {
     bool showAst = false;
     bool showLayout = false;
+    bool showIR = false;
     bool quiet = false;
     std::string path;
 
@@ -74,6 +78,7 @@ int main(int argc, char **argv) {
         const std::string arg = argv[i];
         if      (arg == "-ast")    showAst = true;
         else if (arg == "-layout") showLayout = true;
+        else if (arg == "-ir")     showIR = true;
         else if (arg == "-q")      quiet = true;
         else                       path = arg;
     }
@@ -117,6 +122,18 @@ int main(int argc, char **argv) {
         if (showLayout) {
             if (!quiet) std::cout << "=== OBJECT LAYOUT: " << baseName(path) << " ===" << std::endl;
             layout.print();
+        }
+
+        // PASS 5.  Lowering, but only over a tree that survived analysis --
+        // lowering a program with unresolved names would produce nonsense
+        // rather than a better diagnostic.
+        if (showIR && !diag.hadError()) {
+            IRModule module;
+            cxx::Lowering lower(module, layout, diag, sem.classMap());
+            lower.lowerClasses();
+            lower.lowerUnit(unit);
+            if (!quiet) std::cout << "=== IR: " << baseName(path) << " ===" << std::endl;
+            module.print();
         }
     }
 
