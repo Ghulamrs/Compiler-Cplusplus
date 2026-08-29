@@ -52,7 +52,7 @@ private:
     // and frees them in its destructor.  A formed type must own every node in
     // it -- borrowing a subtree the AST will delete leaves a dangling pointer.
     std::vector<cc::Type*> ownedTypes;
-    cc::Type *makeBuiltin(const std::string &name);
+    cc::Type *makeBuiltin(cc::BuiltinKind k);
     cc::Type *cloneType(cc::Type *t);
     cc::Type *makePointerTo(cc::Type *t);
 
@@ -109,9 +109,25 @@ private:
     static bool isNullPointerConstant(cc::Expr *e);
     cxx::ClassDecl *classOf(cc::Type *t);   // through one pointer or reference
     static bool isVoid(cc::Type *t);
+    // The builtin kind a type names, or BK_Void when it names none.
+    static bool builtinKindOf(cc::Type *t, cc::BuiltinKind &out);
+    // Integral promotion: anything of rank below int becomes int.
+    static cc::BuiltinKind promote(cc::BuiltinKind k);
+    // The usual arithmetic conversions -- the common type two operands meet in.
+    static cc::BuiltinKind usualArithmetic(cc::BuiltinKind a, cc::BuiltinKind b);
+    // Would converting `from` to `to` lose information?
+    static bool isNarrowing(cc::BuiltinKind from, cc::BuiltinKind to);
+    // Legal conversions that may lose the value are allowed but reported.
+    void warnIfNarrowing(cc::Expr *e, cc::Type *from, cc::Type *to,
+                         cc::ASTNode *at, const std::string &what);
+    // A literal whose value fits the target is not narrowing -- otherwise
+    // `short s = 1;` would warn, and nothing small would ever be assignable.
+    static bool literalFitsIn(cc::Expr *e, cc::BuiltinKind to);
     // A stream rather than sprintf: no fixed buffer, and MSVC stays quiet.
     static std::string countText(std::size_t n);
-    void checkTypeIsKnown(cc::Type *t, cc::ASTNode *at, const std::string &where);
+    // false when the type names a class that was never declared -- in which
+    // case the caller skips further checks rather than cascading.
+    bool checkTypeIsKnown(cc::Type *t, cc::ASTNode *at, const std::string &where);
     void checkCallArgs(cc::CallExpr *call, cc::Function *fn);
 
     // not copyable (C++98 way: declared private, never defined)

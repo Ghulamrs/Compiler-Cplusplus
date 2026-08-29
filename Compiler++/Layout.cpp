@@ -26,13 +26,9 @@ int Layout::sizeOf(cc::Type *t) const {
     cxx::ReferenceType *rt = dynamic_cast<cxx::ReferenceType*>(t);
     if (rt) return PointerSize;
     if (dynamic_cast<cc::PointerType*>(t)) return PointerSize;
+    // The type model owns every builtin's size; Layout does not restate them.
     cc::BuiltinType *bt = dynamic_cast<cc::BuiltinType*>(t);
-    if (bt) {
-        if (bt->name == "int")  return IntSize;
-        if (bt->name == "char") return CharSize;
-        if (bt->name == "bool") return BoolSize;
-        return 0;                               // void
-    }
+    if (bt) return cc::builtinSize(bt->kind);
     cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(t);
     if (ct) {
         const ClassLayout *cl = forClass(ct->className);

@@ -14,10 +14,18 @@ const char *tokenName(TokenKind k) {
     case TOK_EOF:        return "end of file";
     case TOK_IDENTIFIER: return "identifier";
     case TOK_NUMBER:     return "number";
+    case TOK_FLOATLIT:   return "floating literal";
+    case TOK_CHARLIT:    return "character literal";
+    case TOK_STRINGLIT:  return "string literal";
     case TOK_INT:        return "int";
     case TOK_CHAR:       return "char";
     case TOK_VOID:       return "void";
-    case TOK_BOOL:       return "bool";
+    case TOK_SHORT:      return "short";
+    case TOK_LONG:       return "long";
+    case TOK_SIGNED:     return "signed";
+    case TOK_UNSIGNED:   return "unsigned";
+    case TOK_FLOAT:      return "float";
+    case TOK_DOUBLE:     return "double";
     case TOK_CONST:      return "const";
     case TOK_RETURN:     return "return";
     case TOK_IF:         return "if";
@@ -67,6 +75,20 @@ const char *tokenName(TokenKind k) {
     case TOK_UNKNOWN:    return "unknown token";
     }
     return "token";
+}
+
+// One place for the escapes both literal forms share.
+static char decodeEscape(char c) {
+    switch (c) {
+    case 'n':  return '\n';
+    case 't':  return '\t';
+    case 'r':  return '\r';
+    case '0':  return '\0';
+    case '\\': return '\\';
+    case '\'': return '\'';
+    case '"':  return '"';
+    default:   return c;
+    }
 }
 
 // --- position bookkeeping ---------------------------------------------
@@ -142,7 +164,12 @@ Token Lexer::nextToken() {
         if      (id == "int")       tok.kind = TOK_INT;
         else if (id == "char")      tok.kind = TOK_CHAR;
         else if (id == "void")      tok.kind = TOK_VOID;
-        else if (id == "bool")      tok.kind = TOK_BOOL;
+        else if (id == "short")     tok.kind = TOK_SHORT;
+        else if (id == "long")      tok.kind = TOK_LONG;
+        else if (id == "signed")    tok.kind = TOK_SIGNED;
+        else if (id == "unsigned")  tok.kind = TOK_UNSIGNED;
+        else if (id == "float")     tok.kind = TOK_FLOAT;
+        else if (id == "double")    tok.kind = TOK_DOUBLE;
         else if (id == "const")     tok.kind = TOK_CONST;
         else if (id == "return")    tok.kind = TOK_RETURN;
         else if (id == "if")        tok.kind = TOK_IF;
@@ -164,13 +191,65 @@ Token Lexer::nextToken() {
         return tok;
     }
 
-    // number
+    // A number is integer until a '.' or an exponent proves otherwise.  The
+    // '.' is only part of the number when a digit follows, so that  p.x  still
+    // lexes as three tokens.
     if (std::isdigit(static_cast<unsigned char>(c))) {
         std::string num;
         while (std::isdigit(static_cast<unsigned char>(peek()))) num += get();
+
+        bool isFloat = false;
+        if (peek() == '.' && std::isdigit(static_cast<unsigned char>(peekAt(1)))) {
+            isFloat = true;
+            num += get();                                   // the '.'
+            while (std::isdigit(static_cast<unsigned char>(peek()))) num += get();
+        }
+        if (peek() == 'e' || peek() == 'E') {
+            const char sign = peekAt(1);
+            const bool signedExp = (sign == '+' || sign == '-');
+            if (std::isdigit(static_cast<unsigned char>(signedExp ? peekAt(2) : sign))) {
+                isFloat = true;
+                num += get();                               // 'e'
+                if (signedExp) num += get();
+                while (std::isdigit(static_cast<unsigned char>(peek()))) num += get();
+            }
+        }
+
+        if (isFloat) {
+            Token tok = makeToken(TOK_FLOATLIT, startLine, startCol);
+            tok.text = num;
+            tok.floatValue = std::atof(num.c_str());
+            if (peek() == 'f' || peek() == 'F') { get(); tok.isFloatSuffixed = true; }
+            return tok;
+        }
         Token tok = makeToken(TOK_NUMBER, startLine, startCol);
         tok.text = num;
-        tok.numberValue = std::atoi(num.c_str());
+        tok.numberValue = std::atol(num.c_str());
+        return tok;
+    }
+
+    // 'A' and "text".  Escapes are shared, so they are decoded in one place.
+    if (c == '\'' || c == '"') {
+        const char quote = get();
+        std::string body;
+        bool closed = false;
+        while (peek() != '\0') {
+            if (peek() == quote) { get(); closed = true; break; }
+            if (peek() == '\n') break;                       // unterminated
+            char ch = get();
+            if (ch == '\\') ch = decodeEscape(get());
+            body += ch;
+        }
+        Token tok = makeToken(quote == '\'' ? TOK_CHARLIT : TOK_STRINGLIT,
+                              startLine, startCol);
+        if (!closed) {
+            tok.kind = TOK_UNKNOWN;
+            tok.text = "unterminated literal";
+            return tok;
+        }
+        if (quote == '"') { tok.text = body; return tok; }
+        tok.numberValue = body.empty() ? 0 : static_cast<unsigned char>(body[0]);
+        tok.text = body;
         return tok;
     }
 

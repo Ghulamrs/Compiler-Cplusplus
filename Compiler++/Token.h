@@ -10,13 +10,21 @@
 enum TokenKind {
     TOK_EOF,
     TOK_IDENTIFIER,
-    TOK_NUMBER,
+    TOK_NUMBER,         // integer literal
+    TOK_FLOATLIT,       // 1.5, 1e3, 1.5f
+    TOK_CHARLIT,        // 'A'
+    TOK_STRINGLIT,      // "text"
 
     // --- keywords the C layer needs ---
     TOK_INT,
     TOK_CHAR,
     TOK_VOID,
-    TOK_BOOL,
+    TOK_SHORT,
+    TOK_LONG,
+    TOK_SIGNED,
+    TOK_UNSIGNED,
+    TOK_FLOAT,
+    TOK_DOUBLE,
     TOK_CONST,
     TOK_RETURN,
     TOK_IF,
@@ -77,11 +85,15 @@ enum TokenKind {
 // pass can point at source just as a syntax error does.
 struct Token {
     TokenKind kind;
-    std::string text;
-    int numberValue;
+    std::string text;       // identifier spelling, or a string literal's body
+    long numberValue;       // integer and character literals
+    double floatValue;      // floating literals
+    bool isFloatSuffixed;   // 1.5f rather than 1.5
     int line;
     int col;
-    Token() : kind(TOK_UNKNOWN), numberValue(0), line(0), col(0) {}
+    Token()
+        : kind(TOK_UNKNOWN), numberValue(0), floatValue(0.0),
+          isFloatSuffixed(false), line(0), col(0) {}
 };
 
 // Human-readable spelling, for "expected X, found Y" messages.

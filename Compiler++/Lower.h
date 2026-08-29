@@ -29,7 +29,7 @@ namespace cc {
 class Lowering {
 public:
     Lowering(IRModule &module, const Layout &layout, Diagnostics &diag);
-    virtual ~Lowering() {}
+    virtual ~Lowering();
 
     // Lowers a whole translation unit.
     void lowerUnit(const std::vector<Decl*> &units);
@@ -72,6 +72,18 @@ protected:
     IRReg lowerValue(Expr *e);
     IRReg lowerAddress(Expr *e);
     IRReg lowerBinary(BinaryExpr *e);
+    // Emits whatever machine operation the conversion needs, or nothing when
+    // the two types already agree.  Every implicit conversion the semantic
+    // pass allowed becomes a real instruction here.
+    IRReg convert(IRReg value, Type *from, Type *to, int line);
+    // The type an expression's operands meet in, so both sides are converted
+    // before the operator runs.
+    static bool arithKind(Type *t, BuiltinKind &out);
+    static BuiltinKind commonKind(BuiltinKind a, BuiltinKind b);
+    Type *literalType(BuiltinKind k);
+    Type *commonType(BuiltinKind k);
+    // Builtin types this pass forms, one per kind, owned here.
+    std::map<int, Type*> builtinCache;
     IRReg lowerUnary(UnaryExpr *e);
     IRReg lowerAssign(BinaryExpr *e);
     IRReg lowerShortCircuit(BinaryExpr *e);

@@ -56,7 +56,12 @@ void Parser::synchronize() {
         case TOK_INT:
         case TOK_CHAR:
         case TOK_VOID:
-        case TOK_BOOL:
+        case TOK_SHORT:
+        case TOK_LONG:
+        case TOK_SIGNED:
+        case TOK_UNSIGNED:
+        case TOK_FLOAT:
+        case TOK_DOUBLE:
             return;
         default:
             advance();
@@ -298,19 +303,91 @@ Type *Parser::parsePointerSuffixes(Type *base) {
     return base;
 }
 
+// The builtin types are C's, every one of them, so the whole specifier soup is
+// resolved here and the C++ layer inherits it by calling this first.
+//
+//     [const] { signed | unsigned | short | long | int | char
+//               | void | float | double }...
+//
+// The specifiers may appear in any order and combine, so they are collected
+// into three independent facts -- signedness, length, base -- and resolved once
+// at the end.  Nothing is consumed unless it is a specifier, which is what lets
+// parseStatement() call this speculatively.
 Type *Parser::parseType() {
     match(TOK_CONST);                               // accepted, not enforced
-    const char *name = 0;
-    switch (cur.kind) {
-    case TOK_INT:  name = "int"; break;
-    case TOK_CHAR: name = "char"; break;
-    case TOK_VOID: name = "void"; break;
-    case TOK_BOOL: name = "bool"; break;
-    default: return 0;                              // not a type this layer knows
-    }
+
+    enum { SignNone, SignSigned, SignUnsigned } sign = SignNone;
+    enum { LenNone, LenShort, LenLong } length = LenNone;
+    enum { BaseNone, BaseInt, BaseChar, BaseVoid, BaseFloat, BaseDouble }
+        base = BaseNone;
+
     const int line = cur.line, col = cur.col;
-    advance();
-    Type *t = new BuiltinType(name);
+    bool sawAny = false;
+    bool bad = false;
+    bool alreadyReported = false;       // a specific message beats the generic one
+
+    for (;;) {
+        switch (cur.kind) {
+        case TOK_SIGNED:   if (sign != SignNone) bad = true; sign = SignSigned; break;
+        case TOK_UNSIGNED: if (sign != SignNone) bad = true; sign = SignUnsigned; break;
+        case TOK_SHORT:    if (length != LenNone) bad = true; length = LenShort; break;
+        case TOK_LONG:
+            if (length == LenLong) {
+                errorAtCurrent("'long long' is not supported in this subset");
+                bad = true;
+                alreadyReported = true;
+            } else if (length != LenNone) bad = true;
+            length = LenLong;
+            break;
+        case TOK_INT:      if (base != BaseNone) bad = true; base = BaseInt; break;
+        case TOK_CHAR:     if (base != BaseNone) bad = true; base = BaseChar; break;
+        case TOK_VOID:     if (base != BaseNone) bad = true; base = BaseVoid; break;
+        case TOK_FLOAT:    if (base != BaseNone) bad = true; base = BaseFloat; break;
+        case TOK_DOUBLE:   if (base != BaseNone) bad = true; base = BaseDouble; break;
+        default:
+            goto resolve;
+        }
+        sawAny = true;
+        advance();
+        match(TOK_CONST);                           // const may trail too
+    }
+
+resolve:
+    if (!sawAny) return 0;                          // not a type this layer knows
+
+    const bool uns = (sign == SignUnsigned);
+    BuiltinKind kind = BK_Int;
+
+    if (base == BaseVoid || base == BaseFloat || base == BaseDouble) {
+        // These take no length or signedness.
+        if (sign != SignNone || length != LenNone) {
+            errorAtCurrent(std::string("'") + (base == BaseVoid ? "void" :
+                           base == BaseFloat ? "float" : "double")
+                           + "' cannot be combined with signed, unsigned, short or long");
+            bad = true;
+            alreadyReported = true;
+        }
+        kind = (base == BaseVoid)  ? BK_Void
+             : (base == BaseFloat) ? BK_Float
+                                   : BK_Double;
+    } else if (base == BaseChar) {
+        if (length != LenNone) {
+            errorAtCurrent("'char' cannot be combined with short or long");
+            bad = true;
+            alreadyReported = true;
+        }
+        // Plain char is a distinct type from signed char, as in C++.
+        kind = (sign == SignNone) ? BK_Char : (uns ? BK_UChar : BK_SChar);
+    } else {
+        // int, or a length and signedness with int implied
+        if (length == LenShort)     kind = uns ? BK_UShort : BK_Short;
+        else if (length == LenLong) kind = uns ? BK_ULong : BK_Long;
+        else                        kind = uns ? BK_UInt : BK_Int;
+    }
+
+    if (bad && !alreadyReported) errorAtCurrent("conflicting type specifiers");
+
+    Type *t = new BuiltinType(kind);
     t->line = line;
     t->col = col;
     return parsePointerSuffixes(t);
@@ -473,10 +550,28 @@ Expr *Parser::parseCallSuffix(Expr *callee) {
 
 Expr *Parser::parsePrimary() {
     const int line = cur.line, col = cur.col;
-    if (cur.kind == TOK_NUMBER) {
-        const int v = cur.numberValue;
+
+    // Every literal form is C's, so they all live in this layer.
+    if (cur.kind == TOK_NUMBER || cur.kind == TOK_CHARLIT) {
+        const BuiltinKind k = (cur.kind == TOK_CHARLIT) ? BK_Char : BK_Int;
+        const long v = cur.numberValue;
         advance();
-        Expr *e = new NumberExpr(v);
+        Expr *e = new NumberExpr(v, k);
+        e->line = line; e->col = col;
+        return e;
+    }
+    if (cur.kind == TOK_FLOATLIT) {
+        const double v = cur.floatValue;
+        const BuiltinKind k = cur.isFloatSuffixed ? BK_Float : BK_Double;
+        advance();
+        Expr *e = new FloatExpr(v, k);
+        e->line = line; e->col = col;
+        return e;
+    }
+    if (cur.kind == TOK_STRINGLIT) {
+        const std::string v = cur.text;
+        advance();
+        Expr *e = new StringExpr(v);
         e->line = line; e->col = col;
         return e;
     }

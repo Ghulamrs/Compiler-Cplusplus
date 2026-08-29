@@ -8,6 +8,7 @@
 
 #include "Semantic.h"
 
+#include <cmath>
 #include <cstddef>
 #include <sstream>
 
@@ -23,16 +24,104 @@ void SemanticAnalyzer::error(cc::ASTNode *at, const std::string &msg) {
     else    diag.error(0, 0, msg);
 }
 
-cc::Type *SemanticAnalyzer::makeBuiltin(const std::string &name) {
-    cc::Type *t = new cc::BuiltinType(name);
+cc::Type *SemanticAnalyzer::makeBuiltin(cc::BuiltinKind k) {
+    cc::Type *t = new cc::BuiltinType(k);
     ownedTypes.push_back(t);
     return t;
+}
+
+bool SemanticAnalyzer::builtinKindOf(cc::Type *t, cc::BuiltinKind &out) {
+    cc::BuiltinType *bt = dynamic_cast<cc::BuiltinType*>(stripReference(t));
+    if (!bt) return false;
+    out = bt->kind;
+    return true;
+}
+
+// Anything narrower than int is computed as an int.  This is why `char + char`
+// has type int in C++, and why a compiler needs a rank rather than a size.
+cc::BuiltinKind SemanticAnalyzer::promote(cc::BuiltinKind k) {
+    if (cc::builtinIsFloating(k)) return k;
+    return cc::builtinRank(k) < cc::builtinRank(cc::BK_Int) ? cc::BK_Int : k;
+}
+
+// The common type two operands meet in: floating wins over integer, then the
+// higher rank wins, and at equal rank unsigned wins over signed.
+cc::BuiltinKind SemanticAnalyzer::usualArithmetic(cc::BuiltinKind a, cc::BuiltinKind b) {
+    if (a == cc::BK_Double || b == cc::BK_Double) return cc::BK_Double;
+    if (a == cc::BK_Float  || b == cc::BK_Float)  return cc::BK_Float;
+    a = promote(a);
+    b = promote(b);
+    if (a == b) return a;
+    const int ra = cc::builtinRank(a), rb = cc::builtinRank(b);
+    if (ra != rb) return (ra > rb) ? a : b;
+    return cc::builtinIsSigned(a) ? b : a;      // equal rank: unsigned wins
+}
+
+// The range of an integer kind, as the smallest and largest value it holds.
+static void integerRange(cc::BuiltinKind k, double &lo, double &hi) {
+    const int bits = cc::builtinSize(k) * 8;
+    if (cc::builtinIsSigned(k)) {
+        const double half = std::pow(2.0, bits - 1);
+        lo = -half;
+        hi = half - 1;
+    } else {
+        lo = 0;
+        hi = std::pow(2.0, bits) - 1;
+    }
+}
+
+bool SemanticAnalyzer::literalFitsIn(cc::Expr *e, cc::BuiltinKind to) {
+    if (cc::NumberExpr *n = dynamic_cast<cc::NumberExpr*>(e)) {
+        if (cc::builtinIsFloating(to)) return true;
+        double lo, hi;
+        integerRange(to, lo, hi);
+        const double v = static_cast<double>(n->value);
+        return v >= lo && v <= hi;
+    }
+    if (cc::FloatExpr *f = dynamic_cast<cc::FloatExpr*>(e)) {
+        if (to == cc::BK_Double) return true;
+        // Exactly representable as a float?  Then the conversion loses nothing.
+        if (to == cc::BK_Float) {
+            return static_cast<double>(static_cast<float>(f->value)) == f->value;
+        }
+        return false;                       // a float literal into an integer
+    }
+    return false;
+}
+
+void SemanticAnalyzer::warnIfNarrowing(cc::Expr *e, cc::Type *from, cc::Type *to,
+                                       cc::ASTNode *at, const std::string &what) {
+    cc::BuiltinKind kf, kt;
+    if (!builtinKindOf(from, kf) || !builtinKindOf(to, kt)) return;
+    if (!cc::builtinIsArithmetic(kf) || !cc::builtinIsArithmetic(kt)) return;
+    if (!isNarrowing(kf, kt)) return;
+    if (e && literalFitsIn(e, kt)) return;
+    diag.warning(at->line, at->col,
+                 std::string("converting ") + describe(from) + " to " + describe(to)
+                 + " in " + what + " may lose value");
+}
+
+// Legal, but worth saying out loud: the value may not survive the trip.
+bool SemanticAnalyzer::isNarrowing(cc::BuiltinKind from, cc::BuiltinKind to) {
+    if (from == to) return false;
+    if (cc::builtinIsFloating(from) && !cc::builtinIsFloating(to)) return true;
+    if (cc::builtinIsFloating(from) && cc::builtinIsFloating(to)) {
+        return cc::builtinRank(to) < cc::builtinRank(from);
+    }
+    if (cc::builtinIsFloating(to)) return false;        // int -> float widens
+    if (cc::builtinSize(to) < cc::builtinSize(from)) return true;
+    // Same width but a different signedness reinterprets the top bit.
+    if (cc::builtinSize(to) == cc::builtinSize(from) &&
+        cc::builtinIsSigned(to) != cc::builtinIsSigned(from)) {
+        return true;
+    }
+    return false;
 }
 
 cc::Type *SemanticAnalyzer::cloneType(cc::Type *t) {
     if (!t) return 0;
     cc::BuiltinType *bt = dynamic_cast<cc::BuiltinType*>(t);
-    if (bt) return new cc::BuiltinType(bt->name);
+    if (bt) return new cc::BuiltinType(bt->kind);
     cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(t);
     if (ct) return new cxx::ClassType(ct->className);
     cc::PointerType *pt = dynamic_cast<cc::PointerType*>(t);
@@ -58,7 +147,7 @@ cc::Type *SemanticAnalyzer::stripReference(cc::Type *t) {
 std::string SemanticAnalyzer::describe(cc::Type *t) {
     if (!t) return "<none>";
     cc::BuiltinType *bt = dynamic_cast<cc::BuiltinType*>(t);
-    if (bt) return bt->name;
+    if (bt) return bt->name();
     cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(t);
     if (ct) return ct->className;
     cc::PointerType *pt = dynamic_cast<cc::PointerType*>(t);
@@ -75,8 +164,8 @@ std::string SemanticAnalyzer::countText(std::size_t n) {
 }
 
 bool SemanticAnalyzer::isVoid(cc::Type *t) {
-    cc::BuiltinType *bt = dynamic_cast<cc::BuiltinType*>(stripReference(t));
-    return bt && bt->name == "void";
+    cc::BuiltinKind k;
+    return builtinKindOf(t, k) && k == cc::BK_Void;
 }
 
 bool SemanticAnalyzer::sameType(cc::Type *a, cc::Type *b) {
@@ -85,7 +174,7 @@ bool SemanticAnalyzer::sameType(cc::Type *a, cc::Type *b) {
     if (!a || !b) return true;          // an earlier error already spoke
     cc::BuiltinType *ba = dynamic_cast<cc::BuiltinType*>(a);
     cc::BuiltinType *bb = dynamic_cast<cc::BuiltinType*>(b);
-    if (ba && bb) return ba->name == bb->name;
+    if (ba && bb) return ba->kind == bb->kind;
     cxx::ClassType *ca = dynamic_cast<cxx::ClassType*>(a);
     cxx::ClassType *cb = dynamic_cast<cxx::ClassType*>(b);
     if (ca && cb) return ca->className == cb->className;
@@ -111,6 +200,13 @@ bool SemanticAnalyzer::canConvert(cc::Type *from, cc::Type *to) {
 
     cc::Type *f = stripReference(from);
     cc::Type *t = stripReference(to);
+
+    // Any arithmetic type converts to any other.  Whether the value survives is
+    // a separate question, answered by isNarrowing() and reported as a warning.
+    cc::BuiltinKind kf, kt;
+    if (builtinKindOf(f, kf) && builtinKindOf(t, kt)) {
+        return cc::builtinIsArithmetic(kf) && cc::builtinIsArithmetic(kt);
+    }
 
     // Derived* -> Base*
     cc::PointerType *pf = dynamic_cast<cc::PointerType*>(f);
@@ -146,16 +242,18 @@ bool SemanticAnalyzer::convertible(cc::Expr *fromExpr, cc::Type *from, cc::Type 
 }
 
 // int, int*, int** need no resolution; a class name does.
-void SemanticAnalyzer::checkTypeIsKnown(cc::Type *t, cc::ASTNode *at, const std::string &where) {
-    if (!t) return;
+bool SemanticAnalyzer::checkTypeIsKnown(cc::Type *t, cc::ASTNode *at, const std::string &where) {
+    if (!t) return true;
     cc::PointerType *pt = dynamic_cast<cc::PointerType*>(t);
-    if (pt) { checkTypeIsKnown(pt->base, at, where); return; }
+    if (pt) return checkTypeIsKnown(pt->base, at, where);
     cxx::ReferenceType *rt = dynamic_cast<cxx::ReferenceType*>(t);
-    if (rt) { checkTypeIsKnown(rt->base, at, where); return; }
+    if (rt) return checkTypeIsKnown(rt->base, at, where);
     cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(t);
     if (ct && !findClass(ct->className)) {
         error(at, "unknown type '" + ct->className + "' in " + where);
+        return false;
     }
+    return true;
 }
 
 // --- Classes and their members ---
@@ -457,6 +555,9 @@ void SemanticAnalyzer::analyzeMemberInits(cxx::MethodDecl *ctor, cxx::ClassDecl 
                 diag.error(mi.line, mi.col,
                            "cannot initialise '" + describe(field->type) + " " + mi.name
                            + "' from an expression of type " + describe(at));
+            } else if (at) {
+                warnIfNarrowing(mi.args[a], at, field->type, mi.args[a],
+                                "the initialisation of '" + mi.name + "'");
             }
         }
     }
@@ -676,7 +777,8 @@ void SemanticAnalyzer::recordScopeExitDestruction(cc::CompoundStmt *block,
 
 void SemanticAnalyzer::analyzeVarDecl(cc::VarDecl *vd, bool declareIt) {
     if (!vd) return;
-    checkTypeIsKnown(vd->type, vd, "declaration of '" + vd->name + "'");
+    // An unknown type makes every later check about this variable noise.
+    const bool typeKnown = checkTypeIsKnown(vd->type, vd, "declaration of '" + vd->name + "'");
     if (isVoid(vd->type)) error(vd, "variable '" + vd->name + "' cannot have type void");
 
     cc::Type *initType = 0;
@@ -697,9 +799,12 @@ void SemanticAnalyzer::analyzeVarDecl(cc::VarDecl *vd, bool declareIt) {
             error(vd, "cannot bind '" + describe(vd->type) + " " + vd->name
                       + "' to an initialiser of type " + describe(initType));
         }
-    } else if (vd->init && initType && !convertible(vd->init, initType, vd->type)) {
+    } else if (vd->init && initType && typeKnown && !convertible(vd->init, initType, vd->type)) {
         error(vd, "cannot initialise '" + describe(vd->type) + " " + vd->name
                   + "' from an expression of type " + describe(initType));
+    } else if (vd->init && initType) {
+        warnIfNarrowing(vd->init, initType, vd->type, vd,
+                        "the initialisation of '" + vd->name + "'");
     }
 
     // A class-typed object is CONSTRUCTED.  `Point p;` needs a constructor
@@ -764,6 +869,8 @@ void SemanticAnalyzer::analyzeStmt(cc::Stmt *s) {
         } else if (got && !convertible(rs->expr, got, currentReturnType)) {
             error(rs, "returning " + describe(got) + " from a function returning "
                       + describe(currentReturnType));
+        } else if (got) {
+            warnIfNarrowing(rs->expr, got, currentReturnType, rs, "this return");
         }
         return;
     }
@@ -834,6 +941,9 @@ void SemanticAnalyzer::checkCallArgs(cc::CallExpr *call, cc::Function *fn) {
         if (!convertible(call->args[i], at, pt)) {
             error(call->args[i], "argument " + describe(at) + " does not match parameter '"
                                  + fn->params[i]->name + "' of type " + describe(pt));
+        } else {
+            warnIfNarrowing(call->args[i], at, pt, call->args[i],
+                            "the argument to '" + fn->params[i]->name + "'");
         }
     }
 }
@@ -922,7 +1032,7 @@ cc::Type *SemanticAnalyzer::analyzeExpr(cc::Expr *e, bool &isLValue) {
                 }
             }
         }
-        return makeBuiltin("void");
+        return makeBuiltin(cc::BK_Void);
     }
 
     // --- LAYER 1 forms ---
@@ -947,7 +1057,14 @@ cc::Type *SemanticAnalyzer::analyzeExpr(cc::Expr *e, bool &isLValue) {
         return stripReference(s->type);
     }
 
-    if (dynamic_cast<cc::NumberExpr*>(e)) return makeBuiltin("int");
+    if (cc::NumberExpr *n = dynamic_cast<cc::NumberExpr*>(e)) return makeBuiltin(n->kind);
+    if (cc::FloatExpr *fl = dynamic_cast<cc::FloatExpr*>(e)) return makeBuiltin(fl->kind);
+    if (dynamic_cast<cc::StringExpr*>(e)) {
+        // A string literal is a pointer into read-only data.
+        cc::Type *p = new cc::PointerType(new cc::BuiltinType(cc::BK_Char));
+        ownedTypes.push_back(p);
+        return p;
+    }
 
     cc::CallExpr *call = dynamic_cast<cc::CallExpr*>(e);
     if (call) {
@@ -993,11 +1110,16 @@ cc::Type *SemanticAnalyzer::analyzeExpr(cc::Expr *e, bool &isLValue) {
         cc::Type *t = analyzeExpr(ue->operand, operandLV);
         if (!t) return 0;
         switch (ue->op) {
-        case cc::UN_Neg:
-            if (!sameType(t, makeBuiltin("int"))) { error(ue, "unary '-' needs an int, got " + describe(t)); return 0; }
-            return makeBuiltin("int");
+        case cc::UN_Neg: {
+            cc::BuiltinKind k;
+            if (!builtinKindOf(t, k) || !cc::builtinIsArithmetic(k)) {
+                error(ue, "unary '-' needs an arithmetic type, got " + describe(t));
+                return 0;
+            }
+            return makeBuiltin(promote(k));
+        }
         case cc::UN_Not:
-            return makeBuiltin("int");
+            return makeBuiltin(cc::BK_Int);
         case cc::UN_Deref: {
             cc::PointerType *pt = dynamic_cast<cc::PointerType*>(t);
             if (!pt) { error(ue, "unary '*' applied to " + describe(t) + ", which is not a pointer"); return 0; }
@@ -1026,21 +1148,36 @@ cc::Type *SemanticAnalyzer::analyzeExpr(cc::Expr *e, bool &isLValue) {
                 error(be, "cannot assign " + describe(rt) + " to " + describe(lt));
                 return 0;
             }
+            warnIfNarrowing(be->rhs, rt, lt, be, "this assignment");
             isLValue = true;            // in C++ an assignment yields an lvalue
             return lt;
         }
 
         if (cc::binaryOpIsComparison(be->op) || cc::binaryOpIsLogical(be->op)) {
-            if (!sameType(lt, rt)) {
+            cc::BuiltinKind kl, kr;
+            const bool bothArith = builtinKindOf(lt, kl) && builtinKindOf(rt, kr) &&
+                                   cc::builtinIsArithmetic(kl) && cc::builtinIsArithmetic(kr);
+            if (!bothArith && !canConvert(lt, rt) && !canConvert(rt, lt)) {
                 error(be, std::string("cannot compare ") + describe(lt) + " with " + describe(rt));
                 return 0;
             }
-            return makeBuiltin("int");  // no bool in the generated code yet
+            // A comparison yields int, as in C.
+            return makeBuiltin(cc::BK_Int);
         }
 
-        cc::BuiltinType *biL = dynamic_cast<cc::BuiltinType*>(lt);
-        cc::BuiltinType *biR = dynamic_cast<cc::BuiltinType*>(rt);
-        if (biL && biR && biL->name == "int" && biR->name == "int") return makeBuiltin("int");
+        // Arithmetic: both operands meet in a common type, and that is the
+        // type of the result.  % is integers only.
+        cc::BuiltinKind kl, kr;
+        if (builtinKindOf(lt, kl) && builtinKindOf(rt, kr) &&
+            cc::builtinIsArithmetic(kl) && cc::builtinIsArithmetic(kr)) {
+            if (be->op == cc::BIN_Mod &&
+                (cc::builtinIsFloating(kl) || cc::builtinIsFloating(kr))) {
+                error(be, "'%' needs integer operands, not "
+                          + describe(lt) + " and " + describe(rt));
+                return 0;
+            }
+            return makeBuiltin(usualArithmetic(kl, kr));
+        }
         error(be, std::string("invalid operands to '") + cc::binaryOpText(be->op)
                   + "': " + describe(lt) + " and " + describe(rt));
         return 0;

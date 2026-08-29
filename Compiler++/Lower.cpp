@@ -11,6 +11,13 @@ namespace cc {
 Lowering::Lowering(IRModule &module, const Layout &l, Diagnostics &d)
     : mod(module), layout(l), diag(d), fn(0) {}
 
+Lowering::~Lowering() {
+    for (std::map<int, Type*>::iterator it = builtinCache.begin();
+         it != builtinCache.end(); ++it) {
+        delete it->second;
+    }
+}
+
 // --- Scopes and slots ---
 
 void Lowering::pushScope() {
@@ -45,10 +52,73 @@ int Lowering::sizeOfType(Type *t) const {
     return s > 0 ? s : Layout::IntSize;
 }
 
+// Types the lowering pass forms for literals and for the common type of a
+// binary operator.  Owned here, because they belong to no AST node.
+Type *Lowering::literalType(BuiltinKind k) {
+    std::map<int, Type*>::iterator it = builtinCache.find(static_cast<int>(k));
+    if (it != builtinCache.end()) return it->second;
+    Type *t = new BuiltinType(k);
+    builtinCache[static_cast<int>(k)] = t;
+    return t;
+}
+
+Type *Lowering::commonType(BuiltinKind k) { return literalType(k); }
+
+// The same rule the semantic pass applied, restated where lowering needs it.
+BuiltinKind Lowering::commonKind(BuiltinKind a, BuiltinKind b) {
+    if (a == BK_Double || b == BK_Double) return BK_Double;
+    if (a == BK_Float  || b == BK_Float)  return BK_Float;
+    if (builtinRank(a) < builtinRank(BK_Int)) a = BK_Int;
+    if (builtinRank(b) < builtinRank(BK_Int)) b = BK_Int;
+    if (a == b) return a;
+    const int ra = builtinRank(a), rb = builtinRank(b);
+    if (ra != rb) return (ra > rb) ? a : b;
+    return builtinIsSigned(a) ? b : a;
+}
+
+bool Lowering::arithKind(Type *t, BuiltinKind &out) {
+    BuiltinType *bt = dynamic_cast<BuiltinType*>(t);
+    if (!bt || !builtinIsArithmetic(bt->kind)) return false;
+    out = bt->kind;
+    return true;
+}
+
+// A conversion is never free: a narrower integer must be truncated, a wider one
+// sign- or zero-extended, and int and float do not even share a register file
+// on most machines.  Emitting them explicitly is what stops a size mismatch
+// slipping silently into the code generator.
+IRReg Lowering::convert(IRReg value, Type *from, Type *to, int line) {
+    BuiltinKind kf, kt;
+    if (!arithKind(from, kf) || !arithKind(to, kt)) return value;
+    if (kf == kt) return value;
+
+    const bool ff = builtinIsFloating(kf);
+    const bool ft = builtinIsFloating(kt);
+
+    if (ff && ft) {
+        return fn->emitConvert(IR_FloatResize, value, builtinSize(kt), IR_NoReg, line);
+    }
+    if (!ff && ft) {
+        // Integer to floating; the source's signedness decides the instruction.
+        return fn->emitConvert(IR_IntToFloat, value,
+                               builtinIsSigned(kf) ? 0 : 1, IR_NoReg, line);
+    }
+    if (ff && !ft) {
+        const IRReg asInt = fn->emitConvert(IR_FloatToInt, value,
+                                            builtinSize(kt), IR_NoReg, line);
+        return asInt;
+    }
+    // Integer to integer: resize, sign-extending only from a signed source.
+    return fn->emitConvert(IR_IntResize, value, builtinSize(kt),
+                           builtinIsSigned(kf) ? 1 : 0, line);
+}
+
 // --- types, recomputed cheaply ---------------------------------------
 
 Type *Lowering::typeOf(Expr *e) {
     if (!e) return 0;
+    if (NumberExpr *n = dynamic_cast<NumberExpr*>(e)) return literalType(n->kind);
+    if (FloatExpr *f = dynamic_cast<FloatExpr*>(e))   return literalType(f->kind);
     if (IdentExpr *id = dynamic_cast<IdentExpr*>(e)) {
         std::map<std::string, Type*>::iterator it = localTypes.find(id->name);
         if (it != localTypes.end()) return it->second;
@@ -197,7 +267,10 @@ void Lowering::lowerVarDecl(VarDecl *vd) {
     if (vd->init) {
         // A reference stores the ADDRESS of what it binds to -- the whole of
         // what a reference becomes.
-        const IRReg value = lowerValue(vd->init);
+        IRReg value = lowerValue(vd->init);
+        if (!isReferenceExpr(vd->init)) {
+            value = convert(value, typeOf(vd->init), vd->type, vd->line);
+        }
         const IRReg addr = fn->emitLocalAddr(slot, vd->line);
         fn->emitStore(addr, value, size, vd->line);
     }
@@ -308,6 +381,12 @@ IRReg Lowering::lowerValue(Expr *e) {
     if (NumberExpr *n = dynamic_cast<NumberExpr*>(e)) {
         return fn->emitConst(n->value, e->line);
     }
+    if (FloatExpr *f = dynamic_cast<FloatExpr*>(e)) {
+        return fn->emitFConst(f->value, e->line);
+    }
+    if (StringExpr *str = dynamic_cast<StringExpr*>(e)) {
+        return fn->emitStringAddr(mod.internString(str->value), e->line);
+    }
 
     if (IdentExpr *id = dynamic_cast<IdentExpr*>(e)) {
         const IRReg addr = lowerAddress(e);
@@ -326,7 +405,11 @@ IRReg Lowering::lowerValue(Expr *e) {
 
 IRReg Lowering::lowerUnary(UnaryExpr *e) {
     switch (e->op) {
-    case UN_Neg:    return fn->emitUnary(IR_Neg, lowerValue(e->operand), e->line);
+    case UN_Neg: {
+        BuiltinKind k;
+        const bool flt = arithKind(typeOf(e->operand), k) && builtinIsFloating(k);
+        return fn->emitUnary(flt ? IR_FNeg : IR_Neg, lowerValue(e->operand), e->line);
+    }
     case UN_Not:    return fn->emitUnary(IR_LogicalNot, lowerValue(e->operand), e->line);
     case UN_AddrOf: return lowerAddress(e->operand);        // &x IS the address
     case UN_Deref: {
@@ -338,36 +421,53 @@ IRReg Lowering::lowerUnary(UnaryExpr *e) {
     return IR_NoReg;
 }
 
+// Both operands are converted to the type they meet in before the operator
+// runs, and the operator chosen depends on that type: integer, unsigned and
+// floating arithmetic are three different machine operations.
 IRReg Lowering::lowerBinary(BinaryExpr *e) {
     if (e->op == BIN_Assign) return lowerAssign(e);
     if (e->op == BIN_LAnd || e->op == BIN_LOr) return lowerShortCircuit(e);
 
+    Type *lt = typeOf(e->lhs);
+    Type *rt = typeOf(e->rhs);
+    IRReg a = lowerValue(e->lhs);
+    IRReg b = lowerValue(e->rhs);
+
+    BuiltinKind kl, kr;
+    BuiltinKind common = BK_Int;
+    if (arithKind(lt, kl) && arithKind(rt, kr)) {
+        common = commonKind(kl, kr);
+        a = convert(a, lt, commonType(common), e->line);
+        b = convert(b, rt, commonType(common), e->line);
+    }
+    const bool flt = builtinIsFloating(common);
+    const bool uns = !builtinIsSigned(common);
+
     IROp op = IR_Add;
     switch (e->op) {
-    case BIN_Add: op = IR_Add; break;
-    case BIN_Sub: op = IR_Sub; break;
-    case BIN_Mul: op = IR_Mul; break;
-    case BIN_Div: op = IR_Div; break;
-    case BIN_Mod: op = IR_Mod; break;
-    case BIN_EQ:  op = IR_CmpEQ; break;
-    case BIN_NE:  op = IR_CmpNE; break;
-    case BIN_LT:  op = IR_CmpLT; break;
-    case BIN_GT:  op = IR_CmpGT; break;
-    case BIN_LE:  op = IR_CmpLE; break;
-    case BIN_GE:  op = IR_CmpGE; break;
+    case BIN_Add: op = flt ? IR_FAdd : IR_Add; break;
+    case BIN_Sub: op = flt ? IR_FSub : IR_Sub; break;
+    case BIN_Mul: op = flt ? IR_FMul : IR_Mul; break;
+    case BIN_Div: op = flt ? IR_FDiv : (uns ? IR_UDiv : IR_Div); break;
+    case BIN_Mod: op = uns ? IR_UMod : IR_Mod; break;
+    case BIN_EQ:  op = flt ? IR_FCmpEQ : IR_CmpEQ; break;
+    case BIN_NE:  op = flt ? IR_FCmpNE : IR_CmpNE; break;
+    case BIN_LT:  op = flt ? IR_FCmpLT : (uns ? IR_UCmpLT : IR_CmpLT); break;
+    case BIN_GT:  op = flt ? IR_FCmpGT : (uns ? IR_UCmpGT : IR_CmpGT); break;
+    case BIN_LE:  op = flt ? IR_FCmpLE : (uns ? IR_UCmpLE : IR_CmpLE); break;
+    case BIN_GE:  op = flt ? IR_FCmpGE : (uns ? IR_UCmpGE : IR_CmpGE); break;
     default: break;
     }
-    const IRReg a = lowerValue(e->lhs);
-    const IRReg b = lowerValue(e->rhs);
     return fn->emitBinary(op, a, b, e->line);
 }
 
 IRReg Lowering::lowerAssign(BinaryExpr *e) {
     // Right side first: the order the language leaves open, and the one that
     // keeps the address live for the shortest time.
-    const IRReg value = lowerValue(e->rhs);
-    const IRReg addr = lowerAddress(e->lhs);
+    IRReg value = lowerValue(e->rhs);
     Type *t = typeOf(e->lhs);
+    value = convert(value, typeOf(e->rhs), t, e->line);
+    const IRReg addr = lowerAddress(e->lhs);
     fn->emitStore(addr, value, t ? sizeOfType(t) : Layout::IntSize, e->line);
     return value;
 }

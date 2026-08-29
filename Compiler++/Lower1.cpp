@@ -26,7 +26,7 @@ cc::Type *Lowering::makePointerToClass(const std::string &className) {
 
 cc::Type *Lowering::cloneType(cc::Type *t) {
     if (!t) return 0;
-    if (cc::BuiltinType *bt = dynamic_cast<cc::BuiltinType*>(t)) return new cc::BuiltinType(bt->name);
+    if (cc::BuiltinType *bt = dynamic_cast<cc::BuiltinType*>(t)) return new cc::BuiltinType(bt->kind);
     if (ClassType *ct = dynamic_cast<ClassType*>(t)) return new ClassType(ct->className);
     if (cc::PointerType *pt = dynamic_cast<cc::PointerType*>(t)) return new cc::PointerType(cloneType(pt->base));
     if (ReferenceType *rt = dynamic_cast<ReferenceType*>(t)) return new ReferenceType(cloneType(rt->base));

@@ -47,11 +47,90 @@ const char *unaryOpText(UnaryOp op) {
     return "?";
 }
 
+// --- builtin types ---
+
+const char *builtinName(BuiltinKind k) {
+    switch (k) {
+    case BK_Void:   return "void";
+    case BK_Char:   return "char";
+    case BK_SChar:  return "signed char";
+    case BK_UChar:  return "unsigned char";
+    case BK_Short:  return "short";
+    case BK_UShort: return "unsigned short";
+    case BK_Int:    return "int";
+    case BK_UInt:   return "unsigned int";
+    case BK_Long:   return "long";
+    case BK_ULong:  return "unsigned long";
+    case BK_Float:  return "float";
+    case BK_Double: return "double";
+    }
+    return "?";
+}
+
+int builtinSize(BuiltinKind k) {
+    switch (k) {
+    case BK_Void:   return 0;
+    case BK_Char:
+    case BK_SChar:
+    case BK_UChar:  return 1;
+    case BK_Short:
+    case BK_UShort: return 2;
+    case BK_Int:
+    case BK_UInt:
+    case BK_Float:  return 4;
+    case BK_Long:
+    case BK_ULong:
+    case BK_Double: return 8;
+    }
+    return 0;
+}
+
+int builtinRank(BuiltinKind k) {
+    switch (k) {
+    case BK_Void:   return -1;
+    case BK_Char:
+    case BK_SChar:
+    case BK_UChar:  return 0;
+    case BK_Short:
+    case BK_UShort: return 1;
+    case BK_Int:
+    case BK_UInt:   return 2;
+    case BK_Long:
+    case BK_ULong:  return 3;
+    case BK_Float:  return 4;
+    case BK_Double: return 5;
+    }
+    return -1;
+}
+
+bool builtinIsFloating(BuiltinKind k) {
+    return k == BK_Float || k == BK_Double;
+}
+
+bool builtinIsInteger(BuiltinKind k) {
+    return k != BK_Void && !builtinIsFloating(k);
+}
+
+bool builtinIsArithmetic(BuiltinKind k) {
+    return k != BK_Void;
+}
+
+// Plain `char` is signed in this implementation, as it is on x86 and arm64.
+bool builtinIsSigned(BuiltinKind k) {
+    switch (k) {
+    case BK_UChar:
+    case BK_UShort:
+    case BK_UInt:
+    case BK_ULong:  return false;
+    default:        return true;
+    }
+}
+
 // --- Types ---
 
 void BuiltinType::print(int indent) {
     printIndent(indent);
-    std::cout << name << std::endl;
+    std::cout << name() << std::endl;
 }
 
 void PointerType::print(int indent) {
@@ -64,7 +143,19 @@ void PointerType::print(int indent) {
 
 void NumberExpr::print(int indent) {
     printIndent(indent);
-    std::cout << value << std::endl;
+    std::cout << value;
+    if (kind != BK_Int) std::cout << " : " << builtinName(kind);
+    std::cout << std::endl;
+}
+
+void FloatExpr::print(int indent) {
+    printIndent(indent);
+    std::cout << value << " : " << builtinName(kind) << std::endl;
+}
+
+void StringExpr::print(int indent) {
+    printIndent(indent);
+    std::cout << "\"" << value << "\"" << std::endl;
 }
 
 void IdentExpr::print(int indent) {

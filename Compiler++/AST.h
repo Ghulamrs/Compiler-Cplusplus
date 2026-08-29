@@ -77,10 +77,37 @@ struct Type : public ASTNode {
     virtual ~Type() {}
 };
 
-// Builtin type like int, char, void, bool
+// The builtin types, as a kind rather than a name.  Every conversion rule in
+// the language is stated in terms of three facts about a type -- is it integer
+// or floating, is it signed, and what is its rank -- and a string carries none
+// of them.  Sizes are this compiler's model, not the host's: `long` is 8 bytes
+// here, as on Linux and macOS, even when targeting Windows.
+//
+// There is no `bool`.  C89 has none, and layer 1 is C89, so a truth value is
+// an int -- which is also what every comparison in this language yields.
+enum BuiltinKind {
+    BK_Void,
+    BK_Char, BK_SChar, BK_UChar,
+    BK_Short, BK_UShort,
+    BK_Int, BK_UInt,
+    BK_Long, BK_ULong,
+    BK_Float, BK_Double
+};
+
+const char *builtinName(BuiltinKind k);
+int  builtinSize(BuiltinKind k);
+// Conversion rank: char < short < int < long < float < double.  Two types of
+// equal rank differ only in signedness.
+int  builtinRank(BuiltinKind k);
+bool builtinIsInteger(BuiltinKind k);
+bool builtinIsFloating(BuiltinKind k);
+bool builtinIsSigned(BuiltinKind k);
+bool builtinIsArithmetic(BuiltinKind k);   // anything but void
+
 struct BuiltinType : public Type {
-    std::string name;
-    BuiltinType(const std::string &n) : name(n) {}
+    BuiltinKind kind;
+    BuiltinType(BuiltinKind k) : kind(k) {}
+    const char *name() const { return builtinName(kind); }
     void print(int indent);
 };
 
@@ -110,9 +137,26 @@ const char *unaryOpText(UnaryOp op);
 
 struct Expr : public ASTNode {};
 
+// An integer or character literal.  Both are integer values; only their type
+// differs, which is why one node carries them.
 struct NumberExpr : public Expr {
-    int value;
-    NumberExpr(int v) : value(v) {}
+    long value;
+    BuiltinKind kind;
+    NumberExpr(long v, BuiltinKind k = BK_Int) : value(v), kind(k) {}
+    void print(int indent);
+};
+
+struct FloatExpr : public Expr {
+    double value;
+    BuiltinKind kind;           // BK_Float or BK_Double
+    FloatExpr(double v, BuiltinKind k) : value(v), kind(k) {}
+    void print(int indent);
+};
+
+// "text" -- lowered to a pointer into the module's string data.
+struct StringExpr : public Expr {
+    std::string value;
+    StringExpr(const std::string &v) : value(v) {}
     void print(int indent);
 };
 

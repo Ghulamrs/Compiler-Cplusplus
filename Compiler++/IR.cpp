@@ -10,12 +10,21 @@
 const char *irOpName(IROp op) {
     switch (op) {
     case IR_Const:        return "const";
+    case IR_FConst:       return "fconst";
+    case IR_StringAddr:   return "straddr";
     case IR_Move:         return "move";
     case IR_Add:          return "add";
     case IR_Sub:          return "sub";
     case IR_Mul:          return "mul";
     case IR_Div:          return "div";
     case IR_Mod:          return "mod";
+    case IR_UDiv:         return "udiv";
+    case IR_UMod:         return "umod";
+    case IR_FAdd:         return "fadd";
+    case IR_FSub:         return "fsub";
+    case IR_FMul:         return "fmul";
+    case IR_FDiv:         return "fdiv";
+    case IR_FNeg:         return "fneg";
     case IR_Neg:          return "neg";
     case IR_LogicalNot:   return "not";
     case IR_CmpEQ:        return "cmp.eq";
@@ -24,6 +33,20 @@ const char *irOpName(IROp op) {
     case IR_CmpGT:        return "cmp.gt";
     case IR_CmpLE:        return "cmp.le";
     case IR_CmpGE:        return "cmp.ge";
+    case IR_UCmpLT:       return "ucmp.lt";
+    case IR_UCmpGT:       return "ucmp.gt";
+    case IR_UCmpLE:       return "ucmp.le";
+    case IR_UCmpGE:       return "ucmp.ge";
+    case IR_FCmpEQ:       return "fcmp.eq";
+    case IR_FCmpNE:       return "fcmp.ne";
+    case IR_FCmpLT:       return "fcmp.lt";
+    case IR_FCmpGT:       return "fcmp.gt";
+    case IR_FCmpLE:       return "fcmp.le";
+    case IR_FCmpGE:       return "fcmp.ge";
+    case IR_IntToFloat:   return "itof";
+    case IR_FloatToInt:   return "ftoi";
+    case IR_FloatResize:  return "fresize";
+    case IR_IntResize:    return "iresize";
     case IR_LocalAddr:    return "local";
     case IR_GlobalAddr:   return "global";
     case IR_FieldAddr:    return "field";
@@ -84,6 +107,35 @@ IRReg IRFunction::emitConst(long value, int line) {
     IRInstr i(IR_Const);
     i.dest = newReg();
     i.imm = value;
+    i.line = line;
+    push(i);
+    return i.dest;
+}
+
+IRReg IRFunction::emitFConst(double value, int line) {
+    IRInstr i(IR_FConst);
+    i.dest = newReg();
+    i.fimm = value;
+    i.line = line;
+    push(i);
+    return i.dest;
+}
+
+IRReg IRFunction::emitStringAddr(const std::string &sym, int line) {
+    IRInstr i(IR_StringAddr);
+    i.dest = newReg();
+    i.sym = sym;
+    i.line = line;
+    push(i);
+    return i.dest;
+}
+
+IRReg IRFunction::emitConvert(IROp op, IRReg a, long imm, IRReg signFlag, int line) {
+    IRInstr i(op);
+    i.dest = newReg();
+    i.a = a;
+    i.b = signFlag;
+    i.imm = imm;
     i.line = line;
     push(i);
     return i.dest;
@@ -251,6 +303,16 @@ void IRFunction::emitReturn(IRReg value, int line) {
 
 // --- the module and its dump ------------------------------------------
 
+std::string IRModule::internString(const std::string &value) {
+    for (std::size_t i = 0; i < strings.size(); ++i) {
+        if (strings[i].value == value) return strings[i].name;
+    }
+    std::ostringstream ss;
+    ss << "str" << strings.size();
+    strings.push_back(IRString(ss.str(), value));
+    return strings.back().name;
+}
+
 IRModule::~IRModule() {
     for (std::size_t i = 0; i < functions.size(); ++i) delete functions[i];
 }
@@ -276,6 +338,23 @@ void IRModule::printInstr(const IRInstr &i) {
     case IR_Const:
     case IR_Alloc:
         std::cout << " " << i.imm;
+        break;
+    case IR_FConst:
+        std::cout << " " << i.fimm;
+        break;
+    case IR_StringAddr:
+        std::cout << " " << i.sym;
+        break;
+    case IR_IntResize:
+        std::cout << " " << regName(i.a) << " :" << i.imm
+                  << (i.b == 1 ? " signed" : " unsigned");
+        break;
+    case IR_IntToFloat:
+        std::cout << " " << regName(i.a) << (i.imm ? " (unsigned)" : "");
+        break;
+    case IR_FloatToInt:
+    case IR_FloatResize:
+        std::cout << " " << regName(i.a) << " :" << i.imm;
         break;
     case IR_LocalAddr:
         std::cout << " #" << i.imm;
@@ -329,6 +408,12 @@ void IRModule::printInstr(const IRInstr &i) {
 }
 
 void IRModule::print() const {
+    for (std::size_t s = 0; s < strings.size(); ++s) {
+        std::cout << "string " << strings[s].name << "  \"" << strings[s].value
+                  << "\"" << std::endl;
+    }
+    if (!strings.empty()) std::cout << std::endl;
+
     for (std::size_t g = 0; g < globals.size(); ++g) {
         std::cout << "global " << globals[g].name
                   << "  " << globals[g].size << " bytes" << std::endl;

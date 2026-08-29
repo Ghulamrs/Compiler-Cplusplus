@@ -30,15 +30,33 @@ const IRReg IR_NoReg = -1;
 enum IROp {
     // --- values -------------------------------------------------------
     IR_Const,        // dest = imm
+    IR_FConst,       // dest = fimm
+    IR_StringAddr,   // dest = address of string constant `sym`
     IR_Move,         // dest = a
 
-    // --- arithmetic ---------------------------------------------------
+    // --- integer arithmetic -------------------------------------------
     IR_Add, IR_Sub, IR_Mul, IR_Div, IR_Mod,
+    IR_UDiv, IR_UMod,       // unsigned division differs from signed
     IR_Neg,          // dest = -a
     IR_LogicalNot,   // dest = (a == 0)
 
+    // --- floating arithmetic ------------------------------------------
+    // Separate opcodes rather than a flag: float add and integer add are
+    // different machine operations, and a dump that hides that is lying.
+    IR_FAdd, IR_FSub, IR_FMul, IR_FDiv, IR_FNeg,
+
     // --- comparison (all yield 0 or 1) --------------------------------
     IR_CmpEQ, IR_CmpNE, IR_CmpLT, IR_CmpGT, IR_CmpLE, IR_CmpGE,
+    IR_UCmpLT, IR_UCmpGT, IR_UCmpLE, IR_UCmpGE,     // unsigned orderings
+    IR_FCmpEQ, IR_FCmpNE, IR_FCmpLT, IR_FCmpGT, IR_FCmpLE, IR_FCmpGE,
+
+    // --- conversions --------------------------------------------------
+    // Every one of these is a real machine operation, so lowering emits them
+    // explicitly rather than letting a size mismatch pass silently.
+    IR_IntToFloat,   // imm = 1 when the source is unsigned
+    IR_FloatToInt,
+    IR_FloatResize,  // float <-> double
+    IR_IntResize,    // imm = target size in bytes; b = 1 when sign-extending
 
     // --- addresses ----------------------------------------------------
     IR_LocalAddr,    // dest = address of local slot imm
@@ -79,12 +97,14 @@ struct IRInstr {
     IRReg a;
     IRReg b;
     long imm;
+    double fimm;            // IR_FConst
     std::string sym;            // callee or global name
     std::vector<IRReg> args;    // for IR_Call / IR_CallIndirect
     int line;
 
     IRInstr(IROp o)
-        : op(o), dest(IR_NoReg), a(IR_NoReg), b(IR_NoReg), imm(0), line(0) {}
+        : op(o), dest(IR_NoReg), a(IR_NoReg), b(IR_NoReg), imm(0), fimm(0.0),
+          line(0) {}
 };
 
 // A class-typed local occupies its whole object size here, which is what makes
@@ -116,6 +136,9 @@ struct IRFunction {
 
     // Every emit returns its destination register, so expressions compose.
     IRReg emitConst(long value, int line);
+    IRReg emitFConst(double value, int line);
+    IRReg emitStringAddr(const std::string &sym, int line);
+    IRReg emitConvert(IROp op, IRReg a, long imm, IRReg signFlag, int line);
     IRReg emitUnary(IROp op, IRReg a, int line);
     IRReg emitBinary(IROp op, IRReg a, IRReg b, int line);
     IRReg emitLocalAddr(int slot, int line);
@@ -154,6 +177,13 @@ struct IRGlobal {
     IRGlobal(const std::string &n, int s) : name(n), size(s) {}
 };
 
+// Read-only text, so a char* has something to point at.
+struct IRString {
+    std::string name;       // str0, str1, ...
+    std::string value;
+    IRString(const std::string &n, const std::string &v) : name(n), value(v) {}
+};
+
 // Data, not code.  Slot indices come from Layout, which is why they mean the
 // same thing in a base and everything derived from it.
 struct IRVTable {
@@ -164,7 +194,11 @@ struct IRVTable {
 struct IRModule {
     std::vector<IRFunction*> functions;
     std::vector<IRGlobal> globals;
+    std::vector<IRString> strings;
     std::vector<IRVTable> vtables;
+
+    // Interned: the same text used twice is one constant.
+    std::string internString(const std::string &value);
 
     ~IRModule();
     void print() const;

@@ -77,12 +77,10 @@ public:
 
     void print() const;
 
-    // The sizes this compiler targets.  A teaching VM, so they are simply
-    // stated rather than probed from a host machine.
+    // Builtin sizes live in the type model (builtinSize in AST.h); only the
+    // pointer size is Layout's own, because no builtin type describes one.
     static const int PointerSize = 8;
     static const int IntSize = 4;
-    static const int CharSize = 1;
-    static const int BoolSize = 1;
 
 private:
     Diagnostics &diag;
