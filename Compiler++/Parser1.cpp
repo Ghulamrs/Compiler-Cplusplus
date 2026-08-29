@@ -440,6 +440,10 @@ bool Parser::namesAClass(const std::string &n) const {
 // C types plus class names and references; the builtin and pointer forms come
 // from cc::Parser.
 cc::Type *Parser::parseType() {
+    // `const Point p;` -- the C layer's parseType would consume the const and
+    // then find no specifier it knows, so it is taken here for a class type.
+    const bool leadingConst = (cur.kind == TOK_CONST);
+
     // bool is C++'s, so the C layer's specifier soup knows nothing about it.
     if (cur.kind == TOK_BOOL) {
         const int line = cur.line, col = cur.col;
@@ -486,6 +490,7 @@ cc::Type *Parser::parseType() {
     }
 
     if (!t) return 0;
+    if (leadingConst) t->isConst = true;
 
     // reference suffix T& -- new in C++, and only one is legal
     if (cur.kind == TOK_AMP) {

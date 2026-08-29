@@ -74,6 +74,11 @@ protected:
 // --- Types ------------------------------------------------------------
 
 struct Type : public ASTNode {
+    // `const` on a variable: it may not be assigned to, incremented, or
+    // decremented after it is initialised.  It rides on the type because that
+    // is where the parser puts it and where every check can reach it.
+    bool isConst;
+    Type() : isConst(false) {}
     virtual ~Type() {}
 };
 

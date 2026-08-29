@@ -379,6 +379,22 @@ void SemanticAnalyzer::resolveBases() {
 // The member an operator expression calls, if the left operand is an object
 // that declares one.  A class without the operator is not an error here: the
 // builtin rules below will say what is actually wrong with it.
+bool SemanticAnalyzer::isConstExpr(cc::Expr *e) {
+    if (!e) return false;
+
+    // A member is const when the object is, whatever the field says.
+    if (cxx::MemberAccessExpr *ma = dynamic_cast<cxx::MemberAccessExpr*>(e)) {
+        if (!ma->isArrow && isConstExpr(ma->base)) return true;
+    }
+    // An element is const when the array is.
+    if (cc::IndexExpr *ix = dynamic_cast<cc::IndexExpr*>(e)) {
+        if (isConstExpr(ix->base)) return true;
+    }
+
+    cc::Type *t = stripReference(e->resolvedType);
+    return t && t->isConst;
+}
+
 bool SemanticAnalyzer::isClassType(cc::Type *t) {
     return dynamic_cast<cxx::ClassType*>(stripReference(t)) != 0;
 }
@@ -1174,6 +1190,18 @@ void SemanticAnalyzer::analyzeVarDecl(cc::VarDecl *vd, bool declareIt) {
     const bool typeKnown = checkTypeIsKnown(vd->type, vd, "declaration of '" + vd->name + "'");
     if (isVoid(vd->type)) error(vd, "variable '" + vd->name + "' cannot have type void");
 
+    // A const variable can never be assigned to, so its declaration is the
+    // only chance it has to be given a value.
+    if (vd->type && vd->type->isConst && !vd->init && !vd->hasCtorArgs) {
+        // An object with a constructor is initialised BY it, so it needs no
+        // initialiser of its own.  Only a scalar is left with nothing.
+        cxx::ClassType *cct = dynamic_cast<cxx::ClassType*>(vd->type);
+        cxx::ClassDecl *ccd = cct ? findClass(cct->className) : 0;
+        if (!ccd || ccd->ctors.empty()) {
+            error(vd, "const '" + vd->name + "' must be initialised");
+        }
+    }
+
     cc::Type *initType = 0;
     bool initIsLValue = false;
     if (vd->init) initType = analyzeExpr(vd->init, initIsLValue);
@@ -1673,6 +1701,11 @@ cc::Type *SemanticAnalyzer::analyzeExprImpl(cc::Expr *e, bool &isLValue) {
                           + "' needs an lvalue");
                 return 0;
             }
+            if (isConstExpr(ue->operand)) {
+                error(ue, std::string("cannot apply '") + cc::unaryOpText(ue->op)
+                          + "' to a const " + describe(t));
+                return 0;
+            }
             cc::BuiltinKind k;
             const bool arith = arithmeticKind(t, k);
             if (!arith && !dynamic_cast<cc::PointerType*>(stripReference(t))) {
@@ -1791,6 +1824,10 @@ cc::Type *SemanticAnalyzer::analyzeExprImpl(cc::Expr *e, bool &isLValue) {
         if (cc::binaryOpIsAssignment(be->op)) {
             // The other half of lvalue-ness: only an object can be assigned to.
             if (!lL) { error(be, "left side of assignment is not an lvalue"); return 0; }
+            if (isConstExpr(be->lhs)) {
+                error(be, "cannot assign to a const " + describe(lt));
+                return 0;
+            }
 
             // A compound assignment on an object needs an operator of its own.
             // Without one there is nothing sensible to do -- and doing the

@@ -113,6 +113,9 @@ private:
                                    cc::Expr *rhs, cc::Type *rt,
                                    const std::string &name);
     bool isClassType(cc::Type *t);
+    // Does this expression name something declared const?  A member of a const
+    // object is const too, which is what stops  a.x = 1  through a const A&.
+    bool isConstExpr(cc::Expr *e);
     // Walks the base chain, most derived first -- which IS name hiding.
     // `foundIn` receives the class it was found in, for the diagnostic.
     cc::Decl *findMember(cxx::ClassDecl *cd, const std::string &member,

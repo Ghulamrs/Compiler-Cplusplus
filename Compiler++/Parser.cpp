@@ -564,7 +564,7 @@ Type *Parser::parsePointerSuffixes(Type *base) {
 // at the end.  Nothing is consumed unless it is a specifier, which is what lets
 // parseStatement() call this speculatively.
 Type *Parser::parseType() {
-    match(TOK_CONST);                               // accepted, not enforced
+    bool sawConst = match(TOK_CONST);
 
     enum { SignNone, SignSigned, SignUnsigned } sign = SignNone;
     enum { LenNone, LenShort, LenLong } length = LenNone;
@@ -599,7 +599,7 @@ Type *Parser::parseType() {
         }
         sawAny = true;
         advance();
-        match(TOK_CONST);                           // const may trail too
+        if (match(TOK_CONST)) sawConst = true;      // const may trail too
     }
 
 resolve:
@@ -640,6 +640,9 @@ resolve:
     Type *t = new BuiltinType(kind);
     t->line = line;
     t->col = col;
+    // The const belongs to the value, not to a pointer built on top of it:
+    // `const char *s` is a pointer to const char, and s itself may be moved.
+    t->isConst = sawConst;
     return parsePointerSuffixes(t);
 }
 
