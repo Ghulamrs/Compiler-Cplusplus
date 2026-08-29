@@ -376,3 +376,6 @@ function __global_init
     %1 = const 0
             store [%0] <- %1 :4
             ret
+
+function __global_fini
+            ret

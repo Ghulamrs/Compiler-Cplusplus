@@ -79,7 +79,7 @@ function A__ctor$v   ; A::A
             store [%5] <- %2 :4
             ret
 
-function A__ctor$R1A   ; A::A
+function A__ctor$RK1A   ; A::A
   #0 this  8 bytes  (param)
   #1 o  8 bytes  (param)
     %0 = local #0
@@ -111,10 +111,10 @@ function main
             store [%3] <- %1 :4
     %4 = local #1
     %5 = local #0
-            call A__ctor$R1A(%4, %5)
+            call A__ctor$RK1A(%4, %5)
     %6 = local #2
     %7 = local #0
-            call A__ctor$R1A(%6, %7)
+            call A__ctor$RK1A(%6, %7)
     %8 = local #1
     %9 = field %8 +0
     %10 = load [%9] :4
@@ -128,4 +128,7 @@ function main
             ret %14
 
 function __global_init
+            ret
+
+function __global_fini
             ret

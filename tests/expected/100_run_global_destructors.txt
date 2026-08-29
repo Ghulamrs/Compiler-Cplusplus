@@ -1,0 +1,94 @@
+Function print_int returns void
+  param:
+    Var n : int
+Function print_string returns void
+  param:
+    Var s : pointer to char
+Function print_line returns void
+Class G
+  Field public v : int
+  Constructor public G::G
+    Block
+      ExprStmt
+        Binary =
+          v
+          1
+      ExprStmt
+        Call
+          print_string
+          arg 0:
+            "ctor "
+  Destructor public G::~G
+    Block
+      ExprStmt
+        Call
+          print_string
+          arg 0:
+            "dtor"
+      ExprStmt
+        Call
+          print_line
+Var g : class G
+Function main returns int
+  Block
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Member .v
+            g
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+class G  size=4 align=4
+    +0  v (4 bytes)
+    construct: field v -> G() body
+    destroy:   ~G() body -> field v
+
+string str0  "ctor "
+string str1  "dtor"
+
+global g  4 bytes
+
+function G__ctor$v   ; G::G
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = const 1
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+            store [%5] <- %2 :4
+    %6 = straddr str0
+            call print_string(%6)
+            ret
+
+function G__dtor   ; G::~G
+  #0 this  8 bytes  (param)
+    %0 = straddr str1
+            call print_string(%0)
+            call print_line()
+            ret
+
+function main
+            call __global_init()
+    %0 = global g
+    %1 = field %0 +0
+    %2 = load [%1] :4
+            call print_int(%2)
+            call print_line()
+    %3 = const 0
+            ret %3
+
+function __global_init
+    %0 = global g
+            call G__ctor$v(%0)
+            ret
+
+function __global_fini
+    %0 = global g
+            call G__dtor(%0)
+            ret

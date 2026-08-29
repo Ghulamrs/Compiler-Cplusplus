@@ -596,7 +596,20 @@ const char *IOStreamPrelude =
     " ostream operator<<(__endl_t e) { print_line(); return *this; }"
     " };"
     " ostream cout;"
-    " ostream cerr;";
+    " class errstream {"
+    " public: int _;"
+    " errstream() { _ = 0; }"
+    " errstream operator<<(int n)      { err_int(n); return *this; }"
+    " errstream operator<<(long n)     { err_int((int)n); return *this; }"
+    " errstream operator<<(short n)    { err_int(n); return *this; }"
+    " errstream operator<<(double d)   { err_double(d); return *this; }"
+    " errstream operator<<(float f)    { err_double(f); return *this; }"
+    " errstream operator<<(char c)     { err_char(c); return *this; }"
+    " errstream operator<<(char* s)    { err_string(s); return *this; }"
+    " errstream operator<<(bool b)     { err_int(b); return *this; }"
+    " errstream operator<<(__endl_t e) { err_line(); return *this; }"
+    " };"
+    " errstream cerr;";
 
 // The natives the prelude leans on.  Declaring them here means a program that
 // includes <iostream> need not declare them itself.
@@ -605,21 +618,60 @@ const char *IOStreamNatives =
     " void print_char(int c);"
     " void print_double(double d);"
     " void print_string(char* s);"
-    " void print_line();";
+    " void print_line();"
+    " void err_int(int n);"
+    " void err_char(int c);"
+    " void err_double(double d);"
+    " void err_string(char* s);"
+    " void err_line();";
 
 // Does the source include the named header?  Only the spelling matters --
 // there is no file to look for.
 bool includesHeader(const std::string &src, const std::string &name) {
-    std::size_t at = 0;
-    for (;;) {
-        at = src.find("#include", at);
-        if (at == std::string::npos) return false;
-        const std::size_t eol = src.find('\n', at);
-        const std::string line = src.substr(at, (eol == std::string::npos ? src.size() : eol) - at);
-        if (line.find(name) != std::string::npos) return true;
-        if (eol == std::string::npos) return false;
-        at = eol + 1;
+    // Comments and literals are skipped: `// #include <iostream>` mentions the
+    // header, it does not include it, and injecting the prelude on the strength
+    // of a comment puts names into the program nobody asked for.
+    std::size_t i = 0;
+    bool blank = true;                  // nothing but spaces on this line yet
+    while (i < src.size()) {
+        const char c = src[i];
+        if (c == '\n') { ++i; blank = true; continue; }
+        if (c == '/' && i + 1 < src.size() && src[i + 1] == '/') {
+            while (i < src.size() && src[i] != '\n') ++i;
+            continue;
+        }
+        if (c == '/' && i + 1 < src.size() && src[i + 1] == '*') {
+            i += 2;
+            while (i + 1 < src.size() && !(src[i] == '*' && src[i + 1] == '/')) ++i;
+            i = (i + 1 < src.size()) ? i + 2 : src.size();
+            blank = false;
+            continue;
+        }
+        if (c == '"' || c == '\'') {
+            const char quote = c;
+            ++i;
+            while (i < src.size() && src[i] != quote && src[i] != '\n') {
+                if (src[i] == '\\' && i + 1 < src.size()) ++i;
+                ++i;
+            }
+            if (i < src.size()) ++i;
+            blank = false;
+            continue;
+        }
+        if (c == '#' && blank) {
+            const std::size_t eol = src.find('\n', i);
+            const std::string line = src.substr(i, (eol == std::string::npos ? src.size() : eol) - i);
+            if (line.find("include") != std::string::npos &&
+                line.find(name) != std::string::npos) {
+                return true;
+            }
+            i = (eol == std::string::npos) ? src.size() : eol;
+            continue;
+        }
+        if (c != ' ' && c != '\t' && c != '\r') blank = false;
+        ++i;
     }
+    return false;
 }
 
 } // namespace

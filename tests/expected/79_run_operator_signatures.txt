@@ -185,7 +185,7 @@ function M__get$v   ; M::get
             ret %3
 
 function operator*$i1M   ; operator*
-  #0 __ret  8 bytes  (param)
+  #0 $ret  8 bytes  (param)
   #1 k  4 bytes  (param)
   #2 m  4 bytes  (param)
   #3 r  4 bytes
@@ -207,7 +207,7 @@ function operator*$i1M   ; operator*
             ret %10
 
 function operator*$1Mi   ; operator*
-  #0 __ret  8 bytes  (param)
+  #0 $ret  8 bytes  (param)
   #1 m  4 bytes  (param)
   #2 k  4 bytes  (param)
   #3 r  4 bytes
@@ -229,7 +229,7 @@ function operator*$1Mi   ; operator*
             ret %10
 
 function operator*$1M1M   ; operator*
-  #0 __ret  8 bytes  (param)
+  #0 $ret  8 bytes  (param)
   #1 a  4 bytes  (param)
   #2 b  4 bytes  (param)
   #3 r  4 bytes
@@ -266,9 +266,9 @@ function operator<$1M1M   ; operator<
 function main
   #0 a  4 bytes
   #1 b  4 bytes
-  #2 __result  4 bytes
-  #3 __result  4 bytes
-  #4 __result  4 bytes
+  #2 $result  4 bytes
+  #3 $result  4 bytes
+  #4 $result  4 bytes
             call __global_init()
     %0 = local #0
             call M__ctor$v(%0)
@@ -313,4 +313,7 @@ function main
             ret %29
 
 function __global_init
+            ret
+
+function __global_fini
             ret

@@ -82,7 +82,7 @@ function main
   #12 fneg  8 bytes
   #13 mod  4 bytes
   #14 logic  4 bytes
-  #15 __sc  4 bytes
+  #15 $sc  4 bytes
             call __global_init()
     %0 = const 3
     %1 = local #0
@@ -188,4 +188,7 @@ function main
             ret %81
 
 function __global_init
+            ret
+
+function __global_fini
             ret

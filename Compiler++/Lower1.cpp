@@ -112,7 +112,7 @@ void Lowering::lowerClasses() {
         for (std::size_t s = 0; s < cl->vtable.size(); ++s) {
             MethodDecl *m = cl->vtable[s];
             if (m->isDestructor) vt.slots.push_back(mangleDestructor(m->ownerClass));
-            else vt.slots.push_back(mangleOverload(m->ownerClass, m->name, m->params));
+            else vt.slots.push_back(mangleOverload(m->ownerClass, m->name, m->params, m->isConstMethod));
         }
         mod.vtables.push_back(vt);
     }
@@ -131,7 +131,7 @@ void Lowering::lowerDecl(cc::Decl *d) {
             std::string mangled;
             if (md->isConstructor)     mangled = mangleConstructor(cd->name, md->params);
             else if (md->isDestructor) mangled = mangleDestructor(cd->name);
-            else                       mangled = mangleOverload(cd->name, md->name, md->params);
+            else                       mangled = mangleOverload(cd->name, md->name, md->params, md->isConstMethod);
             // A function with `this` in front -- all "member function" means
             // once the C++ is gone.
             lowerFunction(md, mangled, cd->name + "::" + md->name, true);
@@ -230,6 +230,18 @@ bool Lowering::lowerLayerValue(cc::Expr *e, IRReg &out) {
         const IRReg addr = fn->emitFieldAddr(loadThis(e->line), f->offset, e->line);
         if (isArrayType(f->type) || isObjectType(f->type)) { out = addr; return true; }
         out = fn->emitLoad(addr, f->size, isFloatType(f->type), e->line);
+        return true;
+    }
+
+    // T(args): space of the caller's own, constructed in place.  Its value is
+    // its address, which is what every object-valued expression yields here.
+    if (TempExpr *te = dynamic_cast<TempExpr*>(e)) {
+        ClassDecl *cd = classOfMemberType(te->type);
+        const int size = layout.sizeOf(te->type);
+        const int slot = declareLocal("$temp", size > 0 ? size : Layout::PointerSize, false);
+        const IRReg addr = fn->emitLocalAddr(slot, e->line);
+        if (cd) emitConstruct(cd, addr, te->args, e->line, te->resolvedCtor);
+        out = addr;
         return true;
     }
 
@@ -349,10 +361,13 @@ void Lowering::lowerVarDecl(cc::VarDecl *vd) {
     // one; otherwise the copy is memberwise, which carries the vptr and is
     // right for two objects of one class.
     if (vd->init && !vd->hasCtorArgs) {
-        if (copyConstructorOf(cd)) {
+        if (MethodDecl *copyCtor = copyConstructorOf(cd)) {
+            // Name the constructor: by argument COUNT alone this picked
+            // whichever one-argument constructor came first, which for
+            // `T(int)` beside `T(const T&)` was the wrong one.
             std::vector<cc::Expr*> one;
             one.push_back(vd->init);
-            emitConstruct(cd, fn->emitLocalAddr(slot, vd->line), one, vd->line);
+            emitConstruct(cd, fn->emitLocalAddr(slot, vd->line), one, vd->line, copyCtor);
             return;
         }
         if (!isAddressable(vd->init) && !yieldsObject(vd->init)) {
@@ -361,7 +376,12 @@ void Lowering::lowerVarDecl(cc::VarDecl *vd) {
             return;
         }
         const IRReg src = lowerObjectValue(vd->init);
-        fn->emitMemCopy(fn->emitLocalAddr(slot, vd->line), src, size, vd->line);
+        const IRReg dst = fn->emitLocalAddr(slot, vd->line);
+        fn->emitMemCopy(dst, src, size, vd->line);
+        // The bytes copied include the source's vptr, and the source may be a
+        // DERIVED object being sliced into a base.  Rewriting the vptr makes
+        // the copy the class it was declared as, rather than one it is not.
+        emitVPtrStore(cd, dst, vd->line);
         return;
     }
     emitConstruct(cd, fn->emitLocalAddr(slot, vd->line), vd->ctorArgs, vd->line,
@@ -419,6 +439,7 @@ void Lowering::emitArrayDestruct(ClassDecl *cd, IRReg base, long count,
 // A call or an overloaded operator whose result is an object: it has no name,
 // but it does have a place -- the slot the caller supplied for it.
 bool Lowering::yieldsObject(cc::Expr *e) const {
+    if (dynamic_cast<TempExpr*>(e)) return true;
     if (cc::CallExpr *c = dynamic_cast<cc::CallExpr*>(e)) {
         return c->resolved && dynamic_cast<ClassType*>(c->resolved->retType) != 0;
     }
@@ -447,6 +468,21 @@ void Lowering::initGlobal(cc::VarDecl *vd, IRReg addr) {
     cc::Lowering::initGlobal(vd, addr);
 }
 
+void Lowering::destroyGlobal(cc::VarDecl *vd) {
+    long count = 1;
+    ClassDecl *cd = classOfMemberType(vd->type, count);
+    // Ask before addressing it: a global with nothing to destroy should leave
+    // no trace in the teardown function at all.
+    if (!cd || !classHasDestructor(cd)) return;
+    const IRReg addr = fn->emitGlobalAddr(vd->name, vd->line);
+    if (count != 1) {
+        const ClassLayout *cl = layout.forClass(cd->name);
+        if (cl) emitArrayDestruct(cd, addr, count, cl->size, vd->line);
+        return;
+    }
+    emitDestruct(cd, addr, vd->line, true);
+}
+
 bool Lowering::isReferenceExpr(cc::Expr *e) {
     cc::Type *t = typeOf(e);
     return t && dynamic_cast<ReferenceType*>(t) != 0;
@@ -466,6 +502,10 @@ bool Lowering::isObjectType(cc::Type *t) {
     return classOfMemberType(t) != 0;
 }
 
+void Lowering::reassertVPtr(cc::Type *t, IRReg addr, int line) {
+    if (ClassDecl *cd = classOfMemberType(t)) emitVPtrStore(cd, addr, line);
+}
+
 cc::Type *Lowering::referentType(cc::Type *t) {
     ReferenceType *rt = dynamic_cast<ReferenceType*>(t);
     return rt ? rt->base : t;
@@ -479,12 +519,48 @@ bool Lowering::isBoolType(cc::Type *t) {
 
 // object.operatorX(argument) -- with the object passed as `this`, and the
 // argument obeying the same by-reference rule every other parameter does.
+// A copy is a construction, so a declared copy constructor makes it.  Without
+// this the bytes were copied and the constructor never ran, which is a silent
+// wrong answer for any class whose copy does more than move bytes.
+IRReg Lowering::lowerByValueObject(cc::Type *want, cc::Expr *e, int line) {
+    ClassDecl *cd = classOfMemberType(want);
+    MethodDecl *copyCtor = copyConstructorOf(cd);
+    if (!cd || !copyCtor) return lowerObjectValue(e);
+
+    const int size = layout.sizeOf(want);
+    const int tmp = declareLocal("$arg", size > 0 ? size : Layout::PointerSize, false);
+    const IRReg addr = fn->emitLocalAddr(tmp, line);
+    std::vector<cc::Expr*> one;
+    one.push_back(e);
+    emitConstruct(cd, addr, one, line, copyCtor);
+
+    // The copy is the caller's, so the caller destroys it once the call it was
+    // made for has returned.
+    if (classHasDestructor(cd)) {
+        ArgTemp t;
+        t.slot = tmp;
+        t.type = want;
+        argTemps.push_back(t);
+    }
+    return addr;
+}
+
+void Lowering::destroyArgTempsDownTo(std::size_t mark, int line) {
+    while (argTemps.size() > mark) {
+        const ArgTemp t = argTemps.back();
+        argTemps.pop_back();
+        if (ClassDecl *cd = classOfMemberType(t.type)) {
+            emitDestruct(cd, fn->emitLocalAddr(t.slot, line), line, true);
+        }
+    }
+}
+
 // One operand at a time, each obeying the rule its parameter declares.
 IRReg Lowering::lowerOperandFor(cc::Type *want, cc::Expr *e, int line) {
     if (want && isReferenceType(want)) return lowerAddress(e);
     // By value: an object's ADDRESS goes over and the VM copies it into the
     // parameter's own slot, which is the copy the callee owns.
-    if (want && isObjectType(want))    return lowerObjectValue(e);
+    if (want && isObjectType(want))    return lowerByValueObject(want, e, line);
     IRReg v = lowerValue(e);
     if (want) v = convert(v, referentType(typeOf(e)), want, line);
     return v;
@@ -504,7 +580,7 @@ IRReg Lowering::lowerIndexOperator(cc::IndexExpr *e) {
     if (returnsObject(op)) args.push_back(allocReturnSlot(op, e->line));
     args.push_back(lowerOperandFor(op->params.empty() ? 0 : op->params[0]->type,
                                    e->index, e->line));
-    return fn->emitCall(mangleOverload(op->ownerClass, op->name, op->params),
+    return fn->emitCall(mangleOverload(op->ownerClass, op->name, op->params, op->isConstMethod),
                         args, true, e->line);
 }
 
@@ -521,7 +597,7 @@ IRReg Lowering::emitOperatorCall(cc::Function *op, cc::Expr *lhsExpr,
         if (returnsObject(op)) args.push_back(allocReturnSlot(op, line));
         args.push_back(lowerOperandFor(op->params.empty() ? 0 : op->params[0]->type,
                                        rhsExpr, line));
-        return fn->emitCall(mangleOverload(asMember->ownerClass, op->name, op->params),
+        return fn->emitCall(mangleOverload(asMember->ownerClass, op->name, op->params, asMember->isConstMethod),
                             args, true, line);
     }
 
@@ -542,14 +618,18 @@ IRReg Lowering::lowerCall(cc::CallExpr *e, bool wantsResult) {
     if (!ma) {
         MethodDecl *callOp = dynamic_cast<MethodDecl*>(e->resolved);
         if (callOp && callOp->name == "operator()") {
+            const std::size_t mark = argTemps.size();
             std::vector<IRReg> args;
             args.push_back(lowerObjectValue(e->callee));
             if (returnsObject(callOp)) args.push_back(allocReturnSlot(callOp, e->line));
             const std::vector<IRReg> rest = lowerArgs(e, callOp, 0);
             args.insert(args.end(), rest.begin(), rest.end());
-            return fn->emitCall(mangleOverload(callOp->ownerClass, callOp->name,
-                                               callOp->params),
-                                args, wantsResult, e->line);
+            const IRReg out = fn->emitCall(
+                mangleOverload(callOp->ownerClass, callOp->name,
+                               callOp->params, callOp->isConstMethod),
+                args, wantsResult, e->line);
+            destroyArgTempsDownTo(mark, e->line);
+            return out;
         }
     }
 
@@ -566,7 +646,7 @@ IRReg Lowering::lowerCall(cc::CallExpr *e, bool wantsResult) {
                 if (returnsObject(m)) args.push_back(allocReturnSlot(m, e->line));
                 const std::vector<IRReg> rest = lowerArgs(e, m, 0);
                 args.insert(args.end(), rest.begin(), rest.end());
-                return fn->emitCall(mangleOverload(m->ownerClass, m->name, m->params),
+                return fn->emitCall(mangleOverload(m->ownerClass, m->name, m->params, m->isConstMethod),
                                     args, wantsResult, e->line);
             }
         }
@@ -625,7 +705,7 @@ IRReg Lowering::lowerCall(cc::CallExpr *e, bool wantsResult) {
             }
         }
     }
-    return fn->emitCall(mangleOverload(m->ownerClass, m->name, m->params), args,
+    return fn->emitCall(mangleOverload(m->ownerClass, m->name, m->params, m->isConstMethod), args,
                         wantsResult, e->line);
 }
 
@@ -757,9 +837,13 @@ void Lowering::emitPrologue(cc::Function *f) {
 
         // A member that is itself a class is CONSTRUCTED, not assigned -- and
         // it is constructed even when the initialiser list never mentions it.
-        if (ClassDecl *member = classOfMemberType(fd->type)) {
+        long memberCount = 1;
+        if (ClassDecl *member = classOfMemberType(fd->type, memberCount)) {
             const IRReg addr = fn->emitFieldAddr(loadThis(f->line), fl->offset, line);
-            if (mi) {
+            if (memberCount != 1) {
+                const ClassLayout *ml = layout.forClass(member->name);
+                if (ml) emitArrayConstruct(member, addr, memberCount, ml->size, line);
+            } else if (mi) {
                 emitConstruct(member, addr, mi->args, line, mi->resolvedCtor);
             } else {
                 std::vector<cc::Expr*> none;
@@ -781,8 +865,22 @@ void Lowering::emitPrologue(cc::Function *f) {
 // A field's class, when the field is an object rather than a pointer or a
 // reference to one -- only an object is constructed with its container.
 ClassDecl *Lowering::classOfMemberType(cc::Type *t) const {
+    long ignored = 0;
+    return classOfMemberType(t, ignored);
+}
+
+// `count` comes back as the number of objects the member holds: 1 for a plain
+// one, the product of the dimensions for an array of them.  The array case was
+// missed here while the local-variable path handled it, so `E arr[2];` as a
+// member was neither constructed nor destroyed.
+ClassDecl *Lowering::classOfMemberType(cc::Type *t, long &count) const {
+    count = 1;
     if (dynamic_cast<cc::PointerType*>(t)) return 0;
     if (dynamic_cast<ReferenceType*>(t))   return 0;
+    while (cc::ArrayType *at = dynamic_cast<cc::ArrayType*>(t)) {
+        count *= at->count;
+        t = at->element;
+    }
     ClassType *ct = dynamic_cast<ClassType*>(t);
     return ct ? findClass(ct->className) : 0;
 }
@@ -800,12 +898,18 @@ void Lowering::emitEpilogue(cc::Function *f) {
     for (std::size_t i = cd->members.size(); i > 0; --i) {
         FieldDecl *fd = dynamic_cast<FieldDecl*>(cd->members[i - 1]);
         if (!fd) continue;
-        ClassDecl *member = classOfMemberType(fd->type);
+        long memberCount = 1;
+        ClassDecl *member = classOfMemberType(fd->type, memberCount);
         if (!member || !classHasDestructor(member)) continue;
         const FieldLayout *fl = findField(cd->name, fd->name);
         if (!fl) continue;
-        emitDestruct(member, fn->emitFieldAddr(loadThis(f->line), fl->offset, f->line),
-                     f->line, true);
+        const IRReg at = fn->emitFieldAddr(loadThis(f->line), fl->offset, f->line);
+        if (memberCount != 1) {
+            const ClassLayout *ml = layout.forClass(member->name);
+            if (ml) emitArrayDestruct(member, at, memberCount, ml->size, f->line);
+            continue;
+        }
+        emitDestruct(member, at, f->line, true);
     }
 
     if (!cd->base) return;

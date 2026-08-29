@@ -296,7 +296,7 @@ function V__ctor$v   ; V::V
 
 function V__operator+$1V   ; V::operator+
   #0 this  8 bytes  (param)
-  #1 __ret  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
   #2 o  8 bytes  (param)
   #3 r  8 bytes
     %0 = local #3
@@ -331,7 +331,7 @@ function V__operator+$1V   ; V::operator+
 
 function V__operator-$1V   ; V::operator-
   #0 this  8 bytes  (param)
-  #1 __ret  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
   #2 o  8 bytes  (param)
   #3 r  8 bytes
     %0 = local #3
@@ -366,7 +366,7 @@ function V__operator-$1V   ; V::operator-
 
 function V__operator*$i   ; V::operator*
   #0 this  8 bytes  (param)
-  #1 __ret  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
   #2 k  4 bytes  (param)
   #3 r  8 bytes
     %0 = local #3
@@ -400,7 +400,7 @@ function V__operator*$i   ; V::operator*
 function V__operator==$1V   ; V::operator==
   #0 this  8 bytes  (param)
   #1 o  8 bytes  (param)
-  #2 __sc  4 bytes
+  #2 $sc  4 bytes
     %0 = local #0
     %1 = load [%0] :8
     %2 = field %1 +0
@@ -434,7 +434,7 @@ function V__operator==$1V   ; V::operator==
 function V__operator!=$1V   ; V::operator!=
   #0 this  8 bytes  (param)
   #1 o  8 bytes  (param)
-  #2 __sc  4 bytes
+  #2 $sc  4 bytes
     %0 = local #0
     %1 = load [%0] :8
     %2 = field %1 +0
@@ -485,14 +485,14 @@ function main
   #0 a  8 bytes
   #1 b  8 bytes
   #2 c  8 bytes
-  #3 __result  8 bytes
+  #3 $result  8 bytes
   #4 d  8 bytes
-  #5 __result  8 bytes
+  #5 $result  8 bytes
   #6 e  8 bytes
-  #7 __result  8 bytes
+  #7 $result  8 bytes
   #8 f  8 bytes
-  #9 __result  8 bytes
-  #10 __result  8 bytes
+  #9 $result  8 bytes
+  #10 $result  8 bytes
             call __global_init()
     %0 = local #0
             call V__ctor$v(%0)
@@ -605,4 +605,7 @@ function main
             ret %77
 
 function __global_init
+            ret
+
+function __global_fini
             ret

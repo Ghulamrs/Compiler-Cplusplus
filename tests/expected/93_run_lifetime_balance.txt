@@ -1,0 +1,505 @@
+Function print_int returns void
+  param:
+    Var n : int
+Function print_string returns void
+  param:
+    Var s : pointer to char
+Function print_line returns void
+Var live : int
+  init:
+    0
+Class T
+  Field public id : int
+  Constructor public T::T
+    Block
+      ExprStmt
+        Binary =
+          id
+          0
+      ExprStmt
+        Binary =
+          live
+          Binary +
+            live
+            1
+  Constructor public T::T
+    param:
+      Var n : int
+    Block
+      ExprStmt
+        Binary =
+          id
+          n
+      ExprStmt
+        Binary =
+          live
+          Binary +
+            live
+            1
+  Constructor public T::T
+    param:
+      Var o : reference to class T
+    Block
+      ExprStmt
+        Binary =
+          id
+          Binary +
+            Member .id
+              o
+            100
+      ExprStmt
+        Binary =
+          live
+          Binary +
+            live
+            1
+  Destructor public T::~T
+    Block
+      ExprStmt
+        Binary =
+          live
+          Binary -
+            live
+            1
+Class Holder
+  Field public one : class T
+  Field public many : array[2] of class T
+  Field public tag : int
+  Constructor public Holder::Holder
+    Block
+      ExprStmt
+        Binary =
+          tag
+          5
+  Destructor public Holder::~Holder
+    Block
+Function byValue returns int
+  param:
+    Var t : class T
+  Block
+    Return
+      Member .id
+        t
+Function make returns class T
+  param:
+    Var n : int
+  Block
+    Var t : class T
+      construct with 1 argument(s):
+        n
+    Return
+      t
+    [on exit: destroy t]
+Function main returns int
+  Block
+    ExprStmt
+      Call
+        print_string
+        arg 0:
+          "start "
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          live
+    ExprStmt
+      Call
+        print_line
+    Block
+      Var a : class T
+        construct with 1 argument(s):
+          5
+      ExprStmt
+        Call
+          print_string
+          arg 0:
+            "byvalue "
+      ExprStmt
+        Call
+          print_int
+          arg 0:
+            Call
+              byValue
+              arg 0:
+                a
+      ExprStmt
+        Call
+          print_line
+      [on exit: destroy a]
+    ExprStmt
+      Call
+        print_string
+        arg 0:
+          "after "
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          live
+    ExprStmt
+      Call
+        print_line
+    Block
+      Var b : class T
+        init:
+          Call
+            make
+            arg 0:
+              7
+      ExprStmt
+        Call
+          print_string
+          arg 0:
+            "returned "
+      ExprStmt
+        Call
+          print_int
+          arg 0:
+            Member .id
+              b
+      ExprStmt
+        Call
+          print_line
+      [on exit: destroy b]
+    ExprStmt
+      Call
+        print_string
+        arg 0:
+          "after "
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          live
+    ExprStmt
+      Call
+        print_line
+    Block
+      Var h : class Holder
+      ExprStmt
+        Call
+          print_string
+          arg 0:
+            "holder "
+      ExprStmt
+        Call
+          print_int
+          arg 0:
+            Member .tag
+              h
+      ExprStmt
+        Call
+          print_line
+      [on exit: destroy h]
+    ExprStmt
+      Call
+        print_string
+        arg 0:
+          "after "
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          live
+    ExprStmt
+      Call
+        print_line
+    Block
+      Var arr : array[3] of class T
+      ExprStmt
+        Call
+          print_string
+          arg 0:
+            "array "
+      ExprStmt
+        Call
+          print_int
+          arg 0:
+            Member .id
+              Index
+                arr
+                0
+      ExprStmt
+        Call
+          print_line
+      [on exit: destroy arr]
+    ExprStmt
+      Call
+        print_string
+        arg 0:
+          "after "
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          live
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+class Holder  size=16 align=4
+    +0  one (4 bytes)
+    +4  many (8 bytes)
+    +12  tag (4 bytes)
+    construct: field one -> field many -> field tag -> Holder() body
+    destroy:   ~Holder() body -> field tag -> field many -> field one
+
+class T  size=4 align=4
+    +0  id (4 bytes)
+    construct: field id -> T() body
+    destroy:   ~T() body -> field id
+
+string str0  "start "
+string str1  "byvalue "
+string str2  "after "
+string str3  "returned "
+string str4  "holder "
+string str5  "array "
+
+global live  4 bytes
+
+function T__ctor$v   ; T::T
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = const 0
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+            store [%5] <- %2 :4
+    %6 = global live
+    %7 = load [%6] :4
+    %8 = const 1
+    %9 = add %7, %8
+    %10 = global live
+            store [%10] <- %9 :4
+            ret
+
+function T__ctor$i   ; T::T
+  #0 this  8 bytes  (param)
+  #1 n  4 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = local #1
+    %3 = load [%2] :4
+    %4 = local #0
+    %5 = load [%4] :8
+    %6 = field %5 +0
+            store [%6] <- %3 :4
+    %7 = global live
+    %8 = load [%7] :4
+    %9 = const 1
+    %10 = add %8, %9
+    %11 = global live
+            store [%11] <- %10 :4
+            ret
+
+function T__ctor$RK1T   ; T::T
+  #0 this  8 bytes  (param)
+  #1 o  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = local #1
+    %3 = load [%2] :8
+    %4 = field %3 +0
+    %5 = load [%4] :4
+    %6 = const 100
+    %7 = add %5, %6
+    %8 = local #0
+    %9 = load [%8] :8
+    %10 = field %9 +0
+            store [%10] <- %7 :4
+    %11 = global live
+    %12 = load [%11] :4
+    %13 = const 1
+    %14 = add %12, %13
+    %15 = global live
+            store [%15] <- %14 :4
+            ret
+
+function T__dtor   ; T::~T
+  #0 this  8 bytes  (param)
+    %0 = global live
+    %1 = load [%0] :4
+    %2 = const 1
+    %3 = sub %1, %2
+    %4 = global live
+            store [%4] <- %3 :4
+            ret
+
+function Holder__ctor$v   ; Holder::Holder
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = local #0
+    %3 = load [%2] :8
+    %4 = field %3 +0
+            call T__ctor$v(%4)
+    %5 = local #0
+    %6 = load [%5] :8
+    %7 = field %6 +4
+    %8 = field %7 +0
+            call T__ctor$v(%8)
+    %9 = field %7 +4
+            call T__ctor$v(%9)
+    %10 = const 5
+    %11 = local #0
+    %12 = load [%11] :8
+    %13 = field %12 +12
+            store [%13] <- %10 :4
+            ret
+
+function Holder__dtor   ; Holder::~Holder
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +4
+    %3 = field %2 +4
+            call T__dtor(%3)
+    %4 = field %2 +0
+            call T__dtor(%4)
+    %5 = local #0
+    %6 = load [%5] :8
+    %7 = field %6 +0
+            call T__dtor(%7)
+            ret
+
+function byValue$1T   ; byValue
+  #0 t  4 bytes  (param)
+    %0 = local #0
+    %1 = field %0 +0
+    %2 = load [%1] :4
+            ret %2
+
+function make$i   ; make
+  #0 $ret  8 bytes  (param)
+  #1 n  4 bytes  (param)
+  #2 t  4 bytes
+    %0 = local #2
+    %1 = local #1
+    %2 = load [%1] :4
+            call T__ctor$i(%0, %2)
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = local #2
+            memcpy [%4] <- [%5] :4
+    %6 = local #2
+            call T__dtor(%6)
+            ret %4
+
+function main
+  #0 a  4 bytes
+  #1 $arg  4 bytes
+  #2 b  4 bytes
+  #3 $result  4 bytes
+  #4 h  16 bytes
+  #5 arr  12 bytes
+            call __global_init()
+    %0 = straddr str0
+            call print_string(%0)
+    %1 = global live
+    %2 = load [%1] :4
+            call print_int(%2)
+            call print_line()
+    %3 = local #0
+    %4 = const 5
+            call T__ctor$i(%3, %4)
+    %5 = straddr str1
+            call print_string(%5)
+    %6 = local #1
+    %7 = local #0
+            call T__ctor$RK1T(%6, %7)
+    %8 = call byValue$1T(%6)
+    %9 = local #1
+            call T__dtor(%9)
+            call print_int(%8)
+            call print_line()
+    %10 = local #0
+            call T__dtor(%10)
+    %11 = straddr str2
+            call print_string(%11)
+    %12 = global live
+    %13 = load [%12] :4
+            call print_int(%13)
+            call print_line()
+    %14 = local #2
+    %15 = local #3
+    %16 = const 7
+    %17 = call make$i(%15, %16)
+            call T__ctor$RK1T(%14, %17)
+    %18 = straddr str3
+            call print_string(%18)
+    %19 = local #2
+    %20 = field %19 +0
+    %21 = load [%20] :4
+            call print_int(%21)
+            call print_line()
+    %22 = local #2
+            call T__dtor(%22)
+    %23 = straddr str2
+            call print_string(%23)
+    %24 = global live
+    %25 = load [%24] :4
+            call print_int(%25)
+            call print_line()
+    %26 = local #4
+            call Holder__ctor$v(%26)
+    %27 = straddr str4
+            call print_string(%27)
+    %28 = local #4
+    %29 = field %28 +12
+    %30 = load [%29] :4
+            call print_int(%30)
+            call print_line()
+    %31 = local #4
+            call Holder__dtor(%31)
+    %32 = straddr str2
+            call print_string(%32)
+    %33 = global live
+    %34 = load [%33] :4
+            call print_int(%34)
+            call print_line()
+    %35 = local #5
+    %36 = field %35 +0
+            call T__ctor$v(%36)
+    %37 = field %35 +4
+            call T__ctor$v(%37)
+    %38 = field %35 +8
+            call T__ctor$v(%38)
+    %39 = straddr str5
+            call print_string(%39)
+    %40 = local #5
+    %41 = const 0
+    %42 = const 4
+    %43 = mul %41, %42
+    %44 = add %40, %43
+    %45 = field %44 +0
+    %46 = load [%45] :4
+            call print_int(%46)
+            call print_line()
+    %47 = local #5
+    %48 = field %47 +8
+            call T__dtor(%48)
+    %49 = field %47 +4
+            call T__dtor(%49)
+    %50 = field %47 +0
+            call T__dtor(%50)
+    %51 = straddr str2
+            call print_string(%51)
+    %52 = global live
+    %53 = load [%52] :4
+            call print_int(%53)
+            call print_line()
+    %54 = const 0
+            ret %54
+
+function __global_init
+    %0 = global live
+    %1 = const 0
+            store [%0] <- %1 :4
+            ret
+
+function __global_fini
+            ret

@@ -151,7 +151,7 @@ function A__ctor$v   ; A::A
             store [%5] <- %2 :4
             ret
 
-function A__get$v   ; A::get
+function A__get$vK   ; A::get
   #0 this  8 bytes  (param)
     %0 = local #0
     %1 = load [%0] :8
@@ -173,18 +173,18 @@ function A__bump$v   ; A::bump
             store [%8] <- %5 :4
             ret
 
-function readIt$R1A   ; readIt
+function readIt$RK1A   ; readIt
   #0 a  8 bytes  (param)
     %0 = local #0
     %1 = load [%0] :8
-    %2 = call A__get$v(%1)
+    %2 = call A__get$vK(%1)
             ret %2
 
-function viaPtr$P1A   ; viaPtr
+function viaPtr$PK1A   ; viaPtr
   #0 p  8 bytes  (param)
     %0 = local #0
     %1 = load [%0] :8
-    %2 = call A__get$v(%1)
+    %2 = call A__get$vK(%1)
             ret %2
 
 function main
@@ -200,18 +200,18 @@ function main
     %2 = local #0
             call A__bump$v(%2)
     %3 = local #0
-    %4 = call A__get$v(%3)
+    %4 = call A__get$vK(%3)
             call print_int(%4)
     %5 = local #1
             call A__ctor$v(%5)
     %6 = local #1
-    %7 = call A__get$v(%6)
+    %7 = call A__get$vK(%6)
             call print_int(%7)
     %8 = local #1
-    %9 = call readIt$R1A(%8)
+    %9 = call readIt$RK1A(%8)
             call print_int(%9)
     %10 = local #1
-    %11 = call viaPtr$P1A(%10)
+    %11 = call viaPtr$PK1A(%10)
             call print_int(%11)
     %12 = straddr str0
     %13 = local #2
@@ -261,4 +261,7 @@ function main
             ret %47
 
 function __global_init
+            ret
+
+function __global_fini
             ret

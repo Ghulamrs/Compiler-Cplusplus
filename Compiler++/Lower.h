@@ -38,6 +38,8 @@ public:
     // The synthetic function that runs every global's initialiser.  main calls
     // it first; without it `int g = 5;` left g at zero.
     static const char *GlobalInitName;
+    // Its counterpart: global objects are destroyed after main returns.
+    static const char *GlobalFiniName;
 
 protected:
     IRModule &mod;
@@ -46,7 +48,16 @@ protected:
 
     IRFunction *fn;                     // the function being built, or 0
     std::map<std::string, int> slots;   // name -> frame slot, innermost wins
-    std::vector<std::string> scopeNames;// names added, for unwinding a scope
+    // A name declared in a block may shadow one outside it, so unwinding the
+    // scope has to RESTORE the outer binding rather than erase the name.
+    // Erasing it made `int x; { int x; }` an internal error.
+    struct Shadowed {
+        std::string name;
+        int   prevSlot;         // -1 when the name was not bound before
+        Type *prevType;         // 0 likewise; not owned
+        Shadowed() : prevSlot(-1), prevType(0) {}
+    };
+    std::vector<Shadowed> scopeNames;
     std::vector<int> scopeMarks;
     // Labels to jump to for `break` and `continue`, innermost last.
     std::vector<int> breakTargets;
@@ -153,12 +164,18 @@ protected:
     int declareLocal(const std::string &name, int size, bool isParam, bool isFloat = false,
                      bool isObject = false);
     void emitGlobalInit(const std::vector<Decl*> &units);
+    void emitGlobalFini(const std::vector<Decl*> &units);
+    virtual void destroyGlobal(VarDecl *vd);
     // One global's initialiser, given its address.  Virtual because a global
     // object is CONSTRUCTED, and only the C++ layer knows that.
     virtual void initGlobal(VarDecl *vd, IRReg addr);
     // True when a value of this type is copied whole rather than loaded into a
     // register.  Only the C++ layer has such a type.
     virtual bool isObjectType(Type *t);
+    // After a byte copy the destination must be made its own class again: the
+    // copy carried the source's vptr, and the source may have been a derived
+    // object sliced into a base.
+    virtual void reassertVPtr(Type *t, IRReg addr, int line);
     // A function returning an object cannot hand it back in a register, and
     // its own frame is gone by the time the caller could copy it.  So the
     // CALLER supplies the space: a hidden pointer parameter, right after
@@ -169,6 +186,16 @@ protected:
     // The ADDRESS of an object-valued expression, whether it is a name or the
     // result of a call.
     IRReg lowerObjectValue(Expr *e);
+    virtual bool yieldsObject(Expr *e) const;
+    // An object passed BY VALUE: the callee gets a copy, and if the class
+    // wrote a copy constructor that constructor is what makes it.
+    virtual IRReg lowerByValueObject(Type *want, Expr *e, int line);
+    // A by-value argument that a copy constructor built lives in a temporary
+    // of the caller's, and dies at the end of the expression that made it.
+    // Nesting works because each call destroys only what it added.
+    struct ArgTemp { int slot; Type *type; };
+    std::vector<ArgTemp> argTemps;
+    virtual void destroyArgTempsDownTo(std::size_t mark, int line);
     // Space for a call's object result, and the address the callee fills in.
     IRReg allocReturnSlot(Function *target, int line);
     int findSlot(const std::string &name) const;

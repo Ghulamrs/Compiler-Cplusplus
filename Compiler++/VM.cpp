@@ -167,6 +167,20 @@ void VM::callNative(NativeId id, int argc) {
         break;
     }
 
+    // The same five, on the error stream.
+    case NAT_ErrInt:    std::cerr << a[0].i; break;
+    case NAT_ErrChar:   std::cerr << static_cast<char>(a[0].i); break;
+    case NAT_ErrDouble: std::cerr << a[0].d; break;
+    case NAT_ErrLine:   std::cerr << std::endl; break;
+    case NAT_ErrString: {
+        long p = a[0].i;
+        while (p > 0 && p < static_cast<long>(mem.size()) && mem[p]) {
+            std::cerr << static_cast<char>(mem[p]);
+            ++p;
+        }
+        break;
+    }
+
     // Maths.  The operand stack carries a double, which is exactly what the
     // C library wants, so these are one call each.
     case NAT_Sqrt:  pushD(std::sqrt(a[0].d));  return;
@@ -234,6 +248,7 @@ long VM::run(const Image &image, bool &ok) {
     frames.push_back(top);
 
     long result = 0;
+    bool finiDone = false;
 
     while (!frames.empty() && !failed()) {
         if (++steps > MaxSteps) { trap("execution did not terminate"); break; }
@@ -473,7 +488,29 @@ long VM::run(const Image &image, bool &ok) {
             if (in.op == OP_Return) rv = pop();
             stackTop = fr.base;
             frames.pop_back();
-            if (frames.empty()) { result = rv.i; ok = !failed(); return result; }
+            if (frames.empty()) {
+                result = rv.i;
+                // main has returned; global objects are destroyed now, because
+                // no scope in the program owns them.
+                if (!finiDone && image.fini >= 0 &&
+                    image.fini < static_cast<int>(image.functions.size())) {
+                    finiDone = true;
+                    const FuncImage &ff = image.functions[image.fini];
+                    if (stackTop + ff.frameSize <= heapBase && !ff.localOffset.empty()) {
+                        Frame nf;
+                        nf.func = image.fini;
+                        nf.pc = 0;
+                        nf.base = stackTop;
+                        nf.regBase = ff.localOffset.back();
+                        nf.wantsResult = false;
+                        stackTop += ff.frameSize;
+                        frames.push_back(nf);
+                        break;
+                    }
+                }
+                ok = !failed();
+                return result;
+            }
             stack.push_back(rv);
             break;
         }

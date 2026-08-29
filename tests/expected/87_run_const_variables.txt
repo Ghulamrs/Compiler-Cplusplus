@@ -133,7 +133,7 @@ function A__ctor$v   ; A::A
             store [%5] <- %2 :4
             ret
 
-function readOnly$R1A   ; readOnly
+function readOnly$RK1A   ; readOnly
   #0 a  8 bytes  (param)
     %0 = local #0
     %1 = load [%0] :8
@@ -141,7 +141,7 @@ function readOnly$R1A   ; readOnly
     %3 = load [%2] :4
             ret %3
 
-function useConstParam$i   ; useConstParam
+function useConstParam$Ki   ; useConstParam
   #0 n  4 bytes  (param)
     %0 = local #0
     %1 = load [%0] :4
@@ -169,7 +169,7 @@ function main
             call print_int(%7)
     %8 = local #0
     %9 = load [%8] :4
-    %10 = call useConstParam$i(%9)
+    %10 = call useConstParam$Ki(%9)
             call print_int(%10)
     %11 = local #1
             call A__ctor$v(%11)
@@ -178,7 +178,7 @@ function main
     %14 = load [%13] :4
             call print_int(%14)
     %15 = local #1
-    %16 = call readOnly$R1A(%15)
+    %16 = call readOnly$RK1A(%15)
             call print_int(%16)
     %17 = straddr str0
     %18 = local #2
@@ -223,4 +223,7 @@ function main
             ret %46
 
 function __global_init
+            ret
+
+function __global_fini
             ret

@@ -309,7 +309,7 @@ function Vec__ctor$v   ; Vec::Vec
 
 function Vec__operator+$3Vec   ; Vec::operator+
   #0 this  8 bytes  (param)
-  #1 __ret  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
   #2 o  16 bytes  (param)
   #3 r  16 bytes
     %0 = local #3
@@ -344,7 +344,7 @@ function Vec__operator+$3Vec   ; Vec::operator+
 
 function Vec__operator*$d   ; Vec::operator*
   #0 this  8 bytes  (param)
-  #1 __ret  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
   #2 k  8 bytes  (param)
   #3 r  16 bytes
     %0 = local #3
@@ -378,7 +378,7 @@ function Vec__operator*$d   ; Vec::operator*
 function Vec__operator==$3Vec   ; Vec::operator==
   #0 this  8 bytes  (param)
   #1 o  16 bytes  (param)
-  #2 __sc  4 bytes
+  #2 $sc  4 bytes
     %0 = local #0
     %1 = load [%0] :8
     %2 = field %1 +0
@@ -458,10 +458,10 @@ function main
   #0 a  16 bytes
   #1 b  16 bytes
   #2 c  16 bytes
-  #3 __result  16 bytes
+  #3 $result  16 bytes
   #4 d  16 bytes
-  #5 __result  16 bytes
-  #6 __result  16 bytes
+  #5 $result  16 bytes
+  #6 $result  16 bytes
   #7 circles  72 bytes
   #8 i  4 bytes
   #9 i  4 bytes
@@ -613,4 +613,7 @@ function main
             ret %102
 
 function __global_init
+            ret
+
+function __global_fini
             ret

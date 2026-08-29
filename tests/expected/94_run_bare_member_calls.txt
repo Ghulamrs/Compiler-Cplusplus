@@ -1,0 +1,147 @@
+Function print_int returns void
+  param:
+    Var n : int
+Function print_line returns void
+Class B
+  Method public virtual B::tag returns int
+    Block
+      Return
+        1
+  Destructor public virtual B::~B
+    Block
+  Method public B::bare returns int
+    Block
+      Return
+        Call
+          Member ->tag
+            this
+  Method public B::viaThis returns int
+    Block
+      Return
+        Call
+          Member ->tag
+            this
+Class D : public B
+  Method public virtual overriding D::tag returns int
+    Block
+      Return
+        100
+  Destructor public virtual overriding D::~D
+    Block
+Function main returns int
+  Block
+    Var d : class D
+    Var p : pointer to class B
+      init:
+        Unary &
+          d
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member ->bare
+              p
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member ->viaThis
+              p
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+    [on exit: destroy d]
+
+class B  size=8 align=8  [has vptr]
+     +0  __vptr (8 bytes)
+    vtable[0] = B::tag
+    vtable[1] = B::~B
+    construct: set vptr -> B() body
+    destroy:   ~B() body -> reset vptr
+
+class D  size=8 align=8  [has vptr]
+     +0  __vptr (8 bytes)
+    vtable[0] = D::tag
+    vtable[1] = D::~D
+    construct: base B -> set vptr -> D() body
+    destroy:   ~D() body -> reset vptr -> base B
+
+vtable B__vtable
+    [0] B__tag$v
+    [1] B__dtor
+
+vtable D__vtable
+    [0] D__tag$v
+    [1] D__dtor
+
+function B__tag$v   ; B::tag
+  #0 this  8 bytes  (param)
+    %0 = const 1
+            ret %0
+
+function B__dtor   ; B::~B
+  #0 this  8 bytes  (param)
+            ret
+
+function B__bare$v   ; B::bare
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = vtable [%1] slot 0
+    %3 = call.ind %2(%1)
+            ret %3
+
+function B__viaThis$v   ; B::viaThis
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = vtable [%1] slot 0
+    %3 = call.ind %2(%1)
+            ret %3
+
+function D__tag$v   ; D::tag
+  #0 this  8 bytes  (param)
+    %0 = const 100
+            ret %0
+
+function D__dtor   ; D::~D
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+            call B__dtor(%1)
+            ret
+
+function main
+  #0 d  8 bytes
+  #1 p  8 bytes
+            call __global_init()
+    %0 = local #0
+    %1 = global D__vtable
+    %2 = field %0 +0
+            store [%2] <- %1 :8
+    %3 = local #0
+    %4 = local #1
+            store [%4] <- %3 :8
+    %5 = local #1
+    %6 = load [%5] :8
+    %7 = call B__bare$v(%6)
+            call print_int(%7)
+    %8 = local #1
+    %9 = load [%8] :8
+    %10 = call B__viaThis$v(%9)
+            call print_int(%10)
+            call print_line()
+    %11 = const 0
+    %12 = local #0
+            call D__dtor(%12)
+            ret %11
+
+function __global_init
+            ret
+
+function __global_fini
+            ret

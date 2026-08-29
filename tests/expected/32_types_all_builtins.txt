@@ -140,3 +140,6 @@ function __global_init
     %35 = iresize %34 :8 signed
             store [%33] <- %35 :8
             ret
+
+function __global_fini
+            ret

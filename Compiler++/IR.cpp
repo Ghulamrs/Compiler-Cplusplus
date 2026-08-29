@@ -80,31 +80,35 @@ const char *irOpName(IROp op) {
 // and a class by name.  Readable in a dump, and unique.
 static std::string typeCode(cc::Type *t) {
     if (!t) return "v";
-    if (cc::PointerType *pt = dynamic_cast<cc::PointerType*>(t)) return "P" + typeCode(pt->base);
-    if (cc::ArrayType *at = dynamic_cast<cc::ArrayType*>(t)) return "P" + typeCode(at->element);
+    // The mangler and the semantic pass must mean the same thing by
+    // "signature", or two distinct overloads end up sharing one symbol.
+    // 'K' is const, as in the Itanium ABI this borrows its spirit from.
+    const std::string k = t->isConst ? "K" : "";
+    if (cc::PointerType *pt = dynamic_cast<cc::PointerType*>(t)) return k + "P" + typeCode(pt->base);
+    if (cc::ArrayType *at = dynamic_cast<cc::ArrayType*>(t)) return k + "P" + typeCode(at->element);
     if (cc::BuiltinType *bt = dynamic_cast<cc::BuiltinType*>(t)) {
         switch (bt->kind) {
-        case cc::BK_Void:   return "v";
-        case cc::BK_Char:   return "c";
-        case cc::BK_SChar:  return "a";
-        case cc::BK_UChar:  return "h";
-        case cc::BK_Short:  return "s";
-        case cc::BK_UShort: return "t";
-        case cc::BK_Int:    return "i";
-        case cc::BK_UInt:   return "j";
-        case cc::BK_Long:   return "l";
-        case cc::BK_ULong:  return "m";
-        case cc::BK_Float:  return "f";
-        case cc::BK_Double: return "d";
+        case cc::BK_Void:   return k + "v";
+        case cc::BK_Char:   return k + "c";
+        case cc::BK_SChar:  return k + "a";
+        case cc::BK_UChar:  return k + "h";
+        case cc::BK_Short:  return k + "s";
+        case cc::BK_UShort: return k + "t";
+        case cc::BK_Int:    return k + "i";
+        case cc::BK_UInt:   return k + "j";
+        case cc::BK_Long:   return k + "l";
+        case cc::BK_ULong:  return k + "m";
+        case cc::BK_Float:  return k + "f";
+        case cc::BK_Double: return k + "d";
         }
     }
-    if (dynamic_cast<cxx::BoolType*>(t)) return "b";
+    if (dynamic_cast<cxx::BoolType*>(t)) return k + "b";
     if (cxx::ReferenceType *rt = dynamic_cast<cxx::ReferenceType*>(t)) {
         return "R" + typeCode(rt->base);
     }
     if (cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(t)) {
         std::ostringstream ss;
-        ss << ct->className.size() << ct->className;
+        ss << k << ct->className.size() << ct->className;
         return ss.str();
     }
     return "X";
@@ -120,8 +124,12 @@ std::string mangleSignature(const std::vector<cc::VarDecl*> &params) {
 }
 
 std::string mangleOverload(const std::string &className, const std::string &name,
-                           const std::vector<cc::VarDecl*> &params) {
-    return mangleFunction(className, name) + "$" + mangleSignature(params);
+                           const std::vector<cc::VarDecl*> &params, bool isConstMethod) {
+    // A const member function is a different function from its non-const twin,
+    // so it needs a different symbol -- otherwise the pair a container declares
+    // would collide.
+    return mangleFunction(className, name) + "$" + mangleSignature(params)
+         + (isConstMethod ? "K" : "");
 }
 
 std::string mangleFunction(const std::string &className, const std::string &name) {

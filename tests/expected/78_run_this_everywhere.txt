@@ -111,6 +111,8 @@ Class D : public C
         Call
           Member ->get
             this
+  Destructor public D::~D
+    Block
 Function main returns int
   Block
     Var a : class C
@@ -261,7 +263,7 @@ function C__self$v   ; C::self
 
 function C__twin$v   ; C::twin
   #0 this  8 bytes  (param)
-  #1 __ret  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
     %0 = local #1
     %1 = load [%0] :8
     %2 = local #0
@@ -271,7 +273,7 @@ function C__twin$v   ; C::twin
 
 function C__add$1C   ; C::add
   #0 this  8 bytes  (param)
-  #1 __ret  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
   #2 o  4 bytes  (param)
   #3 r  4 bytes
     %0 = local #3
@@ -297,9 +299,9 @@ function C__add$1C   ; C::add
 
 function C__operator+$1C   ; C::operator+
   #0 this  8 bytes  (param)
-  #1 __ret  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
   #2 o  4 bytes  (param)
-  #3 __result  4 bytes
+  #3 $result  4 bytes
     %0 = local #1
     %1 = load [%0] :8
     %2 = local #0
@@ -312,7 +314,7 @@ function C__operator+$1C   ; C::operator+
 
 function C__operator+=$1C   ; C::operator+=
   #0 this  8 bytes  (param)
-  #1 __ret  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
   #2 o  4 bytes  (param)
     %0 = local #0
     %1 = load [%0] :8
@@ -365,11 +367,18 @@ function D__viaBase$v   ; D::viaBase
     %2 = call C__get$v(%1)
             ret %2
 
+function D__dtor   ; D::~D
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+            call C__dtor(%1)
+            ret
+
 function main
   #0 a  4 bytes
-  #1 __result  4 bytes
-  #2 __result  4 bytes
-  #3 __result  4 bytes
+  #1 $result  4 bytes
+  #2 $result  4 bytes
+  #3 $result  4 bytes
   #4 d  4 bytes
             call __global_init()
     %0 = local #0
@@ -419,10 +428,13 @@ function main
             call print_line()
     %33 = const 0
     %34 = local #4
-            call C__dtor(%34)
+            call D__dtor(%34)
     %35 = local #0
             call C__dtor(%35)
             ret %33
 
 function __global_init
+            ret
+
+function __global_fini
             ret

@@ -223,7 +223,7 @@ function Money__get$v   ; Money::get
 
 function Money__operator+$5Money   ; Money::operator+
   #0 this  8 bytes  (param)
-  #1 __ret  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
   #2 o  4 bytes  (param)
   #3 r  4 bytes
     %0 = local #3
@@ -246,7 +246,7 @@ function Money__operator+$5Money   ; Money::operator+
             ret %12
 
 function operator*$5Moneyi   ; operator*
-  #0 __ret  8 bytes  (param)
+  #0 $ret  8 bytes  (param)
   #1 m  4 bytes  (param)
   #2 k  4 bytes  (param)
   #3 r  4 bytes
@@ -280,7 +280,7 @@ function operator<$5Money5Money   ; operator<
             ret %6
 
 function operator*$i5Money   ; operator*
-  #0 __ret  8 bytes  (param)
+  #0 $ret  8 bytes  (param)
   #1 k  4 bytes  (param)
   #2 m  4 bytes  (param)
   #3 r  4 bytes
@@ -303,14 +303,14 @@ function main
   #0 a  4 bytes
   #1 b  4 bytes
   #2 c  4 bytes
-  #3 __result  4 bytes
+  #3 $result  4 bytes
   #4 d  4 bytes
-  #5 __result  4 bytes
+  #5 $result  4 bytes
   #6 e  4 bytes
-  #7 __result  4 bytes
+  #7 $result  4 bytes
   #8 f  4 bytes
-  #9 __result  4 bytes
-  #10 __result  4 bytes
+  #9 $result  4 bytes
+  #10 $result  4 bytes
             call __global_init()
     %0 = local #0
             call Money__ctor$v(%0)
@@ -380,4 +380,7 @@ function main
             ret %45
 
 function __global_init
+            ret
+
+function __global_fini
             ret

@@ -117,7 +117,10 @@ struct Image {
     std::vector<FuncImage> functions;
     std::vector<unsigned char> staticData;
     int entry;                      // index of main, or -1
-    Image() : entry(-1) {}
+    // Run after the entry function returns: global objects are destroyed
+    // there, because there is no scope in the program that owns them.
+    int fini;
+    Image() : entry(-1), fini(-1) {}
 
     void disassemble() const;
 
@@ -130,7 +133,7 @@ struct Image {
     bool read(const std::string &path, std::string &error);
 
     static const unsigned long Magic   = 0x31425843UL;  // "CXB1"
-    static const unsigned long Version = 3;   // v2 localFloat, v3 localObject
+    static const unsigned long Version = 4;   // v2 localFloat, v3 localObject, v4 fini
 };
 
 // Functions the VM supplies.  A program gets them by DECLARING one without a
@@ -143,6 +146,9 @@ enum NativeId {
     NAT_PrintDouble,
     NAT_PrintString,
     NAT_PrintLine,
+    // The error stream, so `cerr` is actually diagnosable output and survives
+    // redirecting stdout.
+    NAT_ErrInt, NAT_ErrChar, NAT_ErrDouble, NAT_ErrString, NAT_ErrLine,
     // Maths.  There is no <cmath> to include, so these are declared the same
     // way everything else is: `double sqrt(double);` with no body.
     NAT_Sqrt, NAT_Sin, NAT_Cos, NAT_Tan,

@@ -93,7 +93,7 @@ function main
   #0 x  4 bytes
   #1 y  4 bytes
   #2 z  4 bytes
-  #3 __sc  4 bytes
+  #3 $sc  4 bytes
   #4 i  4 bytes
             call __global_init()
     %0 = const 2
@@ -184,4 +184,7 @@ function main
             ret %58
 
 function __global_init
+            ret
+
+function __global_fini
             ret

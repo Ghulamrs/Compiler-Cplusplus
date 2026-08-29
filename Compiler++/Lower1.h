@@ -70,9 +70,11 @@ private:
     virtual bool isReferenceType(cc::Type *t);
     virtual cc::Type *referentType(cc::Type *t);
     virtual void initGlobal(cc::VarDecl *vd, IRReg addr);
+    virtual void destroyGlobal(cc::VarDecl *vd);
     virtual bool isObjectType(cc::Type *t);
+    virtual void reassertVPtr(cc::Type *t, IRReg addr, int line);
     bool isAddressable(cc::Expr *e) const;
-    bool yieldsObject(cc::Expr *e) const;
+    virtual bool yieldsObject(cc::Expr *e) const;
     // An array of objects: its element class, and how many there are across
     // every dimension.  0 when the type is not one.
     ClassDecl *elementClassOf(cc::Type *t, long &count) const;
@@ -81,6 +83,8 @@ private:
     // An overloaded operator, lowered as the method call it is.
     IRReg emitOperatorCall(cc::Function *op, cc::Expr *lhsExpr, cc::Expr *rhsExpr, int line);
     IRReg lowerOperandFor(cc::Type *want, cc::Expr *e, int line);
+    virtual IRReg lowerByValueObject(cc::Type *want, cc::Expr *e, int line);
+    virtual void destroyArgTempsDownTo(std::size_t mark, int line);
     virtual IRReg lowerIndexOperator(cc::IndexExpr *e);
     // Construct or destroy `count` objects laid end to end from `base`.
     void emitArrayConstruct(ClassDecl *cd, IRReg base, long count, int elemSize, int line);
@@ -109,6 +113,7 @@ private:
     bool classHasDestructor(ClassDecl *cd) const;
     // A field that IS an object, as opposed to a pointer or reference to one.
     ClassDecl *classOfMemberType(cc::Type *t) const;
+    ClassDecl *classOfMemberType(cc::Type *t, long &count) const;
 };
 
 } // namespace cxx

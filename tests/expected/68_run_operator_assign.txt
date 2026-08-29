@@ -109,7 +109,7 @@ function Acc__ctor$v   ; Acc::Acc
 
 function Acc__operator=$3Acc   ; Acc::operator=
   #0 this  8 bytes  (param)
-  #1 __ret  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
   #2 o  4 bytes  (param)
     %0 = local #2
     %1 = field %0 +0
@@ -142,7 +142,7 @@ function Plain__ctor$v   ; Plain::Plain
 function main
   #0 a  4 bytes
   #1 b  4 bytes
-  #2 __result  4 bytes
+  #2 $result  4 bytes
   #3 p  4 bytes
   #4 q  4 bytes
             call __global_init()
@@ -183,4 +183,7 @@ function main
             ret %22
 
 function __global_init
+            ret
+
+function __global_fini
             ret

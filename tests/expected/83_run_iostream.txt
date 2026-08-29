@@ -80,6 +80,11 @@ class __endl_t  size=4 align=4
     construct: field _ -> __endl_t() body
     destroy:   ~__endl_t() body -> field _
 
+class errstream  size=4 align=4
+    +0  _ (4 bytes)
+    construct: field _ -> errstream() body
+    destroy:   ~errstream() body -> field _
+
 class ostream  size=4 align=4
     +0  _ (4 bytes)
     construct: field _ -> ostream() body
@@ -120,7 +125,7 @@ function ostream__ctor$v   ; ostream::ostream
 
 function ostream__operator<<$i   ; ostream::operator<<
   #0 this  8 bytes  (param)
-  #1 __ret  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
   #2 n  4 bytes  (param)
     %0 = local #2
     %1 = load [%0] :4
@@ -134,7 +139,7 @@ function ostream__operator<<$i   ; ostream::operator<<
 
 function ostream__operator<<$l   ; ostream::operator<<
   #0 this  8 bytes  (param)
-  #1 __ret  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
   #2 n  8 bytes  (param)
     %0 = local #2
     %1 = load [%0] :8
@@ -149,7 +154,7 @@ function ostream__operator<<$l   ; ostream::operator<<
 
 function ostream__operator<<$s   ; ostream::operator<<
   #0 this  8 bytes  (param)
-  #1 __ret  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
   #2 n  2 bytes  (param)
     %0 = local #2
     %1 = load [%0] :2
@@ -164,7 +169,7 @@ function ostream__operator<<$s   ; ostream::operator<<
 
 function ostream__operator<<$d   ; ostream::operator<<
   #0 this  8 bytes  (param)
-  #1 __ret  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
   #2 d  8 bytes  (param)
     %0 = local #2
     %1 = load [%0] :8f
@@ -178,7 +183,7 @@ function ostream__operator<<$d   ; ostream::operator<<
 
 function ostream__operator<<$f   ; ostream::operator<<
   #0 this  8 bytes  (param)
-  #1 __ret  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
   #2 f  4 bytes  (param)
     %0 = local #2
     %1 = load [%0] :4f
@@ -193,7 +198,7 @@ function ostream__operator<<$f   ; ostream::operator<<
 
 function ostream__operator<<$c   ; ostream::operator<<
   #0 this  8 bytes  (param)
-  #1 __ret  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
   #2 c  1 bytes  (param)
     %0 = local #2
     %1 = load [%0] :1
@@ -208,7 +213,7 @@ function ostream__operator<<$c   ; ostream::operator<<
 
 function ostream__operator<<$Pc   ; ostream::operator<<
   #0 this  8 bytes  (param)
-  #1 __ret  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
   #2 s  8 bytes  (param)
     %0 = local #2
     %1 = load [%0] :8
@@ -222,7 +227,7 @@ function ostream__operator<<$Pc   ; ostream::operator<<
 
 function ostream__operator<<$b   ; ostream::operator<<
   #0 this  8 bytes  (param)
-  #1 __ret  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
   #2 b  1 bytes  (param)
     %0 = local #2
     %1 = load [%0] :1
@@ -237,7 +242,7 @@ function ostream__operator<<$b   ; ostream::operator<<
 
 function ostream__operator<<$8__endl_t   ; ostream::operator<<
   #0 this  8 bytes  (param)
-  #1 __ret  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
   #2 e  4 bytes  (param)
             call print_line()
     %0 = local #1
@@ -247,31 +252,171 @@ function ostream__operator<<$8__endl_t   ; ostream::operator<<
             memcpy [%1] <- [%3] :4
             ret %1
 
+function errstream__ctor$v   ; errstream::errstream
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = const 0
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+            store [%5] <- %2 :4
+            ret
+
+function errstream__operator<<$i   ; errstream::operator<<
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 n  4 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :4
+            call err_int(%1)
+    %2 = local #1
+    %3 = load [%2] :8
+    %4 = local #0
+    %5 = load [%4] :8
+            memcpy [%3] <- [%5] :4
+            ret %3
+
+function errstream__operator<<$l   ; errstream::operator<<
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 n  8 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :8
+    %2 = iresize %1 :4 signed
+            call err_int(%2)
+    %3 = local #1
+    %4 = load [%3] :8
+    %5 = local #0
+    %6 = load [%5] :8
+            memcpy [%4] <- [%6] :4
+            ret %4
+
+function errstream__operator<<$s   ; errstream::operator<<
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 n  2 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :2
+    %2 = iresize %1 :4 signed
+            call err_int(%2)
+    %3 = local #1
+    %4 = load [%3] :8
+    %5 = local #0
+    %6 = load [%5] :8
+            memcpy [%4] <- [%6] :4
+            ret %4
+
+function errstream__operator<<$d   ; errstream::operator<<
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 d  8 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :8f
+            call err_double(%1)
+    %2 = local #1
+    %3 = load [%2] :8
+    %4 = local #0
+    %5 = load [%4] :8
+            memcpy [%3] <- [%5] :4
+            ret %3
+
+function errstream__operator<<$f   ; errstream::operator<<
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 f  4 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :4f
+    %2 = fresize %1 :8
+            call err_double(%2)
+    %3 = local #1
+    %4 = load [%3] :8
+    %5 = local #0
+    %6 = load [%5] :8
+            memcpy [%4] <- [%6] :4
+            ret %4
+
+function errstream__operator<<$c   ; errstream::operator<<
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 c  1 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :1
+    %2 = iresize %1 :4 signed
+            call err_char(%2)
+    %3 = local #1
+    %4 = load [%3] :8
+    %5 = local #0
+    %6 = load [%5] :8
+            memcpy [%4] <- [%6] :4
+            ret %4
+
+function errstream__operator<<$Pc   ; errstream::operator<<
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 s  8 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :8
+            call err_string(%1)
+    %2 = local #1
+    %3 = load [%2] :8
+    %4 = local #0
+    %5 = load [%4] :8
+            memcpy [%3] <- [%5] :4
+            ret %3
+
+function errstream__operator<<$b   ; errstream::operator<<
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 b  1 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :1
+    %2 = iresize %1 :4 unsigned
+            call err_int(%2)
+    %3 = local #1
+    %4 = load [%3] :8
+    %5 = local #0
+    %6 = load [%5] :8
+            memcpy [%4] <- [%6] :4
+            ret %4
+
+function errstream__operator<<$8__endl_t   ; errstream::operator<<
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 e  4 bytes  (param)
+            call err_line()
+    %0 = local #1
+    %1 = load [%0] :8
+    %2 = local #0
+    %3 = load [%2] :8
+            memcpy [%1] <- [%3] :4
+            ret %1
+
 function main
-  #0 __result  4 bytes
-  #1 __result  4 bytes
-  #2 __result  4 bytes
-  #3 __result  4 bytes
-  #4 __result  4 bytes
-  #5 __result  4 bytes
+  #0 $result  4 bytes
+  #1 $result  4 bytes
+  #2 $result  4 bytes
+  #3 $result  4 bytes
+  #4 $result  4 bytes
+  #5 $result  4 bytes
   #6 a  4 bytes
-  #7 __result  4 bytes
-  #8 __result  4 bytes
-  #9 __result  4 bytes
-  #10 __result  4 bytes
-  #11 __result  4 bytes
+  #7 $result  4 bytes
+  #8 $result  4 bytes
+  #9 $result  4 bytes
+  #10 $result  4 bytes
+  #11 $result  4 bytes
   #12 c  1 bytes
-  #13 __result  4 bytes
-  #14 __result  4 bytes
+  #13 $result  4 bytes
+  #14 $result  4 bytes
   #15 t  1 bytes
-  #16 __result  4 bytes
-  #17 __result  4 bytes
+  #16 $result  4 bytes
+  #17 $result  4 bytes
   #18 r  8 bytes
-  #19 __result  4 bytes
-  #20 __result  4 bytes
-  #21 __result  4 bytes
-  #22 __result  4 bytes
-  #23 __result  4 bytes
+  #19 $result  4 bytes
+  #20 $result  4 bytes
+  #21 $result  4 bytes
+  #22 $result  4 bytes
+  #23 $result  4 bytes
             call __global_init()
     %0 = global cout
     %1 = local #0
@@ -360,10 +505,10 @@ function main
     %80 = global cerr
     %81 = local #22
     %82 = straddr str5
-    %83 = call ostream__operator<<$Pc(%80, %81, %82)
+    %83 = call errstream__operator<<$Pc(%80, %81, %82)
     %84 = local #23
     %85 = global endl
-    %86 = call ostream__operator<<$8__endl_t(%83, %84, %85)
+    %86 = call errstream__operator<<$8__endl_t(%83, %84, %85)
     %87 = const 0
             ret %87
 
@@ -373,5 +518,8 @@ function __global_init
     %1 = global cout
             call ostream__ctor$v(%1)
     %2 = global cerr
-            call ostream__ctor$v(%2)
+            call errstream__ctor$v(%2)
+            ret
+
+function __global_fini
             ret

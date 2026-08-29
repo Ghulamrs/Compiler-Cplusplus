@@ -80,7 +80,7 @@ function Acc__ctor$v   ; Acc::Acc
 
 function Acc__operator<<$i   ; Acc::operator<<
   #0 this  8 bytes  (param)
-  #1 __ret  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
   #2 n  4 bytes  (param)
     %0 = local #0
     %1 = load [%0] :8
@@ -114,8 +114,8 @@ function Acc__operator()$i   ; Acc::operator()
 
 function main
   #0 a  4 bytes
-  #1 __result  4 bytes
-  #2 __result  4 bytes
+  #1 $result  4 bytes
+  #2 $result  4 bytes
             call __global_init()
     %0 = local #0
             call Acc__ctor$v(%0)
@@ -141,4 +141,7 @@ function main
             ret %15
 
 function __global_init
+            ret
+
+function __global_fini
             ret

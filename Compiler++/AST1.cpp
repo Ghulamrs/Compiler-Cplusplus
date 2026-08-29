@@ -122,6 +122,19 @@ void BoolExpr::print(int indent) {
     std::cout << (value ? "true" : "false") << std::endl;
 }
 
+TempExpr::~TempExpr() {
+    delete type;
+    for (std::size_t i = 0; i < args.size(); ++i) delete args[i];
+}
+
+void TempExpr::print(int indent) {
+    printIndent(indent);
+    std::cout << "Temporary ";
+    if (type) type->print(0);
+    else std::cout << "<none>" << std::endl;
+    for (std::size_t i = 0; i < args.size(); ++i) args[i]->print(indent + 1);
+}
+
 NewExpr::~NewExpr() {
     delete allocType;
     for (std::size_t i = 0; i < args.size(); ++i) delete args[i];

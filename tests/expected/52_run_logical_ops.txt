@@ -86,13 +86,13 @@ Function main returns int
       0
 
 function main
-  #0 __sc  4 bytes
-  #1 __sc  4 bytes
-  #2 __sc  4 bytes
-  #3 __sc  4 bytes
+  #0 $sc  4 bytes
+  #1 $sc  4 bytes
+  #2 $sc  4 bytes
+  #3 $sc  4 bytes
   #4 a  4 bytes
   #5 b  4 bytes
-  #6 __sc  4 bytes
+  #6 $sc  4 bytes
             call __global_init()
     %0 = const 2
     %1 = const 0
@@ -210,4 +210,7 @@ function main
             ret %76
 
 function __global_init
+            ret
+
+function __global_fini
             ret

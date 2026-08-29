@@ -31,7 +31,8 @@ Class Point
       Return
         Binary *
           Call
-            sum
+            Member ->sum
+              this
           k
   Method public virtual Point::area returns int
     Block
@@ -314,4 +315,7 @@ function main
             ret %17
 
 function __global_init
+            ret
+
+function __global_fini
             ret

@@ -166,7 +166,15 @@ bool SemanticAnalyzer::isNarrowing(cc::BuiltinKind from, cc::BuiltinKind to) {
     return false;
 }
 
+// const travels with the copy: a clone that dropped it silently turned every
+// const type back into a plain one.
 cc::Type *SemanticAnalyzer::cloneType(cc::Type *t) {
+    cc::Type *c = cloneTypeShape(t);
+    if (c && t) c->isConst = t->isConst;
+    return c;
+}
+
+cc::Type *SemanticAnalyzer::cloneTypeShape(cc::Type *t) {
     if (!t) return 0;
     cc::BuiltinType *bt = dynamic_cast<cc::BuiltinType*>(t);
     if (bt) return new cc::BuiltinType(bt->kind);
@@ -237,6 +245,25 @@ std::string SemanticAnalyzer::countText(std::size_t n) {
 bool SemanticAnalyzer::isVoid(cc::Type *t) {
     cc::BuiltinKind k;
     return builtinKindOf(t, k) && k == cc::BK_Void;
+}
+
+bool SemanticAnalyzer::sameDeclaredType(cc::Type *a, cc::Type *b) {
+    if (!a || !b) return a == b;
+    if (a->isConst != b->isConst) return false;
+
+    cxx::ReferenceType *ra = dynamic_cast<cxx::ReferenceType*>(a);
+    cxx::ReferenceType *rb = dynamic_cast<cxx::ReferenceType*>(b);
+    if (ra || rb) return ra && rb && sameDeclaredType(ra->base, rb->base);
+
+    cc::PointerType *pa = dynamic_cast<cc::PointerType*>(a);
+    cc::PointerType *pb = dynamic_cast<cc::PointerType*>(b);
+    if (pa || pb) return pa && pb && sameDeclaredType(pa->base, pb->base);
+
+    cc::ArrayType *aa = dynamic_cast<cc::ArrayType*>(a);
+    cc::ArrayType *ab = dynamic_cast<cc::ArrayType*>(b);
+    if (aa || ab) return aa && ab && sameDeclaredType(aa->element, ab->element);
+
+    return sameType(a, b);
 }
 
 bool SemanticAnalyzer::sameType(cc::Type *a, cc::Type *b) {
@@ -416,6 +443,11 @@ bool SemanticAnalyzer::objectIsConst(cxx::MemberAccessExpr *ma) {
     return pt && pt->base && pt->base->isConst;
 }
 
+bool SemanticAnalyzer::isNonConstReferenceTo(cc::Type *t) {
+    cxx::ReferenceType *rt = dynamic_cast<cxx::ReferenceType*>(t);
+    return rt && rt->base && !rt->base->isConst;
+}
+
 bool SemanticAnalyzer::isConstExpr(cc::Expr *e) {
     if (!e) return false;
 
@@ -446,8 +478,14 @@ bool SemanticAnalyzer::isConstExpr(cc::Expr *e) {
     // `char* const p` freezes p, not what p points at, so p[0] stays writable
     // and the pointee's own const decides.
     if (cc::IndexExpr *ix = dynamic_cast<cc::IndexExpr*>(e)) {
+        // The one case that must NOT propagate is a const POINTER: `char* const
+        // p` freezes p, not what p points at.  Everything else that is const --
+        // a const array, a field of a const object, a field inside a const
+        // member function -- passes its constness to the element.
         cc::Type *bt = ix->base ? stripReference(ix->base->resolvedType) : 0;
-        if (dynamic_cast<cc::ArrayType*>(bt) && isConstExpr(ix->base)) return true;
+        const bool pointerItselfConst =
+            bt && dynamic_cast<cc::PointerType*>(bt) != 0 && bt->isConst;
+        if (!pointerItselfConst && isConstExpr(ix->base)) return true;
     }
 
     cc::Type *t = stripReference(e->resolvedType);
@@ -522,30 +560,48 @@ cxx::MethodDecl *SemanticAnalyzer::findCallOperator(cc::Type *ot, cc::CallExpr *
         error(call, std::string("'operator()' is ") + cxx::accessText(memberAccess(m))
                     + " in class '" + (owner ? owner->name : cd->name) + "'");
     }
+    checkConstUse(m, ot && stripReference(ot)->isConst, call);
     return m;
 }
 
 // operator[] takes one argument, so the index picks the overload.
 cxx::MethodDecl *SemanticAnalyzer::findIndexOperator(cxx::ClassDecl *cd, cc::Expr *index,
-                                                     cc::Type *it, cc::ASTNode *at) {
+                                                     cc::Type *it, bool objectConst,
+                                                     cc::ASTNode *at) {
     if (!cd) return 0;
     const std::vector<cc::Function*> cands = findMethods(cd, "operator[]");
+    // A container usually declares the pair -- `T& operator[](int)` beside
+    // `T operator[](int) const` -- so constness picks between them before the
+    // argument does.
     cxx::MethodDecl *exact = 0, *viable = 0;
-    for (std::size_t i = 0; i < cands.size(); ++i) {
-        cxx::MethodDecl *m = dynamic_cast<cxx::MethodDecl*>(cands[i]);
-        if (!m || m->params.size() != 1) continue;
-        cc::Type *want = m->params[0]->type;
-        if (it && sameType(it, stripReference(want))) { if (!exact) exact = m; continue; }
-        if (convertible(index, it, want))             { if (!viable) viable = m; }
+    for (int pass = 0; pass < 2 && !exact && !viable; ++pass) {
+        const bool wantConst = (pass == 0) ? objectConst : !objectConst;
+        for (std::size_t i = 0; i < cands.size(); ++i) {
+            cxx::MethodDecl *m = dynamic_cast<cxx::MethodDecl*>(cands[i]);
+            if (!m || m->params.size() != 1) continue;
+            if (m->isConstMethod != wantConst) continue;
+            cc::Type *want = m->params[0]->type;
+            if (it && sameType(it, stripReference(want))) { if (!exact) exact = m; continue; }
+            if (convertible(index, it, want))             { if (!viable) viable = m; }
+        }
     }
     cxx::MethodDecl *chosen = exact ? exact : viable;
     if (!chosen) return 0;
+    checkConstUse(chosen, objectConst, at);
     cxx::ClassDecl *owner = findClass(chosen->ownerClass);
     if (!memberIsAccessible(chosen, owner)) {
         error(at, std::string("'operator[]' is ") + cxx::accessText(memberAccess(chosen))
                   + " in class '" + (owner ? owner->name : cd->name) + "'");
     }
     return chosen;
+}
+
+// Every member reached through an object obeys the same const rule, whether it
+// is spelled f(), a.f(), a + b or a[i].  Keeping the check in one place is what
+// stops each new call form growing a hole of its own.
+void SemanticAnalyzer::checkConstUse(cxx::MethodDecl *m, bool objectConst, cc::ASTNode *at) {
+    if (!m || !objectConst || m->isConstMethod) return;
+    error(at, "'" + m->name + "' is not const, and the object here is");
 }
 
 cxx::MethodDecl *SemanticAnalyzer::findMemberOperator(cc::Type *lt, cc::BinaryOp op,
@@ -570,20 +626,18 @@ cxx::MethodDecl *SemanticAnalyzer::findMemberOperator(cc::Type *lt, cc::BinaryOp
         if (convertible(rhs, rt, want))               { if (!viable) viable = m; }
     }
 
+    // No member takes this operand -- decline QUIETLY, because a non-member
+    // may well take it.  Reporting here made `cout << myObject` impossible:
+    // ostream has member <<'s, so the free one was never reached.
     cxx::MethodDecl *chosen = exact ? exact : viable;
-    if (!chosen) {
-        // A member of that name exists but none of them takes this operand.
-        // Say so here rather than letting the builtin rules blame the types.
-        cxx::MethodDecl *any = dynamic_cast<cxx::MethodDecl*>(cands[0]);
-        if (any) error(at, "no '" + name + "' takes " + describe(rt));
-        return 0;
-    }
+    if (!chosen) return 0;
 
     cxx::ClassDecl *owner = findClass(chosen->ownerClass);
     if (!memberIsAccessible(chosen, owner)) {
         error(at, "'" + chosen->name + "' is " + cxx::accessText(memberAccess(chosen))
                   + " in class '" + (owner ? owner->name : ct->className) + "'");
     }
+    checkConstUse(chosen, lt && stripReference(lt)->isConst, at);
     return chosen;
 }
 
@@ -753,6 +807,45 @@ void SemanticAnalyzer::pushClassScope(cxx::ClassDecl *cd) {
 
 // Only a class object whose class or some base declares one.  A pointer never
 // does -- `delete` is explicit for a reason.
+// Does anything this class owns need destroying?  Its base, or a member that
+// is an object (an array of them counts).
+bool SemanticAnalyzer::needsDestructor(cxx::ClassDecl *cd) {
+    if (!cd) return false;
+    if (cd->dtor) return true;
+    for (cxx::ClassDecl *b = cd->base; b; b = b->base) if (b->dtor) return true;
+    for (std::size_t i = 0; i < cd->members.size(); ++i) {
+        cxx::FieldDecl *fd = dynamic_cast<cxx::FieldDecl*>(cd->members[i]);
+        if (fd && hasDestructor(fd->type)) return true;
+    }
+    return false;
+}
+
+void SemanticAnalyzer::synthesiseDestructors() {
+    // Repeat until nothing changes: giving one class a destructor can make a
+    // class that holds one need its own.
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        std::map<std::string, cxx::ClassDecl*>::iterator it;
+        for (it = classes.begin(); it != classes.end(); ++it) {
+            cxx::ClassDecl *cd = it->second;
+            if (!cd || cd->dtor || !needsDestructor(cd)) continue;
+            cxx::MethodDecl *d = new cxx::MethodDecl(0, "~" + cd->name, cxx::ACC_Public);
+            d->ownerClass = cd->name;
+            d->isDestructor = true;
+            d->isImplicit = true;
+            d->line = cd->line;
+            d->col = cd->col;
+            d->body = new cc::CompoundStmt();       // nothing of its own to do
+            d->body->line = cd->line;
+            d->body->col = cd->col;
+            cd->members.push_back(d);
+            cd->dtor = d;
+            changed = true;
+        }
+    }
+}
+
 bool SemanticAnalyzer::hasDestructor(cc::Type *t) {
     if (!t) return false;
     if (dynamic_cast<cc::PointerType*>(t)) return false;
@@ -816,7 +909,9 @@ void SemanticAnalyzer::checkClassInvariants(cxx::ClassDecl *cd) {
             }
         }
     }
-    if (polymorphic && cd->dtor && !cd->dtor->isVirtual) {
+    // Only advise about a destructor the user actually wrote; one the compiler
+    // generated is not theirs to make virtual.
+    if (polymorphic && cd->dtor && !cd->dtor->isVirtual && !cd->dtor->isImplicit) {
         diag.warning(cd->dtor->line, cd->dtor->col,
                      "class '" + cd->name + "' has virtual functions but a non-virtual destructor");
     }
@@ -986,6 +1081,10 @@ void SemanticAnalyzer::analyze(const std::vector<cc::Decl*> &units) {
     // 2b) give each out-of-line body to the member it belongs to, so the rest
     //     of the pass sees one complete class
     attachOutOfLineDefinitions(units);
+    // 2c) a class whose base or whose members need destroying needs a
+    //     destructor of its own, whether or not one was written.  Without it
+    //     emitEpilogue never runs and those members are never destroyed.
+    synthesiseDestructors();
     // 3) work out which methods override which, so virtualness is known before
     //    any body is analysed
     for (std::size_t i = 0; i < units.size(); ++i) {
@@ -1025,8 +1124,13 @@ void SemanticAnalyzer::collectClasses(const std::vector<cc::Decl*> &units) {
 bool SemanticAnalyzer::sameParams(cc::Function *a, cc::Function *b) {
     if (a->params.size() != b->params.size()) return false;
     for (std::size_t i = 0; i < a->params.size(); ++i) {
-        if (!sameType(a->params[i]->type, b->params[i]->type)) return false;
+        if (!sameDeclaredType(a->params[i]->type, b->params[i]->type)) return false;
     }
+    // A const member function is a different function from its non-const twin;
+    // declaring both is the ordinary container idiom, not a redeclaration.
+    cxx::MethodDecl *ma = dynamic_cast<cxx::MethodDecl*>(a);
+    cxx::MethodDecl *mb = dynamic_cast<cxx::MethodDecl*>(b);
+    if (ma && mb && ma->isConstMethod != mb->isConstMethod) return false;
     return true;
 }
 
@@ -1187,6 +1291,18 @@ void SemanticAnalyzer::analyzeFunction(cc::Function *fn) {
     currentClass = md ? md->ownerClass : std::string();
     currentFunction = fn;
     currentIsCtorOrDtor = md && (md->isConstructor || md->isDestructor);
+
+    // A by-value object parameter is a copy the callee owns, so the callee
+    // destroys it -- on every path out, which is what putting it in the body's
+    // exit list buys.  Appended after the locals, so it goes last.
+    if (fn->body) {
+        for (std::size_t i = 0; i < fn->params.size(); ++i) {
+            cc::VarDecl *p = fn->params[i];
+            if (p && !p->name.empty() && hasDestructor(p->type)) {
+                fn->body->destroyAtExit.push_back(p);
+            }
+        }
+    }
 
     if (md) pushClassScope(findClass(md->ownerClass));
 
@@ -1354,6 +1470,11 @@ void SemanticAnalyzer::analyzeStmt(cc::Stmt *s) {
         } else if (got && !convertible(rs->expr, got, currentReturnType)) {
             error(rs, "returning " + describe(got) + " from a function returning "
                       + describe(currentReturnType));
+        } else if (isNonConstReferenceTo(currentReturnType) && isConstExpr(rs->expr)) {
+            // Handing out a writable reference to something const gives the
+            // caller a way round every check.  A const member function
+            // returning T& to one of its own fields is the usual way in.
+            error(rs, "cannot return a non-const reference to something const");
         } else if (got) {
             warnIfNarrowing(rs->expr, got, currentReturnType, rs, "this return");
         }
@@ -1598,7 +1719,23 @@ cc::Type *SemanticAnalyzer::analyzeExprImpl(cc::Expr *e, bool &isLValue) {
     if (te) {
         if (currentClass.empty()) { error(te, "'this' used outside a member function"); return 0; }
         cxx::ClassType self(currentClass);
+        // Inside a const member function `this` points at a const object, so
+        // everything reached through it is const.
+        self.isConst = currentMethodIsConst;
         return makePointerTo(&self);
+    }
+
+    // T(args) -- an object built in place.  Its type is T; it is not an lvalue,
+    // because it has no name to be one under.
+    cxx::TempExpr *tmp = dynamic_cast<cxx::TempExpr*>(e);
+    if (tmp) {
+        checkTypeIsKnown(tmp->type, tmp, "a temporary");
+        cxx::ClassType *tct = dynamic_cast<cxx::ClassType*>(tmp->type);
+        cxx::ClassDecl *tcd = tct ? findClass(tct->className) : 0;
+        tmp->resolvedCtor = selectConstructor(tcd, tmp->args, tmp,
+                                              "a temporary " + describe(tmp->type));
+        isLValue = false;
+        return tmp->type;
     }
 
     cxx::NewExpr *ne = dynamic_cast<cxx::NewExpr*>(e);
@@ -1687,6 +1824,25 @@ cc::Type *SemanticAnalyzer::analyzeExprImpl(cc::Expr *e, bool &isLValue) {
         // Resolve the callee to a function without treating it as a value.
         cc::Function *fn = 0;
         cc::IdentExpr *cid = dynamic_cast<cc::IdentExpr*>(call->callee);
+        // A bare name inside a member function that names a method of this
+        // class IS `this->name`, and must resolve through the same path: the
+        // member path is where virtual dispatch, overload resolution by
+        // argument type, and the const check all live.  Resolving it here
+        // instead gave three different wrong answers.
+        if (cid && !currentClass.empty() && !symbols.lookupLocal(cid->name)) {
+            std::map<std::string, cxx::ClassDecl*>::iterator ci = classes.find(currentClass);
+            cxx::ClassDecl *self = (ci == classes.end()) ? 0 : ci->second;
+            if (self && !findMethods(self, cid->name).empty()) {
+                cxx::MemberAccessExpr *rewritten =
+                    new cxx::MemberAccessExpr(new cxx::ThisExpr(), cid->name, true);
+                rewritten->line = cid->line;
+                rewritten->col = cid->col;
+                delete call->callee;
+                call->callee = rewritten;
+                cid = 0;
+            }
+        }
+
         if (cid) {
             std::map<std::string, std::vector<cc::Function*> >::iterator ov =
                 overloads.find(cid->name);
@@ -1847,7 +2003,8 @@ cc::Type *SemanticAnalyzer::analyzeExprImpl(cc::Expr *e, bool &isLValue) {
         if (isClassType(bt)) {
             cxx::ClassDecl *cd = findClass(
                 dynamic_cast<cxx::ClassType*>(stripReference(bt))->className);
-            if (cxx::MethodDecl *op = findIndexOperator(cd, ie->index, it, ie)) {
+            if (cxx::MethodDecl *op = findIndexOperator(cd, ie->index, it,
+                                                       isConstExpr(ie->base), ie)) {
                 ie->resolvedOperator = op;
                 // T& out means the subscript names an object, so it may be
                 // assigned to -- which is the whole point of  s[i] = 'x'.

@@ -261,7 +261,7 @@ function main
   #4 fromZero  1 bytes
   #5 back  4 bytes
   #6 fl  1 bytes
-  #7 __sc  4 bytes
+  #7 $sc  4 bytes
   #8 p  8 bytes
   #9 hasP  1 bytes
   #10 d  8 bytes
@@ -402,4 +402,7 @@ function main
             ret %90
 
 function __global_init
+            ret
+
+function __global_fini
             ret

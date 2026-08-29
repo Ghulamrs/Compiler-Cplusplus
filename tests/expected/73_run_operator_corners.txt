@@ -154,6 +154,8 @@ Class Derived : public Base
     Block
       Return
         2
+  Destructor public virtual overriding Derived::~Derived
+    Block
 Function main returns int
   Block
     Var a : class V
@@ -352,7 +354,7 @@ class Derived  size=16 align=8  [has vptr]
      +0  __vptr (8 bytes)
     +8  x (4 bytes)  inherited from Base
     vtable[0] = Derived::who
-    vtable[1] = Base::~Base
+    vtable[1] = Derived::~Derived
     construct: base Base -> set vptr -> Derived() body
     destroy:   ~Derived() body -> reset vptr -> base Base
 
@@ -367,7 +369,7 @@ vtable Base__vtable
 
 vtable Derived__vtable
     [0] Derived__who$v
-    [1] Base__dtor
+    [1] Derived__dtor
 
 function V__ctor$v   ; V::V
   #0 this  8 bytes  (param)
@@ -382,7 +384,7 @@ function V__ctor$v   ; V::V
 
 function V__operator+$1V   ; V::operator+
   #0 this  8 bytes  (param)
-  #1 __ret  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
   #2 o  4 bytes  (param)
   #3 r  4 bytes
     %0 = local #3
@@ -406,7 +408,7 @@ function V__operator+$1V   ; V::operator+
 
 function V__operator+$i   ; V::operator+
   #0 this  8 bytes  (param)
-  #1 __ret  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
   #2 k  4 bytes  (param)
   #3 r  4 bytes
     %0 = local #3
@@ -429,7 +431,7 @@ function V__operator+$i   ; V::operator+
 
 function V__operator/$1V   ; V::operator/
   #0 this  8 bytes  (param)
-  #1 __ret  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
   #2 o  4 bytes  (param)
   #3 r  4 bytes
     %0 = local #3
@@ -453,7 +455,7 @@ function V__operator/$1V   ; V::operator/
 
 function V__operator%$1V   ; V::operator%
   #0 this  8 bytes  (param)
-  #1 __ret  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
   #2 o  4 bytes  (param)
   #3 r  4 bytes
     %0 = local #3
@@ -477,7 +479,7 @@ function V__operator%$1V   ; V::operator%
 
 function V__operator+=$1V   ; V::operator+=
   #0 this  8 bytes  (param)
-  #1 __ret  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
   #2 o  4 bytes  (param)
     %0 = local #0
     %1 = load [%0] :8
@@ -500,7 +502,7 @@ function V__operator+=$1V   ; V::operator+=
 
 function V__operator*=$i   ; V::operator*=
   #0 this  8 bytes  (param)
-  #1 __ret  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
   #2 k  4 bytes  (param)
     %0 = local #0
     %1 = load [%0] :8
@@ -520,7 +522,7 @@ function V__operator*=$i   ; V::operator*=
             memcpy [%11] <- [%13] :4
             ret %11
 
-function V__operator<$R1V   ; V::operator<
+function V__operator<$RK1V   ; V::operator<
   #0 this  8 bytes  (param)
   #1 o  8 bytes  (param)
     %0 = local #0
@@ -536,8 +538,8 @@ function V__operator<$R1V   ; V::operator<
 
 function V__twice$v   ; V::twice
   #0 this  8 bytes  (param)
-  #1 __ret  8 bytes  (param)
-  #2 __result  4 bytes
+  #1 $ret  8 bytes  (param)
+  #2 $result  4 bytes
     %0 = local #1
     %1 = load [%0] :8
     %2 = local #0
@@ -565,7 +567,7 @@ function Base__ctor$v   ; Base::Base
 
 function Base__operator+$4Base   ; Base::operator+
   #0 this  8 bytes  (param)
-  #1 __ret  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
   #2 o  16 bytes  (param)
   #3 r  16 bytes
     %0 = local #3
@@ -618,24 +620,31 @@ function Derived__who$v   ; Derived::who
     %0 = const 2
             ret %0
 
+function Derived__dtor   ; Derived::~Derived
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+            call Base__dtor(%1)
+            ret
+
 function main
   #0 a  4 bytes
   #1 b  4 bytes
-  #2 __result  4 bytes
-  #3 __result  4 bytes
-  #4 __result  4 bytes
-  #5 __result  4 bytes
-  #6 __result  4 bytes
+  #2 $result  4 bytes
+  #3 $result  4 bytes
+  #4 $result  4 bytes
+  #5 $result  4 bytes
+  #6 $result  4 bytes
   #7 arr  12 bytes
-  #8 __result  4 bytes
+  #8 $result  4 bytes
   #9 c  4 bytes
   #10 d  4 bytes
-  #11 __result  4 bytes
-  #12 __result  4 bytes
+  #11 $result  4 bytes
+  #12 $result  4 bytes
   #13 p  16 bytes
   #14 q  16 bytes
   #15 r  16 bytes
-  #16 __result  16 bytes
+  #16 $result  16 bytes
   #17 bp  8 bytes
             call __global_init()
     %0 = local #0
@@ -687,12 +696,12 @@ function main
             call print_line()
     %37 = local #0
     %38 = local #1
-    %39 = call V__operator<$R1V(%37, %38)
+    %39 = call V__operator<$RK1V(%37, %38)
     %40 = iresize %39 :4 unsigned
             call print_int(%40)
     %41 = local #1
     %42 = local #0
-    %43 = call V__operator<$R1V(%41, %42)
+    %43 = call V__operator<$RK1V(%41, %42)
     %44 = iresize %43 :4 unsigned
             call print_int(%44)
     %45 = local #7
@@ -781,30 +790,36 @@ function main
     %110 = call Base__operator+$4Base(%107, %108, %109)
     %111 = local #15
             memcpy [%111] <- [%110] :16
-    %112 = local #15
-    %113 = field %112 +8
-    %114 = load [%113] :4
-            call print_int(%114)
-    %115 = local #15
-    %116 = call Base__who$v(%115)
+    %112 = global Base__vtable
+    %113 = field %111 +0
+            store [%113] <- %112 :8
+    %114 = local #15
+    %115 = field %114 +8
+    %116 = load [%115] :4
             call print_int(%116)
-    %117 = local #13
-    %118 = local #17
-            store [%118] <- %117 :8
-    %119 = local #17
-    %120 = load [%119] :8
-    %121 = vtable [%120] slot 0
-    %122 = call.ind %121(%120)
-            call print_int(%122)
+    %117 = local #15
+    %118 = call Base__who$v(%117)
+            call print_int(%118)
+    %119 = local #13
+    %120 = local #17
+            store [%120] <- %119 :8
+    %121 = local #17
+    %122 = load [%121] :8
+    %123 = vtable [%122] slot 0
+    %124 = call.ind %123(%122)
+            call print_int(%124)
             call print_line()
-    %123 = const 0
-    %124 = local #15
-            call Base__dtor(%124)
-    %125 = local #14
-            call Base__dtor(%125)
-    %126 = local #13
+    %125 = const 0
+    %126 = local #15
             call Base__dtor(%126)
-            ret %123
+    %127 = local #14
+            call Derived__dtor(%127)
+    %128 = local #13
+            call Derived__dtor(%128)
+            ret %125
 
 function __global_init
+            ret
+
+function __global_fini
             ret

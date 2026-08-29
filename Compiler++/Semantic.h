@@ -64,6 +64,7 @@ private:
     std::vector<cc::Type*> ownedTypes;
     cc::Type *makeBuiltin(cc::BuiltinKind k);
     cc::Type *cloneType(cc::Type *t);
+    cc::Type *cloneTypeShape(cc::Type *t);
     cc::Type *makePointerTo(cc::Type *t);
 
     // passes
@@ -83,6 +84,10 @@ private:
     void recordScopeExitDestruction(cc::CompoundStmt *block,
                                     const std::vector<cc::VarDecl*> &declared);
     bool hasDestructor(cc::Type *t);
+    bool needsDestructor(cxx::ClassDecl *cd);
+    // A class that owns something destructible gets a destructor whether or
+    // not one was written -- otherwise nothing runs its members' destructors.
+    void synthesiseDestructors();
     void declareTopLevel(const std::vector<cc::Decl*> &units);
     void analyzeDecl(cc::Decl *d);
     void analyzeClass(cxx::ClassDecl *cd);
@@ -108,7 +113,7 @@ private:
                                cc::BinaryOp op, cc::ASTNode *at);
     cxx::MethodDecl *findCallOperator(cc::Type *ot, cc::CallExpr *call);
     cxx::MethodDecl *findIndexOperator(cxx::ClassDecl *cd, cc::Expr *index,
-                                       cc::Type *it, cc::ASTNode *at);
+                                       cc::Type *it, bool objectConst, cc::ASTNode *at);
     cxx::MethodDecl *findMemberOperator(cc::Type *lt, cc::BinaryOp op,
                                         cc::Expr *rhs, cc::Type *rt, cc::ASTNode *at);
     cc::Function *findFreeOperator(cc::Expr *lhs, cc::Type *lt,
@@ -118,7 +123,10 @@ private:
     // Does this expression name something declared const?  A member of a const
     // object is const too, which is what stops  a.x = 1  through a const A&.
     bool isConstExpr(cc::Expr *e);
+    static bool isNonConstReferenceTo(cc::Type *t);
     bool objectIsConst(cxx::MemberAccessExpr *ma);
+    // One const check for every form of member call.
+    void checkConstUse(cxx::MethodDecl *m, bool objectConst, cc::ASTNode *at);
     // Const may be added by a conversion, never removed.
     bool constQualificationOk(cc::Type *from, cc::Type *to);
     // Walks the base chain, most derived first -- which IS name hiding.
@@ -144,6 +152,12 @@ private:
     cc::Type *decay(cc::Type *t);
     static std::string describe(cc::Type *t);
     static bool sameType(cc::Type *a, cc::Type *b);
+    // Two questions that are not the same one: sameType asks whether two
+    // VALUES have the same type (references stripped, const ignored), which is
+    // what conversions need; sameDeclaredType asks whether two DECLARATIONS
+    // are identical, which is what a signature is.  Conflating them let a
+    // friend grant to peek(const A&) reach peek(A&).
+    static bool sameDeclaredType(cc::Type *a, cc::Type *b);
     // sameType plus the upcasts single inheritance makes free.
     bool canConvert(cc::Type *from, cc::Type *to);
     // canConvert, plus the rule needing the EXPRESSION: literal 0 is the null

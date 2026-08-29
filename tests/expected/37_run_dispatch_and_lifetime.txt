@@ -329,3 +329,6 @@ function main
 
 function __global_init
             ret
+
+function __global_fini
+            ret

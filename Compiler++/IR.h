@@ -231,7 +231,8 @@ private:
 std::string mangleSignature(const std::vector<cc::VarDecl*> &params);
 std::string mangleFunction(const std::string &className, const std::string &name);
 std::string mangleOverload(const std::string &className, const std::string &name,
-                           const std::vector<cc::VarDecl*> &params);
+                           const std::vector<cc::VarDecl*> &params,
+                           bool isConstMethod = false);
 std::string mangleConstructor(const std::string &className,
                               const std::vector<cc::VarDecl*> &params);
 std::string mangleDestructor(const std::string &className);

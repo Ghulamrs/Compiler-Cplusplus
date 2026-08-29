@@ -1,0 +1,86 @@
+Function print_int returns void
+  param:
+    Var n : int
+Function print_line returns void
+Function main returns int
+  Block
+    Var x : int
+      init:
+        10
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          x
+    Block
+      Var x : int
+        init:
+          99
+      ExprStmt
+        Call
+          print_int
+          arg 0:
+            x
+      Block
+        Var x : int
+          init:
+            7
+        ExprStmt
+          Call
+            print_int
+            arg 0:
+              x
+      ExprStmt
+        Call
+          print_int
+          arg 0:
+            x
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          x
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+function main
+  #0 x  4 bytes
+  #1 x  4 bytes
+  #2 x  4 bytes
+            call __global_init()
+    %0 = const 10
+    %1 = local #0
+            store [%1] <- %0 :4
+    %2 = local #0
+    %3 = load [%2] :4
+            call print_int(%3)
+    %4 = const 99
+    %5 = local #1
+            store [%5] <- %4 :4
+    %6 = local #1
+    %7 = load [%6] :4
+            call print_int(%7)
+    %8 = const 7
+    %9 = local #2
+            store [%9] <- %8 :4
+    %10 = local #2
+    %11 = load [%10] :4
+            call print_int(%11)
+    %12 = local #1
+    %13 = load [%12] :4
+            call print_int(%13)
+    %14 = local #0
+    %15 = load [%14] :4
+            call print_int(%15)
+            call print_line()
+    %16 = const 0
+            ret %16
+
+function __global_init
+            ret
+
+function __global_fini
+            ret

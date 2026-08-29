@@ -588,6 +588,32 @@ QualifiedName *Parser::parseQualifiedName() {
 
 // Numbers, identifiers and parentheses are C's; these are not.
 cc::Expr *Parser::parsePrimary() {
+    // ClassName ( args )  builds an unnamed object.  Only a name that IS a
+    // class starts one, so an ordinary call is untouched.
+    if (cur.kind == TOK_IDENTIFIER && namesAClass(cur.text)) {
+        const State st = save();
+        const int line = cur.line, col = cur.col;
+        const std::string cname = cur.text;
+        advance();
+        if (cur.kind == TOK_LPAREN) {
+            advance();
+            TempExpr *t = new TempExpr(new ClassType(cname));
+            t->line = line;
+            t->col = col;
+            t->type->line = line;
+            t->type->col = col;
+            while (cur.kind != TOK_RPAREN && cur.kind != TOK_EOF) {
+                cc::Expr *a = parseExpression();
+                if (!a) break;
+                t->args.push_back(a);
+                if (!match(TOK_COMMA)) break;
+            }
+            expect(TOK_RPAREN, "after the arguments of a temporary");
+            return t;
+        }
+        restore(st);
+    }
+
     const int line = cur.line, col = cur.col;
 
     if (cur.kind == TOK_TRUE || cur.kind == TOK_FALSE) {

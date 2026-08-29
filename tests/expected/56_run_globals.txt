@@ -168,3 +168,8 @@ function __global_init
     %4 = global gc
             call C__ctor$v(%4)
             ret
+
+function __global_fini
+    %0 = global gc
+            call C__dtor(%0)
+            ret

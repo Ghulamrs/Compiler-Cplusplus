@@ -30,8 +30,11 @@ void Lowering::popScope() {
     const int mark = scopeMarks.back();
     scopeMarks.pop_back();
     while (static_cast<int>(scopeNames.size()) > mark) {
-        slots.erase(scopeNames.back());
-        localTypes.erase(scopeNames.back());
+        const Shadowed &s = scopeNames.back();
+        if (s.prevSlot >= 0) slots[s.name] = s.prevSlot;
+        else                 slots.erase(s.name);
+        if (s.prevType)      localTypes[s.name] = s.prevType;
+        else                 localTypes.erase(s.name);
         scopeNames.pop_back();
     }
 }
@@ -39,8 +42,17 @@ void Lowering::popScope() {
 int Lowering::declareLocal(const std::string &name, int size, bool isParam, bool isFloat,
                            bool isObject) {
     const int slot = fn->addLocal(name, size, isParam, isFloat, isObject);
+
+    // Remember what this name meant before, so the block can put it back.
+    Shadowed prev;
+    prev.name = name;
+    std::map<std::string, int>::const_iterator os = slots.find(name);
+    if (os != slots.end()) prev.prevSlot = os->second;
+    std::map<std::string, Type*>::const_iterator ot = localTypes.find(name);
+    if (ot != localTypes.end()) prev.prevType = ot->second;
+    scopeNames.push_back(prev);
+
     slots[name] = slot;
-    scopeNames.push_back(name);
     return slot;
 }
 
@@ -265,7 +277,11 @@ bool Lowering::isObjectType(Type *) {
     return false;               // C has no class types
 }
 
-const char *Lowering::ReturnSlotName = "__ret";
+void Lowering::reassertVPtr(Type *, IRReg, int) {}      // C has no vptr
+
+bool Lowering::yieldsObject(Expr *) const { return false; }   // C has no objects
+
+const char *Lowering::ReturnSlotName = "$ret";   // '$' keeps it out of reach of user code
 
 bool Lowering::returnsObject(Function *f) {
     return f && isObjectType(f->retType);
@@ -273,14 +289,24 @@ bool Lowering::returnsObject(Function *f) {
 
 IRReg Lowering::allocReturnSlot(Function *target, int line) {
     const int size = sizeOfType(target->retType);
-    const int slot = declareLocal("__result", size > 0 ? size : Layout::PointerSize, false);
+    const int slot = declareLocal("$result", size > 0 ? size : Layout::PointerSize, false);
     return fn->emitLocalAddr(slot, line);
 }
 
+IRReg Lowering::lowerByValueObject(Type *, Expr *e, int) {
+    return lowerObjectValue(e);         // C has no copy constructor to call
+}
+
+void Lowering::destroyArgTempsDownTo(std::size_t mark, int) {
+    while (argTemps.size() > mark) argTemps.pop_back();   // C has none to destroy
+}
+
 IRReg Lowering::lowerObjectValue(Expr *e) {
-    // A call already yields the address of the caller-supplied slot; anything
-    // else with a place in memory yields that place.
+    // A call already yields the address of the caller-supplied slot; a
+    // temporary yields the space it was built in; anything else with a place
+    // in memory yields that place.
     if (dynamic_cast<CallExpr*>(e)) return lowerValue(e);
+    if (yieldsObject(e)) return lowerValue(e);
     if (BinaryExpr *b = dynamic_cast<BinaryExpr*>(e)) {
         if (b->resolvedOperator) return lowerValue(e);
     }
@@ -307,9 +333,11 @@ void Lowering::lowerUnit(const std::vector<Decl*> &units) {
     }
     for (std::size_t i = 0; i < units.size(); ++i) lowerDecl(units[i]);
     emitGlobalInit(units);
+    emitGlobalFini(units);
 }
 
 const char *Lowering::GlobalInitName = "__global_init";
+const char *Lowering::GlobalFiniName = "__global_fini";
 
 // Everything a global needs before main runs: scalar initialisers, and (in the
 // layer above) constructors for global objects.  One function, called once.
@@ -334,6 +362,31 @@ void Lowering::emitGlobalInit(const std::vector<Decl*> &units) {
     fn = savedFn;
     currentReturnType = savedReturn;
 }
+
+// The mirror of emitGlobalInit: reverse order, as every other scope exit is.
+void Lowering::emitGlobalFini(const std::vector<Decl*> &units) {
+    IRFunction *irf = new IRFunction(GlobalFiniName, GlobalFiniName);
+    mod.functions.push_back(irf);
+
+    IRFunction *savedFn = fn;
+    Type *savedReturn = currentReturnType;
+    fn = irf;
+    currentReturnType = 0;
+
+    int line = 0;
+    for (std::size_t i = units.size(); i > 0; --i) {
+        VarDecl *vd = dynamic_cast<VarDecl*>(units[i - 1]);
+        if (!vd) continue;
+        line = vd->line;
+        destroyGlobal(vd);
+    }
+    fn->emitReturn(IR_NoReg, line);
+
+    fn = savedFn;
+    currentReturnType = savedReturn;
+}
+
+void Lowering::destroyGlobal(VarDecl *) {}              // C has no destructors
 
 void Lowering::initGlobal(VarDecl *vd, IRReg addr) {
     if (!vd->init) return;
@@ -939,9 +992,10 @@ IRReg Lowering::lowerAssign(BinaryExpr *e) {
         // An object is copied byte for byte: it does not fit in a register,
         // and load-then-store would shift its bytes off the end of one.
         if (isObjectType(t)) {
-            const IRReg src = lowerAddress(e->rhs);
+            const IRReg src = lowerObjectValue(e->rhs);
             const IRReg dst = lowerAddress(e->lhs);
             fn->emitMemCopy(dst, src, size, e->line);
+            reassertVPtr(t, dst, e->line);      // the copy is the target's class
             return dst;
         }
         // Right side first: the order the language leaves open, and the one
@@ -998,7 +1052,7 @@ IRReg Lowering::truth(IRReg value, Type *t, int line) {
 // fact, so it lowers to branches rather than an operator.  The stored value is
 // the truth of each side: `2 && 4` is 1, not 4.
 IRReg Lowering::lowerShortCircuit(BinaryExpr *e) {
-    const int slot = fn->addLocal("__sc", Layout::IntSize, false);
+    const int slot = fn->addLocal("$sc", Layout::IntSize, false);
     const int done = fn->newLabel();
 
     const IRReg left = truth(lowerValue(e->lhs), referentType(typeOf(e->lhs)), e->line);
@@ -1030,11 +1084,14 @@ IRReg Lowering::lowerCall(CallExpr *e, bool wantsResult) {
         if (it != functions.end()) target = it->second;
     }
     const std::string sym = target ? symbolFor(target, "") : callee->name;
+    const std::size_t mark = argTemps.size();
     std::vector<IRReg> args;
     if (returnsObject(target)) args.push_back(allocReturnSlot(target, e->line));
     const std::vector<IRReg> rest = lowerArgs(e, target, 0);
     args.insert(args.end(), rest.begin(), rest.end());
-    return fn->emitCall(sym, args, wantsResult, e->line);
+    const IRReg out = fn->emitCall(sym, args, wantsResult, e->line);
+    destroyArgTempsDownTo(mark, e->line);
+    return out;
 }
 
 // Each argument is converted to its parameter's declared type.  Without this a
@@ -1052,8 +1109,9 @@ std::vector<IRReg> Lowering::lowerArgs(CallExpr *e, Function *target, std::size_
             v = lowerAddress(e->args[i]);
         } else if (want && isObjectType(want)) {
             // By value: the address goes over, and the VM copies the object
-            // into the parameter's own slot.
-            v = lowerObjectValue(e->args[i]);
+            // into the parameter's own slot -- but a declared copy constructor
+            // is what makes the copy, if the class wrote one.
+            v = lowerByValueObject(want, e->args[i], e->line);
         } else {
             v = lowerValue(e->args[i]);
             if (want) v = convert(v, typeOf(e->args[i]), want, e->line);

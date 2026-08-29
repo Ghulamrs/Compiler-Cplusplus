@@ -1,0 +1,182 @@
+Function print_int returns void
+  param:
+    Var n : int
+Function print_line returns void
+Class V
+  Field public a : int
+  Constructor public V::V
+    Block
+      ExprStmt
+        Binary =
+          a
+          0
+  Method public virtual V::f returns int
+    Block
+      Return
+        10
+  Destructor public virtual V::~V
+    Block
+Class D2 : public V
+  Constructor public D2::D2
+    Block
+      ExprStmt
+        Binary =
+          a
+          0
+  Method public virtual overriding D2::f returns int
+    Block
+      Return
+        20
+  Destructor public virtual overriding D2::~D2
+    Block
+Function main returns int
+  Block
+    Var d : class D2
+    Var rv : reference to class V
+      init:
+        d
+    Var c : class V
+      init:
+        rv
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member .f
+              c
+    Var q : pointer to class V
+      init:
+        Unary &
+          c
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Call
+            Member ->f
+              q
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+    [on exit: destroy c]
+    [on exit: destroy d]
+
+class D2  size=16 align=8  [has vptr]
+     +0  __vptr (8 bytes)
+    +8  a (4 bytes)  inherited from V
+    vtable[0] = D2::f
+    vtable[1] = D2::~D2
+    construct: base V -> set vptr -> D2() body
+    destroy:   ~D2() body -> reset vptr -> base V
+
+class V  size=16 align=8  [has vptr]
+     +0  __vptr (8 bytes)
+    +8  a (4 bytes)
+    vtable[0] = V::f
+    vtable[1] = V::~V
+    construct: set vptr -> field a -> V() body
+    destroy:   ~V() body -> field a -> reset vptr
+
+vtable D2__vtable
+    [0] D2__f$v
+    [1] D2__dtor
+
+vtable V__vtable
+    [0] V__f$v
+    [1] V__dtor
+
+function V__ctor$v   ; V::V
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = global V__vtable
+    %3 = field %1 +0
+            store [%3] <- %2 :8
+    %4 = const 0
+    %5 = local #0
+    %6 = load [%5] :8
+    %7 = field %6 +8
+            store [%7] <- %4 :4
+            ret
+
+function V__f$v   ; V::f
+  #0 this  8 bytes  (param)
+    %0 = const 10
+            ret %0
+
+function V__dtor   ; V::~V
+  #0 this  8 bytes  (param)
+            ret
+
+function D2__ctor$v   ; D2::D2
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+            call V__ctor$v(%1)
+    %2 = global D2__vtable
+    %3 = field %1 +0
+            store [%3] <- %2 :8
+    %4 = const 0
+    %5 = local #0
+    %6 = load [%5] :8
+    %7 = field %6 +8
+            store [%7] <- %4 :4
+            ret
+
+function D2__f$v   ; D2::f
+  #0 this  8 bytes  (param)
+    %0 = const 20
+            ret %0
+
+function D2__dtor   ; D2::~D2
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+            call V__dtor(%1)
+            ret
+
+function main
+  #0 d  16 bytes
+  #1 rv  8 bytes
+  #2 c  16 bytes
+  #3 q  8 bytes
+            call __global_init()
+    %0 = local #0
+            call D2__ctor$v(%0)
+    %1 = local #0
+    %2 = local #1
+            store [%2] <- %1 :8
+    %3 = local #1
+    %4 = load [%3] :8
+    %5 = local #2
+            memcpy [%5] <- [%4] :16
+    %6 = global V__vtable
+    %7 = field %5 +0
+            store [%7] <- %6 :8
+    %8 = local #2
+    %9 = call V__f$v(%8)
+            call print_int(%9)
+    %10 = local #2
+    %11 = local #3
+            store [%11] <- %10 :8
+    %12 = local #3
+    %13 = load [%12] :8
+    %14 = vtable [%13] slot 0
+    %15 = call.ind %14(%13)
+            call print_int(%15)
+            call print_line()
+    %16 = const 0
+    %17 = local #2
+            call V__dtor(%17)
+    %18 = local #0
+            call D2__dtor(%18)
+            ret %16
+
+function __global_init
+            ret
+
+function __global_fini
+            ret

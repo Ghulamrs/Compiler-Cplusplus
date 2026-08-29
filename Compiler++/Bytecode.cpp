@@ -85,6 +85,11 @@ const NativeEntry NativeTable[] = {
     { "print_double", NAT_PrintDouble, 1, false },
     { "print_string", NAT_PrintString, 1, false },
     { "print_line",   NAT_PrintLine,   0, false },
+    { "err_int",      NAT_ErrInt,      1, false },
+    { "err_char",     NAT_ErrChar,     1, false },
+    { "err_double",   NAT_ErrDouble,   1, false },
+    { "err_string",   NAT_ErrString,   1, false },
+    { "err_line",     NAT_ErrLine,     0, false },
     { "sqrt",         NAT_Sqrt,        1, true  },
     { "sin",          NAT_Sin,         1, true  },
     { "cos",          NAT_Cos,         1, true  },
@@ -204,6 +209,7 @@ bool Image::write(const std::string &path, std::string &error) const {
     putU(out, Magic, 4);
     putU(out, Version, 4);
     putI64(out, entry);
+    putI64(out, fini);
 
     putU(out, static_cast<unsigned long>(staticData.size()), 4);
     for (std::size_t i = 0; i < staticData.size(); ++i) {
@@ -262,6 +268,7 @@ bool Image::read(const std::string &path, std::string &error) {
         return false;
     }
     entry = static_cast<int>(r.getI64());
+    fini  = static_cast<int>(r.getI64());
 
     const unsigned long dataLen = r.getU(4);
     staticData.clear();

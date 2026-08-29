@@ -36,6 +36,9 @@ void CodeGen::collectSymbols(const IRModule &module, Image &out) {
         const std::string &name = module.functions[i]->name;
         functionIndex[name] = static_cast<int>(i);
         if (name == "main") out.entry = static_cast<int>(i);
+        // Named rather than included: pulling in Lower.h here would tie the
+        // back end to the pass in front of it for one string.
+        if (name == "__global_fini") out.fini = static_cast<int>(i);
     }
 }
 

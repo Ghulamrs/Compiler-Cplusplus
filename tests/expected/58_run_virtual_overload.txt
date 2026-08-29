@@ -46,6 +46,8 @@ Class Derived : public Base
             400
             a
           b
+  Destructor public virtual overriding Derived::~Derived
+    Block
 Function main returns int
   Block
     Var d : class Derived
@@ -95,9 +97,9 @@ class Derived  size=8 align=8  [has vptr]
      +0  __vptr (8 bytes)
     vtable[0] = Derived::f
     vtable[1] = Derived::f
-    vtable[2] = Base::~Base
-    construct: base Base -> set vptr
-    destroy:   reset vptr -> base Base
+    vtable[2] = Derived::~Derived
+    construct: base Base -> set vptr -> Derived() body
+    destroy:   ~Derived() body -> reset vptr -> base Base
 
 vtable Base__vtable
     [0] Base__f$i
@@ -107,7 +109,7 @@ vtable Base__vtable
 vtable Derived__vtable
     [0] Derived__f$i
     [1] Derived__f$ii
-    [2] Base__dtor
+    [2] Derived__dtor
 
 function Base__f$i   ; Base::f
   #0 this  8 bytes  (param)
@@ -157,6 +159,13 @@ function Derived__f$ii   ; Derived::f
     %6 = add %3, %5
             ret %6
 
+function Derived__dtor   ; Derived::~Derived
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+            call Base__dtor(%1)
+            ret
+
 function main
   #0 d  8 bytes
   #1 p  8 bytes
@@ -185,8 +194,11 @@ function main
             call print_line()
     %16 = const 0
     %17 = local #0
-            call Base__dtor(%17)
+            call Derived__dtor(%17)
             ret %16
 
 function __global_init
+            ret
+
+function __global_fini
             ret
