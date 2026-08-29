@@ -8,3 +8,7 @@ build/
 
 # macOS
 .DS_Store
+
+# Xcode per-user state
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
