@@ -1,0 +1,181 @@
+// Layout.cpp
+//
+// C++98 only.  See Layout.h for the three rules single inheritance buys.
+
+#include "Layout.h"
+
+#include <cstddef>
+#include <iostream>
+
+Layout::Layout(Diagnostics &d) : diag(d) {}
+
+int Layout::roundUp(int value, int alignment) {
+    if (alignment <= 1) return value;
+    const int rem = value % alignment;
+    return rem ? value + (alignment - rem) : value;
+}
+
+const ClassLayout *Layout::forClass(const std::string &name) const {
+    std::map<std::string, ClassLayout>::const_iterator it = layouts.find(name);
+    return (it == layouts.end()) ? 0 : &it->second;
+}
+
+int Layout::sizeOf(cc::Type *t) const {
+    if (!t) return 0;
+    // A reference is a pointer at runtime; that is the whole of its lowering.
+    cxx::ReferenceType *rt = dynamic_cast<cxx::ReferenceType*>(t);
+    if (rt) return PointerSize;
+    if (dynamic_cast<cc::PointerType*>(t)) return PointerSize;
+    cc::BuiltinType *bt = dynamic_cast<cc::BuiltinType*>(t);
+    if (bt) {
+        if (bt->name == "int")  return IntSize;
+        if (bt->name == "char") return CharSize;
+        if (bt->name == "bool") return BoolSize;
+        return 0;                               // void
+    }
+    cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(t);
+    if (ct) {
+        const ClassLayout *cl = forClass(ct->className);
+        return cl ? cl->size : 0;
+    }
+    return 0;
+}
+
+int Layout::alignOf(cc::Type *t) const {
+    cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(t);
+    if (ct) {
+        const ClassLayout *cl = forClass(ct->className);
+        return cl ? cl->align : 1;
+    }
+    const int s = sizeOf(t);
+    return s > 0 ? s : 1;                       // scalars align to their size
+}
+
+void Layout::computeAll(const std::map<std::string, cxx::ClassDecl*> &classes) {
+    std::map<std::string, cxx::ClassDecl*>::const_iterator it;
+    for (it = classes.begin(); it != classes.end(); ++it) {
+        computeFor(it->second);
+    }
+}
+
+void Layout::computeFor(cxx::ClassDecl *cd) {
+    if (!cd) return;
+    if (layouts.find(cd->name) != layouts.end()) return;    // already done
+
+    // A base must be laid out first: the derived layout starts as a copy of it.
+    // The semantic pass has already broken any cycle, so this recursion ends.
+    if (cd->base) computeFor(cd->base);
+    const ClassLayout *baseLayout = cd->base ? forClass(cd->base->name) : 0;
+
+    ClassLayout cl;
+    cl.name = cd->name;
+
+    // Does this class need a vptr?  Yes if it declares a virtual function, or
+    // if its base already had one.
+    bool declaresVirtual = false;
+    for (std::size_t i = 0; i < cd->members.size(); ++i) {
+        cxx::MethodDecl *md = dynamic_cast<cxx::MethodDecl*>(cd->members[i]);
+        if (md && md->isVirtual) { declaresVirtual = true; break; }
+    }
+    cl.hasVPtr = declaresVirtual || (baseLayout && baseLayout->hasVPtr);
+
+    int offset = 0;
+    cl.align = 1;
+
+    if (baseLayout) {
+        // The base subobject sits at offset 0 -- which is what makes an upcast
+        // free -- so its fields keep the offsets they already had.
+        cl.fields = baseLayout->fields;
+        offset = baseLayout->size;
+        cl.align = baseLayout->align;
+        // A base without a vptr, derived from by a class that has one, would
+        // need the vptr in front and the base pushed down.  Rejecting that
+        // keeps every upcast a no-op; requiring `virtual` in the base instead
+        // is the ordinary way to write such a hierarchy anyway.
+        if (cl.hasVPtr && !baseLayout->hasVPtr) {
+            diag.error(cd->line, cd->col,
+                       "class '" + cd->name + "' introduces a virtual function but its base '"
+                       + cd->base->name + "' has none; declare the base's function virtual");
+            cl.hasVPtr = false;
+        }
+    } else if (cl.hasVPtr) {
+        offset = PointerSize;                   // the vptr occupies offset 0
+        cl.align = PointerSize;
+    }
+
+    cl.firstOwnField = static_cast<int>(cl.fields.size());
+
+    for (std::size_t i = 0; i < cd->members.size(); ++i) {
+        cxx::FieldDecl *fd = dynamic_cast<cxx::FieldDecl*>(cd->members[i]);
+        if (!fd) continue;
+        const int fsize = sizeOf(fd->type);
+        const int falign = alignOf(fd->type);
+        if (fsize == 0) {
+            diag.error(fd->line, fd->col,
+                       "field '" + fd->name + "' has no size in class '" + cd->name + "'");
+            continue;
+        }
+        offset = roundUp(offset, falign);
+        FieldLayout f;
+        f.name = fd->name;
+        f.ownerClass = cd->name;
+        f.type = fd->type;
+        f.offset = offset;
+        f.size = fsize;
+        cl.fields.push_back(f);
+        offset += fsize;
+        if (falign > cl.align) cl.align = falign;
+    }
+
+    // An object's size is rounded up so that an array of them stays aligned.
+    cl.size = roundUp(offset, cl.align);
+    if (cl.size == 0) cl.size = 1;              // an empty class still occupies a byte
+
+    // --- the vtable -------------------------------------------------------
+    // Start from the base's, so a slot index means the same thing all the way
+    // down the chain.  An override REPLACES its base's slot; a newly
+    // introduced virtual APPENDS one.
+    if (baseLayout) cl.vtable = baseLayout->vtable;
+    if (cl.hasVPtr) {
+        for (std::size_t i = 0; i < cd->members.size(); ++i) {
+            cxx::MethodDecl *md = dynamic_cast<cxx::MethodDecl*>(cd->members[i]);
+            if (!md || !md->isVirtual) continue;
+            bool replaced = false;
+            if (md->overrides) {
+                for (std::size_t s = 0; s < cl.vtable.size(); ++s) {
+                    if (cl.vtable[s] == md->overrides) { cl.vtable[s] = md; replaced = true; break; }
+                }
+            }
+            if (!replaced) cl.vtable.push_back(md);
+        }
+    }
+
+    layouts[cd->name] = cl;
+}
+
+void Layout::print() const {
+    std::map<std::string, ClassLayout>::const_iterator it;
+    for (it = layouts.begin(); it != layouts.end(); ++it) {
+        const ClassLayout &cl = it->second;
+        std::cout << "class " << cl.name
+                  << "  size=" << cl.size
+                  << " align=" << cl.align
+                  << (cl.hasVPtr ? "  [has vptr]" : "")
+                  << std::endl;
+        if (cl.hasVPtr) {
+            std::cout << "     +0  __vptr (" << PointerSize << " bytes)" << std::endl;
+        }
+        for (std::size_t i = 0; i < cl.fields.size(); ++i) {
+            const FieldLayout &f = cl.fields[i];
+            std::cout << "    +" << f.offset << "  " << f.name
+                      << " (" << f.size << " bytes)";
+            if (f.ownerClass != cl.name) std::cout << "  inherited from " << f.ownerClass;
+            std::cout << std::endl;
+        }
+        for (std::size_t s = 0; s < cl.vtable.size(); ++s) {
+            cxx::MethodDecl *m = cl.vtable[s];
+            std::cout << "    vtable[" << s << "] = " << m->ownerClass << "::" << m->name << std::endl;
+        }
+        std::cout << std::endl;
+    }
+}

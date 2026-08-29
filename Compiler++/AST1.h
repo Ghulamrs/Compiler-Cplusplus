@@ -74,22 +74,42 @@ struct FieldDecl : public Decl {
 
 // A member function.  A method IS a function -- same return type, name,
 // parameters and body -- that additionally knows its access, its class, and
-// (once dispatch lands) whether it is virtual.  So it derives from cc::Function
-// instead of restating it.
+// whether it is virtual.  So it derives from cc::Function instead of
+// restating it.
 struct MethodDecl : public Function {
     Access access;
     std::string ownerClass;
+    // Written `virtual`, OR inherited virtualness by overriding a base method.
+    // In C++ a function that overrides a virtual function is itself virtual
+    // whether or not the keyword is repeated, so this is set by the semantic
+    // pass as well as by the parser.
     bool isVirtual;
+    // The base-class method this one overrides, filled in by the semantic
+    // pass; 0 when this method overrides nothing.
+    MethodDecl *overrides;
     MethodDecl(Type *r, const std::string &n, Access a)
-        : Function(r, n), access(a), isVirtual(false) {}
+        : Function(r, n), access(a), isVirtual(false), overrides(0) {}
     // Only the first printed line differs from a plain function.
     void printSignature(int indent);
 };
 
+// class D : public B { ... };
+//
+// SINGLE inheritance only: one base, by design.  With one base the derived
+// object is simply the base object with fields appended, so an upcast is a
+// no-op and the vptr can be shared -- the whole object model stays something
+// you can hold in your head.  Multiple bases would mean several subobjects at
+// different offsets and pointer adjustment on every conversion, so the parser
+// rejects a second base with a message that says so.
 struct ClassDecl : public Decl {
     std::string name;
+    std::string baseName;       // empty when the class has no base
+    Access baseAccess;          // public/private/protected inheritance
+    // Resolved by the semantic pass from baseName; NOT owned, and 0 until then.
+    ClassDecl *base;
     std::vector<Decl*> members;
-    ClassDecl(const std::string &n) : name(n) {}
+    ClassDecl(const std::string &n)
+        : name(n), baseAccess(ACC_Public), base(0) {}
     ~ClassDecl();
     void print(int indent);
 };

@@ -13,6 +13,7 @@
 //
 //  Usage:   Compiler++ [options] [source-file]
 //             -ast        print the syntax tree
+//             -layout     print each class's object layout and vtable
 //             -q          diagnostics only, no banner
 //
 //  With no file it reads DEFAULT_INPUT below.  Xcode runs the binary with its
@@ -37,6 +38,7 @@
 #include "AST.h"
 #include "AST1.h"
 #include "Diagnostics.h"
+#include "Layout.h"
 #include "Parser.h"
 #include "Parser1.h"
 #include "Semantic.h"
@@ -64,14 +66,16 @@ static std::string baseName(const std::string &path) {
 
 int main(int argc, char **argv) {
     bool showAst = false;
+    bool showLayout = false;
     bool quiet = false;
     std::string path;
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
-        if      (arg == "-ast") showAst = true;
-        else if (arg == "-q")   quiet = true;
-        else                    path = arg;
+        if      (arg == "-ast")    showAst = true;
+        else if (arg == "-layout") showLayout = true;
+        else if (arg == "-q")      quiet = true;
+        else                       path = arg;
     }
     if (path.empty()) path = DEFAULT_INPUT;
 
@@ -89,17 +93,31 @@ int main(int argc, char **argv) {
     cxx::Parser parser(source, diag);
     std::vector<cc::Decl*> unit = parser.parseTranslationUnit();
 
-    if (showAst) {
-        if (!quiet) std::cout << "=== SYNTAX TREE: " << baseName(path) << " ===" << std::endl;
-        for (std::size_t i = 0; i < unit.size(); ++i) unit[i]->print(0);
-        std::cout << std::endl;
-    }
-
     // PASS 3.  Analysis runs even after syntax errors: the tree is still worth
     // walking, and a second round of diagnostics is more useful than silence.
+    // It comes BEFORE printing, because it writes conclusions back into the
+    // tree -- which methods are virtual, and what each one overrides -- and a
+    // dump taken beforehand would not show them.
     {
         SemanticAnalyzer sem(diag);
         sem.analyze(unit);
+
+        if (showAst) {
+            if (!quiet) std::cout << "=== SYNTAX TREE: " << baseName(path) << " ===" << std::endl;
+            for (std::size_t i = 0; i < unit.size(); ++i) unit[i]->print(0);
+            std::cout << std::endl;
+        }
+
+        // PASS 4.  The object model: offsets, sizes and vtables.  It runs
+        // ALWAYS, not only when printing, because it enforces constraints of
+        // its own -- a diagnostic must not depend on whether a debug flag was
+        // passed.  The flag controls the dump, not the pass.
+        Layout layout(diag);
+        layout.computeAll(sem.classMap());
+        if (showLayout) {
+            if (!quiet) std::cout << "=== OBJECT LAYOUT: " << baseName(path) << " ===" << std::endl;
+            layout.print();
+        }
     }
 
     if (!quiet) diag.printSummary();

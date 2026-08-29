@@ -95,6 +95,62 @@ bool SemanticAnalyzer::sameType(cc::Type *a, cc::Type *b) {
     return false;                       // different shapes entirely
 }
 
+// The class a type names, seeing through at most one pointer or reference --
+// which is all single inheritance ever needs to look through.
+cxx::ClassDecl *SemanticAnalyzer::classOf(cc::Type *t) {
+    t = stripReference(t);
+    cc::PointerType *pt = dynamic_cast<cc::PointerType*>(t);
+    if (pt) t = pt->base;
+    cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(t);
+    return ct ? findClass(ct->className) : 0;
+}
+
+// What may be used where a `to` is expected.  Beyond an exact match, single
+// inheritance makes the upcasts free: a Derived object BEGINS with its Base
+// subobject at offset 0, so Derived* and Base* are the same address and the
+// conversion costs nothing at runtime.  The reverse is not allowed -- a Base*
+// need not point at a Derived.
+bool SemanticAnalyzer::canConvert(cc::Type *from, cc::Type *to) {
+    if (sameType(from, to)) return true;
+    if (!from || !to) return true;              // an earlier error already spoke
+
+    cc::Type *f = stripReference(from);
+    cc::Type *t = stripReference(to);
+
+    // Derived* -> Base*
+    cc::PointerType *pf = dynamic_cast<cc::PointerType*>(f);
+    cc::PointerType *ptt = dynamic_cast<cc::PointerType*>(t);
+    if (pf && ptt) {
+        cxx::ClassDecl *df = classOf(pf->base);
+        cxx::ClassDecl *dt = classOf(ptt->base);
+        if (df && dt) return isDerivedFrom(df, dt);
+        return false;
+    }
+
+    // Derived -> Base& , and Derived -> Base
+    cxx::ClassDecl *cf = classOf(f);
+    cxx::ClassDecl *ctd = classOf(t);
+    if (cf && ctd) return isDerivedFrom(cf, ctd);
+
+    return false;
+}
+
+// In C++98 a literal 0 is the null pointer constant.  Its TYPE is int, so no
+// type-only rule can accept it where a pointer is wanted; the expression
+// itself has to be looked at.
+bool SemanticAnalyzer::isNullPointerConstant(cc::Expr *e) {
+    cc::NumberExpr *n = dynamic_cast<cc::NumberExpr*>(e);
+    return n && n->value == 0;
+}
+
+bool SemanticAnalyzer::convertible(cc::Expr *fromExpr, cc::Type *from, cc::Type *to) {
+    if (canConvert(from, to)) return true;
+    if (dynamic_cast<cc::PointerType*>(stripReference(to)) && isNullPointerConstant(fromExpr)) {
+        return true;
+    }
+    return false;
+}
+
 // int, int*, int** need no resolution; a class name does.
 void SemanticAnalyzer::checkTypeIsKnown(cc::Type *t, cc::ASTNode *at, const std::string &where) {
     if (!t) return;
@@ -117,17 +173,90 @@ cxx::ClassDecl *SemanticAnalyzer::findClass(const std::string &name) {
     return (it == classes.end()) ? 0 : it->second;
 }
 
-// Single inheritance will turn this into a loop: look in cd, then in cd's base,
-// and so on up the chain.  The signature is already the right shape for that.
-cc::Decl *SemanticAnalyzer::findMember(cxx::ClassDecl *cd, const std::string &member) {
-    if (!cd) return 0;
-    for (std::size_t i = 0; i < cd->members.size(); ++i) {
-        cxx::FieldDecl *fd = dynamic_cast<cxx::FieldDecl*>(cd->members[i]);
-        if (fd && fd->name == member) return fd;
-        cxx::MethodDecl *md = dynamic_cast<cxx::MethodDecl*>(cd->members[i]);
-        if (md && md->name == member) return md;
+// Link every class to its base, and refuse the two ways that can go wrong:
+// a base that was never declared, and a chain that loops back on itself.
+void SemanticAnalyzer::resolveBases() {
+    std::map<std::string, cxx::ClassDecl*>::iterator it;
+    for (it = classes.begin(); it != classes.end(); ++it) {
+        cxx::ClassDecl *cd = it->second;
+        if (cd->baseName.empty()) continue;
+        cxx::ClassDecl *base = findClass(cd->baseName);
+        if (!base) {
+            error(cd, "unknown base class '" + cd->baseName + "' for class '" + cd->name + "'");
+            continue;
+        }
+        if (base == cd) {
+            error(cd, "class '" + cd->name + "' cannot inherit from itself");
+            continue;
+        }
+        cd->base = base;
+    }
+
+    // Cycle detection, done after linking so it can just walk the pointers.
+    // A chain longer than the number of classes must have revisited one.
+    for (it = classes.begin(); it != classes.end(); ++it) {
+        cxx::ClassDecl *cd = it->second;
+        std::size_t steps = 0;
+        for (cxx::ClassDecl *p = cd->base; p; p = p->base) {
+            if (p == cd || ++steps > classes.size()) {
+                error(cd, "inheritance cycle involving class '" + cd->name + "'");
+                cd->base = 0;               // break it, so later walks terminate
+                break;
+            }
+        }
+    }
+}
+
+// Most-derived first: the first match wins, and that IS name hiding -- a
+// derived member with the same name conceals the base's.
+cc::Decl *SemanticAnalyzer::findMember(cxx::ClassDecl *cd, const std::string &member,
+                                       cxx::ClassDecl **foundIn) {
+    for (cxx::ClassDecl *c = cd; c; c = c->base) {
+        for (std::size_t i = 0; i < c->members.size(); ++i) {
+            cxx::FieldDecl *fd = dynamic_cast<cxx::FieldDecl*>(c->members[i]);
+            if (fd && fd->name == member) { if (foundIn) *foundIn = c; return fd; }
+            cxx::MethodDecl *md = dynamic_cast<cxx::MethodDecl*>(c->members[i]);
+            if (md && md->name == member) { if (foundIn) *foundIn = c; return md; }
+        }
     }
     return 0;
+}
+
+bool SemanticAnalyzer::isDerivedFrom(cxx::ClassDecl *derived, cxx::ClassDecl *base) {
+    for (cxx::ClassDecl *c = derived; c; c = c->base) {
+        if (c == base) return true;
+    }
+    return false;
+}
+
+bool SemanticAnalyzer::memberIsAccessible(cc::Decl *m, cxx::ClassDecl *owner) const {
+    const cxx::Access a = memberAccess(m);
+    if (a == cxx::ACC_Public) return true;
+    if (currentClass.empty()) return false;
+    // `const` on this method means findClass() is off limits, so the current
+    // class is looked up directly.
+    std::map<std::string, cxx::ClassDecl*>::const_iterator it = classes.find(currentClass);
+    cxx::ClassDecl *from = (it == classes.end()) ? 0 : it->second;
+    if (!from) return false;
+    if (from == owner) return true;                 // inside the class itself
+    if (a == cxx::ACC_Protected) return isDerivedFrom(from, owner);
+    return false;                                   // private, from outside
+}
+
+cxx::ClassDecl *SemanticAnalyzer::ownerClassOf(cc::Decl *m) {
+    cxx::FieldDecl *fd = dynamic_cast<cxx::FieldDecl*>(m);
+    if (fd) return findClass(fd->ownerClass);
+    cxx::MethodDecl *md = dynamic_cast<cxx::MethodDecl*>(m);
+    if (md) return findClass(md->ownerClass);
+    return 0;
+}
+
+bool SemanticAnalyzer::sameSignature(cc::Function *a, cc::Function *b) {
+    if (a->params.size() != b->params.size()) return false;
+    for (std::size_t i = 0; i < a->params.size(); ++i) {
+        if (!sameType(a->params[i]->type, b->params[i]->type)) return false;
+    }
+    return true;
 }
 
 cxx::Access SemanticAnalyzer::memberAccess(cc::Decl *m) {
@@ -146,20 +275,57 @@ cc::Type *SemanticAnalyzer::memberType(cc::Decl *m) {
     return 0;
 }
 
-// This is what makes  int getX() { return x; }  resolve: the class's members
-// are inserted, unqualified, into a scope that sits under the parameter scope.
-void SemanticAnalyzer::pushClassScope(cxx::ClassDecl *cd) {
-    symbols.pushScope();
-    if (!cd) return;
+// A method that matches a base method by name becomes an override when the
+// signatures agree AND the base one is virtual.  Same name, different
+// signature is legal C++ but almost always a mistake, so it warns: the derived
+// method HIDES the base one rather than overriding it.
+void SemanticAnalyzer::resolveOverrides(cxx::ClassDecl *cd) {
+    if (!cd->base) return;
     for (std::size_t i = 0; i < cd->members.size(); ++i) {
-        cxx::FieldDecl *fd = dynamic_cast<cxx::FieldDecl*>(cd->members[i]);
-        if (fd) {
-            symbols.insert(fd->name, new Symbol(SYM_Field, fd->name, fd, fd->type));
+        cxx::MethodDecl *md = dynamic_cast<cxx::MethodDecl*>(cd->members[i]);
+        if (!md) continue;
+        cc::Decl *found = findMember(cd->base, md->name);
+        cxx::MethodDecl *bm = dynamic_cast<cxx::MethodDecl*>(found);
+        if (!bm) continue;
+
+        if (!sameSignature(md, bm)) {
+            diag.warning(md->line, md->col,
+                         "'" + md->name + "' hides '" + bm->ownerClass + "::" + bm->name
+                         + "' rather than overriding it; the parameter lists differ");
             continue;
         }
-        cxx::MethodDecl *md = dynamic_cast<cxx::MethodDecl*>(cd->members[i]);
-        if (md) {
-            symbols.insert(md->name, new Symbol(SYM_Method, md->name, md, md->retType));
+        if (!bm->isVirtual) continue;       // hiding a non-virtual is not an override
+        if (!sameType(md->retType, bm->retType)) {
+            error(md, "'" + md->name + "' overrides '" + bm->ownerClass + "::" + bm->name
+                      + "' but returns " + describe(md->retType)
+                      + " instead of " + describe(bm->retType));
+            continue;
+        }
+        // In C++ an overriding function is virtual whether or not the keyword
+        // is repeated, so virtualness propagates down the chain from here.
+        md->overrides = bm;
+        md->isVirtual = true;
+    }
+}
+
+// Members of the class AND of every base, so a method body sees them
+// unqualified.  Walking most-derived first means insert() -- which refuses a
+// duplicate -- keeps the derived member, which is exactly name hiding.
+void SemanticAnalyzer::pushClassScope(cxx::ClassDecl *cd) {
+    symbols.pushScope();
+    for (cxx::ClassDecl *c = cd; c; c = c->base) {
+        for (std::size_t i = 0; i < c->members.size(); ++i) {
+            cxx::FieldDecl *fd = dynamic_cast<cxx::FieldDecl*>(c->members[i]);
+            if (fd) {
+                Symbol *s = new Symbol(SYM_Field, fd->name, fd, fd->type);
+                if (!symbols.insert(fd->name, s)) delete s;
+                continue;
+            }
+            cxx::MethodDecl *md = dynamic_cast<cxx::MethodDecl*>(c->members[i]);
+            if (md) {
+                Symbol *s = new Symbol(SYM_Method, md->name, md, md->retType);
+                if (!symbols.insert(md->name, s)) delete s;
+            }
         }
     }
 }
@@ -171,9 +337,17 @@ void SemanticAnalyzer::pushClassScope(cxx::ClassDecl *cd) {
 void SemanticAnalyzer::analyze(const std::vector<cc::Decl*> &units) {
     // 1) every class name, so declarations may refer to a class defined later
     collectClasses(units);
-    // 2) every top-level name, so functions may call each other in any order
+    // 2) link the hierarchy, before anything tries to look a member up
+    resolveBases();
+    // 3) work out which methods override which, so virtualness is known before
+    //    any body is analysed
+    for (std::size_t i = 0; i < units.size(); ++i) {
+        cxx::ClassDecl *cd = dynamic_cast<cxx::ClassDecl*>(units[i]);
+        if (cd) resolveOverrides(cd);
+    }
+    // 4) every top-level name, so functions may call each other in any order
     declareTopLevel(units);
-    // 3) bodies
+    // 5) bodies
     for (std::size_t i = 0; i < units.size(); ++i) analyzeDecl(units[i]);
 }
 
@@ -231,6 +405,21 @@ void SemanticAnalyzer::analyzeDecl(cc::Decl *d) {
 }
 
 void SemanticAnalyzer::analyzeClass(cxx::ClassDecl *cd) {
+    // A field may not shadow a base field: legal C++, but in a teaching subset
+    // it is far more often a mistake than an intention.
+    if (cd->base) {
+        for (std::size_t i = 0; i < cd->members.size(); ++i) {
+            cxx::FieldDecl *fd = dynamic_cast<cxx::FieldDecl*>(cd->members[i]);
+            if (!fd) continue;
+            cxx::ClassDecl *owner = 0;
+            cc::Decl *hidden = findMember(cd->base, fd->name, &owner);
+            if (hidden && dynamic_cast<cxx::FieldDecl*>(hidden)) {
+                diag.warning(fd->line, fd->col,
+                             "field '" + fd->name + "' hides '" + owner->name
+                             + "::" + fd->name + "'");
+            }
+        }
+    }
     for (std::size_t i = 0; i < cd->members.size(); ++i) {
         cxx::FieldDecl *fd = dynamic_cast<cxx::FieldDecl*>(cd->members[i]);
         if (fd) {
@@ -310,11 +499,11 @@ void SemanticAnalyzer::analyzeVarDecl(cc::VarDecl *vd, bool declareIt) {
         } else if (initType && !initIsLValue) {
             error(vd, "cannot bind reference '" + vd->name + "' of type "
                       + describe(vd->type) + " to a non-lvalue initialiser");
-        } else if (initType && !sameType(rt->base, initType)) {
+        } else if (initType && !convertible(vd->init, initType, rt->base)) {
             error(vd, "cannot bind '" + describe(vd->type) + " " + vd->name
                       + "' to an initialiser of type " + describe(initType));
         }
-    } else if (vd->init && initType && !sameType(vd->type, initType)) {
+    } else if (vd->init && initType && !convertible(vd->init, initType, vd->type)) {
         error(vd, "cannot initialise '" + describe(vd->type) + " " + vd->name
                   + "' from an expression of type " + describe(initType));
     }
@@ -352,7 +541,7 @@ void SemanticAnalyzer::analyzeStmt(cc::Stmt *s) {
             }
         } else if (isVoid(currentReturnType)) {
             error(rs, "return with a value in a function returning void");
-        } else if (got && !sameType(currentReturnType, got)) {
+        } else if (got && !convertible(rs->expr, got, currentReturnType)) {
             error(rs, "returning " + describe(got) + " from a function returning "
                       + describe(currentReturnType));
         }
@@ -430,7 +619,7 @@ void SemanticAnalyzer::checkCallArgs(cc::CallExpr *call, cc::Function *fn) {
                                  + fn->params[i]->name + "' must be an lvalue");
             continue;
         }
-        if (!sameType(pt, at)) {
+        if (!convertible(call->args[i], at, pt)) {
             error(call->args[i], "argument " + describe(at) + " does not match parameter '"
                                  + fn->params[i]->name + "' of type " + describe(pt));
         }
@@ -464,11 +653,12 @@ cc::Type *SemanticAnalyzer::analyzeExpr(cc::Expr *e, bool &isLValue) {
         if (!ct) { error(ma, "member access on non-class type " + describe(baseType)); return 0; }
         cxx::ClassDecl *cd = findClass(ct->className);
         if (!cd) { error(ma, "unknown class '" + ct->className + "'"); return 0; }
-        cc::Decl *m = findMember(cd, ma->member);
+        cxx::ClassDecl *owner = 0;
+        cc::Decl *m = findMember(cd, ma->member, &owner);
         if (!m) { error(ma, "no member named '" + ma->member + "' in class '" + ct->className + "'"); return 0; }
-        if (memberAccess(m) != cxx::ACC_Public && currentClass != ct->className) {
+        if (!memberIsAccessible(m, owner)) {
             error(ma, "'" + ma->member + "' is " + cxx::accessText(memberAccess(m))
-                      + " in class '" + ct->className + "'");
+                      + " in class '" + owner->name + "'");
         }
         isLValue = (dynamic_cast<cxx::FieldDecl*>(m) != 0);
         return stripReference(memberType(m));
@@ -509,6 +699,19 @@ cc::Type *SemanticAnalyzer::analyzeExpr(cc::Expr *e, bool &isLValue) {
         Symbol *s = symbols.lookup(id->name);
         if (!s) { error(id, "undeclared identifier '" + id->name + "'"); return 0; }
         if (s->kind == SYM_Type) { error(id, "type '" + id->name + "' used as an expression"); return 0; }
+        // An unqualified name inside a method may have come from a BASE class
+        // scope, so it needs the same access check that obj.member gets --
+        // otherwise a private base member would be reachable simply by not
+        // writing `this->` in front of it.
+        if (s->kind == SYM_Field || s->kind == SYM_Method) {
+            cc::Decl *m = dynamic_cast<cc::Decl*>(s->decl);
+            cxx::ClassDecl *owner = m ? ownerClassOf(m) : 0;
+            if (owner && !memberIsAccessible(m, owner)) {
+                error(id, "'" + id->name + "' is " + cxx::accessText(memberAccess(m))
+                          + " in class '" + owner->name + "'");
+                return 0;
+            }
+        }
         isLValue = (s->kind == SYM_Var || s->kind == SYM_Field);
         return stripReference(s->type);
     }
@@ -539,11 +742,12 @@ cc::Type *SemanticAnalyzer::analyzeExpr(cc::Expr *e, bool &isLValue) {
             cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(baseType);
             if (!ct) { error(cma, "method call on non-class type " + describe(baseType)); return 0; }
             cxx::ClassDecl *cd = findClass(ct->className);
-            cc::Decl *m = cd ? findMember(cd, cma->member) : 0;
+            cxx::ClassDecl *owner = 0;
+            cc::Decl *m = cd ? findMember(cd, cma->member, &owner) : 0;
             if (!m) { error(cma, "no member named '" + cma->member + "' in class '" + ct->className + "'"); return 0; }
-            if (memberAccess(m) != cxx::ACC_Public && currentClass != ct->className) {
+            if (!memberIsAccessible(m, owner)) {
                 error(cma, "'" + cma->member + "' is " + cxx::accessText(memberAccess(m))
-                           + " in class '" + ct->className + "'");
+                           + " in class '" + owner->name + "'");
             }
             fn = dynamic_cast<cxx::MethodDecl*>(m);
             if (!fn) { error(cma, "'" + cma->member + "' is not a method"); return 0; }
@@ -588,7 +792,7 @@ cc::Type *SemanticAnalyzer::analyzeExpr(cc::Expr *e, bool &isLValue) {
             // THE ASSIGNMENT RULE, the other half of lvalue-ness: only an
             // object can be assigned to.  `1 = p.x;` is rejected here.
             if (!lL) { error(be, "left side of assignment is not an lvalue"); return 0; }
-            if (!sameType(lt, rt)) {
+            if (!convertible(be->rhs, rt, lt)) {
                 error(be, "cannot assign " + describe(rt) + " to " + describe(lt));
                 return 0;
             }

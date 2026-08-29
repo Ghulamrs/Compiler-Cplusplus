@@ -42,6 +42,7 @@ void MethodDecl::printSignature(int indent) {
     printIndent(indent);
     std::cout << "Method " << accessText(access) << " ";
     if (isVirtual) std::cout << "virtual ";
+    if (overrides) std::cout << "overriding ";
     if (!ownerClass.empty()) std::cout << ownerClass << "::";
     std::cout << name << " returns ";
     if (retType) retType->print(0);
@@ -54,7 +55,9 @@ ClassDecl::~ClassDecl() {
 
 void ClassDecl::print(int indent) {
     printIndent(indent);
-    std::cout << "Class " << name << std::endl;
+    std::cout << "Class " << name;
+    if (!baseName.empty()) std::cout << " : " << accessText(baseAccess) << " " << baseName;
+    std::cout << std::endl;
     for (std::size_t i = 0; i < members.size(); ++i) members[i]->print(indent + 1);
 }
 

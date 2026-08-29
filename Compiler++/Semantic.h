@@ -45,6 +45,12 @@ public:
     // entry point: a whole translation unit
     void analyze(const std::vector<cc::Decl*> &units);
 
+    // The resolved hierarchy, for the layout pass that runs next.  Handing it
+    // over rather than recomputing it means there is one answer to "what is
+    // this class's base", and the layout pass inherits the cycle-breaking the
+    // semantic pass already did.
+    const std::map<std::string, cxx::ClassDecl*> &classMap() const { return classes; }
+
 private:
     SymbolTable symbols;
     Diagnostics &diag;
@@ -71,6 +77,12 @@ private:
 
     // passes
     void collectClasses(const std::vector<cc::Decl*> &units);
+    // Links each class to its base and rejects unknown bases and cycles.
+    // Runs before anything looks a member up, because member lookup walks the
+    // chain this pass builds.
+    void resolveBases();
+    // Marks a method that matches a base virtual as an override.
+    void resolveOverrides(cxx::ClassDecl *cd);
     void declareTopLevel(const std::vector<cc::Decl*> &units);
     void analyzeDecl(cc::Decl *d);
     void analyzeClass(cxx::ClassDecl *cd);
@@ -82,7 +94,19 @@ private:
 
     // member lookup
     cxx::ClassDecl *findClass(const std::string &name);
-    cc::Decl *findMember(cxx::ClassDecl *cd, const std::string &member);
+    // Walks the base chain: the most derived class wins, which IS name hiding.
+    // `foundIn` receives the class the member was actually found in, so an
+    // access diagnostic can name the right class.
+    cc::Decl *findMember(cxx::ClassDecl *cd, const std::string &member,
+                         cxx::ClassDecl **foundIn = 0);
+    // Is `derived` the same class as `base`, or below it in the chain?
+    static bool isDerivedFrom(cxx::ClassDecl *derived, cxx::ClassDecl *base);
+    // The access rule, in one place: public everywhere, protected inside the
+    // class or anything derived from it, private only inside the class itself.
+    bool memberIsAccessible(cc::Decl *m, cxx::ClassDecl *owner) const;
+    // The class a member belongs to, from the member itself.
+    cxx::ClassDecl *ownerClassOf(cc::Decl *m);
+    static bool sameSignature(cc::Function *a, cc::Function *b);
     static cxx::Access memberAccess(cc::Decl *m);
     static cc::Type *memberType(cc::Decl *m);
     // Pushes a scope holding cd's members, so a method body sees them unqualified.
@@ -93,6 +117,16 @@ private:
     static cc::Type *stripReference(cc::Type *t);
     static std::string describe(cc::Type *t);
     static bool sameType(cc::Type *a, cc::Type *b);
+    // Implicit conversion, which is sameType plus the upcasts single
+    // inheritance makes free:  Derived* -> Base*  and  Derived -> Base&.
+    bool canConvert(cc::Type *from, cc::Type *to);
+    // canConvert, plus the one rule that needs the EXPRESSION and not just its
+    // type: the literal 0 is the null pointer constant, so it initialises any
+    // pointer even though its type is int.
+    bool convertible(cc::Expr *fromExpr, cc::Type *from, cc::Type *to);
+    static bool isNullPointerConstant(cc::Expr *e);
+    // The class a type names, looking through one pointer or reference.
+    cxx::ClassDecl *classOf(cc::Type *t);
     static bool isVoid(cc::Type *t);
     void checkTypeIsKnown(cc::Type *t, cc::ASTNode *at, const std::string &where);
     void checkCallArgs(cc::CallExpr *call, cc::Function *fn);

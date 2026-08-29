@@ -37,6 +37,32 @@ ClassDecl *Parser::parseClass() {
     cd->line = line;
     cd->col = col;
 
+    // optional base clause:  : [public|private|protected] Base
+    if (match(TOK_COLON)) {
+        // `struct D : B` inherits publicly, `class D : B` privately -- the same
+        // default the keyword sets for members.
+        cd->baseAccess = defaultAccess == ACC_Public ? ACC_Public : ACC_Private;
+        if (cur.kind == TOK_PUBLIC || cur.kind == TOK_PRIVATE || cur.kind == TOK_PROTECTED) {
+            cd->baseAccess = (cur.kind == TOK_PUBLIC)  ? ACC_Public
+                           : (cur.kind == TOK_PRIVATE) ? ACC_Private
+                                                       : ACC_Protected;
+            advance();
+        }
+        if (cur.kind != TOK_IDENTIFIER) {
+            errorAtCurrent("expected a base class name");
+        } else {
+            cd->baseName = cur.text;
+            advance();
+        }
+        // Single inheritance is a deliberate limit of this subset, so say so
+        // plainly rather than letting it surface as a confusing parse error.
+        if (cur.kind == TOK_COMMA) {
+            errorAtCurrent("multiple inheritance is not supported; "
+                           "this compiler allows a single base class");
+            while (cur.kind != TOK_LBRACE && cur.kind != TOK_EOF) advance();
+        }
+    }
+
     if (!expect(TOK_LBRACE, "to open a class body")) return cd;
 
     Access access = defaultAccess;
@@ -65,6 +91,11 @@ ClassDecl *Parser::parseClass() {
 // parameter list is what tells them apart -- and the method case reuses the C
 // layer's parseFunctionRest(), which also parses the body.
 Decl *Parser::parseMemberDecl(const std::string &className, Access access) {
+    // `virtual` precedes the return type and is meaningful only on a method.
+    const bool sawVirtual = (cur.kind == TOK_VIRTUAL);
+    const int virtualLine = cur.line, virtualCol = cur.col;
+    if (sawVirtual) advance();
+
     cc::Type *t = parseType();                  // virtual: knows C++ types
     if (!t) {
         errorAtCurrent(std::string("expected a member declaration, found ")
@@ -87,12 +118,16 @@ Decl *Parser::parseMemberDecl(const std::string &className, Access access) {
         // cc::Function, the same call populates the derived node.
         MethodDecl *md = new MethodDecl(t, name, access);
         md->ownerClass = className;
+        md->isVirtual = sawVirtual;
         md->line = line;
         md->col = col;
         parseFunctionParamsAndBody(md);
         return md;
     }
 
+    if (sawVirtual) {
+        diag.error(virtualLine, virtualCol, "'virtual' can only be applied to a member function");
+    }
     FieldDecl *fd = new FieldDecl(t, name, access);
     fd->ownerClass = className;
     fd->line = line;
