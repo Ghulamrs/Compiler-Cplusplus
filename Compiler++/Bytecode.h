@@ -103,6 +103,9 @@ struct FuncImage {
     // Parallel to localSize: 1 when the slot holds a float or double, so the
     // VM writes an incoming argument with the right representation.
     std::vector<unsigned char> localFloat;
+    // 1 when the slot is a by-value object: the argument is an address and the
+    // VM copies localSize bytes from it.
+    std::vector<unsigned char> localObject;
     std::vector<Instr> code;
     FuncImage() : paramCount(0), frameSize(0), registerCount(0) {}
 };
@@ -126,7 +129,7 @@ struct Image {
     bool read(const std::string &path, std::string &error);
 
     static const unsigned long Magic   = 0x31425843UL;  // "CXB1"
-    static const unsigned long Version = 2;   // v2 adds localFloat
+    static const unsigned long Version = 3;   // v2 localFloat, v3 localObject
 };
 
 // Functions the VM supplies.  A program gets them by DECLARING one without a
@@ -139,6 +142,13 @@ enum NativeId {
     NAT_PrintDouble,
     NAT_PrintString,
     NAT_PrintLine,
+    // Maths.  There is no <cmath> to include, so these are declared the same
+    // way everything else is: `double sqrt(double);` with no body.
+    NAT_Sqrt, NAT_Sin, NAT_Cos, NAT_Tan,
+    NAT_Asin, NAT_Acos, NAT_Atan, NAT_Atan2,
+    NAT_Pow, NAT_Fabs, NAT_Floor, NAT_Ceil,
+    NAT_Log, NAT_Log10, NAT_Exp,
+    NAT_Abs,                    // the one that is integer in and integer out
     NAT_Count
 };
 
@@ -146,5 +156,9 @@ enum NativeId {
 NativeId nativeByName(const std::string &name);
 const char *nativeName(NativeId id);
 int nativeArgCount(NativeId id);
+// True when the native hands back a double rather than an integer.
+bool nativeReturnsFloat(NativeId id);
+// The most any native takes; the VM keeps that many argument slots.
+const int NativeMaxArgs = 2;
 
 #endif

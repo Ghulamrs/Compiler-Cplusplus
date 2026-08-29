@@ -143,9 +143,10 @@ std::string mangleVTable(const std::string &className) {
 
 // --- the builder ------------------------------------------------------
 
-int IRFunction::addLocal(const std::string &n, int size, bool isParam, bool isFloat) {
+int IRFunction::addLocal(const std::string &n, int size, bool isParam, bool isFloat,
+                         bool isObject) {
     const int slot = static_cast<int>(locals.size());
-    locals.push_back(IRLocal(n, slot, size, isParam, isFloat));
+    locals.push_back(IRLocal(n, slot, size, isParam, isFloat, isObject));
     return slot;
 }
 

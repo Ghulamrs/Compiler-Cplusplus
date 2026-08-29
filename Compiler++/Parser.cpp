@@ -186,10 +186,20 @@ Function *Parser::parseSingleFunction() {
 
 Decl *Parser::parseDeclaration() {
     if (skipReservedConstruct()) return 0;
+    // #include is accepted and ignored.  There is no header to read -- a
+    // native binds by being declared without a body -- but every C++ program a
+    // student has ever seen opens with one, and stopping there helps nobody.
+    // Any OTHER directive is still refused, by name.
     if (cur.kind == TOK_HASH) {
-        errorAtCurrent("there is no preprocessor in this version");
-        // The whole line goes, so one directive earns one message.
         const int line = cur.line;
+        advance();
+        const bool isInclude = (cur.kind == TOK_IDENTIFIER && cur.text == "include");
+        if (!isInclude) {
+            const std::string what = (cur.kind == TOK_IDENTIFIER)
+                                   ? ("'#" + cur.text + "'")
+                                   : std::string("this directive");
+            errorAtCurrent(what + " is not supported in this version");
+        }
         while (cur.kind != TOK_EOF && cur.line == line) advance();
         suppressSync = true;
         return 0;

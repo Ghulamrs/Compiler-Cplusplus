@@ -91,6 +91,11 @@ private:
 
     // member lookup
     cxx::ClassDecl *findClass(const std::string &name);
+    // Overloaded operators: the member an expression calls, and the check that
+    // its one argument fits.
+    cxx::MethodDecl *findOperator(cc::Type *lt, cc::BinaryOp op, cc::ASTNode *at);
+    bool checkOperatorOperand(cxx::MethodDecl *op, cc::Expr *rhs, cc::Type *rt,
+                              cc::ASTNode *at);
     // Walks the base chain, most derived first -- which IS name hiding.
     // `foundIn` receives the class it was found in, for the diagnostic.
     cc::Decl *findMember(cxx::ClassDecl *cd, const std::string &member,

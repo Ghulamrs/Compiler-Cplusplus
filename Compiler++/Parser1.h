@@ -43,6 +43,8 @@ private:
     // itself: `Node *next;`.
     std::set<std::string> classNames;
     bool namesAClass(const std::string &n) const;
+    // The name of an operator member, read after the `operator` keyword.
+    std::string operatorMemberName();
 
     // extension points taken over from the C layer.
     // C++98 has no `override` keyword -- each signature must match

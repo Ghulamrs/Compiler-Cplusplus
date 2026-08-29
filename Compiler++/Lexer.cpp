@@ -4,8 +4,11 @@
 
 #include "Lexer.h"
 
+#include "Diagnostics.h"
+
 #include <cctype>
 #include <cstdlib>
+#include <map>
 #include <string>
 
 // --- token spelling, for "expected X" messages -------------------------
@@ -421,4 +424,143 @@ Token Lexer::nextToken() {
 // A factory, so the parsers never need the lexer's definition in their headers.
 Lexer *createLexer(const std::string &s) {
     return new Lexer(s);
+}
+
+// --- object-like macros ----------------------------------------------------
+//
+// A #define is a textual substitution, so it happens before the first token
+// exists.  Everything else about the language is unaffected -- which is the
+// point: a constant should not need a rule in the grammar.
+
+namespace {
+
+bool identStart(char c) {
+    return std::isalpha(static_cast<unsigned char>(c)) || c == '_';
+}
+bool identPart(char c) {
+    return std::isalnum(static_cast<unsigned char>(c)) || c == '_';
+}
+
+// Copies a string or character literal through untouched: PI inside "PI" is
+// not a macro use.
+void copyLiteral(const std::string &src, std::size_t &i, std::string &out) {
+    const char quote = src[i];
+    out += src[i++];
+    while (i < src.size()) {
+        if (src[i] == '\\' && i + 1 < src.size()) { out += src[i++]; out += src[i++]; continue; }
+        out += src[i];
+        if (src[i] == quote) { ++i; return; }
+        if (src[i] == '\n') { ++i; return; }             // unterminated
+        ++i;
+    }
+}
+
+} // namespace
+
+std::string expandDefines(const std::string &src, Diagnostics &diag) {
+    std::map<std::string, std::string> macros;
+    std::string out;
+    out.reserve(src.size());
+
+    std::size_t i = 0;
+    int line = 1;
+    bool blank = true;                  // nothing but spaces on this line yet
+
+    while (i < src.size()) {
+        const char c = src[i];
+
+        if (c == '\n') { out += c; ++i; ++line; blank = true; continue; }
+
+        // Comments and literals pass through: a macro name inside one is text.
+        if (c == '/' && i + 1 < src.size() && src[i + 1] == '/') {
+            while (i < src.size() && src[i] != '\n') out += src[i++];
+            continue;
+        }
+        if (c == '/' && i + 1 < src.size() && src[i + 1] == '*') {
+            out += src[i++]; out += src[i++];
+            while (i < src.size() && !(src[i] == '*' && i + 1 < src.size() && src[i + 1] == '/')) {
+                if (src[i] == '\n') ++line;
+                out += src[i++];
+            }
+            if (i < src.size()) { out += src[i++]; out += src[i++]; }
+            blank = false;
+            continue;
+        }
+        if (c == '"' || c == '\'') { copyLiteral(src, i, out); blank = false; continue; }
+
+        // A directive, but only when it opens the line.
+        if (c == '#' && blank) {
+            std::size_t j = i + 1;
+            while (j < src.size() && (src[j] == ' ' || src[j] == '\t')) ++j;
+            std::string word;
+            while (j < src.size() && identPart(src[j])) word += src[j++];
+
+            if (word != "define") {
+                // #include and the rest still reach the parser, which names
+                // whichever one it is.
+                while (i < src.size() && src[i] != '\n') out += src[i++];
+                continue;
+            }
+
+            while (j < src.size() && (src[j] == ' ' || src[j] == '\t')) ++j;
+            std::string name;
+            while (j < src.size() && identPart(src[j])) name += src[j++];
+
+            if (name.empty()) {
+                diag.error(line, 1, "'#define' needs a name");
+            } else if (j < src.size() && src[j] == '(') {
+                diag.error(line, 1, "function-like macros are not supported in this version");
+            } else {
+                std::string body;
+                while (j < src.size() && src[j] != '\n') body += src[j++];
+                // Trim, then expand through macros already defined, so one
+                // constant may be written in terms of another.
+                std::size_t b = 0, e = body.size();
+                while (b < e && (body[b] == ' ' || body[b] == '\t')) ++b;
+                while (e > b && (body[e - 1] == ' ' || body[e - 1] == '\t' || body[e - 1] == '\r')) --e;
+                body = body.substr(b, e - b);
+
+                std::string expanded;
+                std::size_t k = 0;
+                while (k < body.size()) {
+                    // A literal in the body is text, exactly as it is anywhere
+                    // else: #define G "PI" does not mention the macro PI.
+                    if (body[k] == '"' || body[k] == '\'') {
+                        copyLiteral(body, k, expanded);
+                        continue;
+                    }
+                    if (identStart(body[k])) {
+                        std::string w;
+                        while (k < body.size() && identPart(body[k])) w += body[k++];
+                        std::map<std::string, std::string>::const_iterator m = macros.find(w);
+                        expanded += (m == macros.end()) ? w : m->second;
+                        continue;
+                    }
+                    expanded += body[k++];
+                }
+                macros[name] = expanded;
+            }
+
+            // The line is blanked, not deleted, so every later line keeps its
+            // number and a diagnostic still points where the user is looking.
+            while (i < src.size() && src[i] != '\n') ++i;
+            continue;
+        }
+
+        if (identStart(c)) {
+            std::string word;
+            const std::size_t start = i;
+            while (i < src.size() && identPart(src[i])) word += src[i++];
+            std::map<std::string, std::string>::const_iterator m = macros.find(word);
+            out += (m == macros.end()) ? word : m->second;
+            (void)start;
+            blank = false;
+            continue;
+        }
+
+        if (c != ' ' && c != '\t' && c != '\r') blank = false;
+        out += c;
+        ++i;
+    }
+    return out;
 }

@@ -235,22 +235,26 @@ Decl *Parser::parseMemberDecl(const std::string &className, Access access) {
         advance();                              // guarantee progress
         return 0;
     }
-    if (cur.kind != TOK_IDENTIFIER) {
-        // `operator+` reaches here as a type followed by the keyword: name the
-        // feature rather than complain about a missing identifier.
-        if (cur.text == "operator") {
-            errorAtCurrent("operator overloading is not supported in this version");
-        } else {
-            errorAtCurrent("expected a member name");
-        }
+    // `operator+` is a member whose name happens to be spelled with a keyword
+    // and a symbol.  Everything after this point treats it as an ordinary
+    // method, which is what makes overload resolution and dispatch work on it
+    // without a rule of their own.
+    std::string name;
+    int line = cur.line, col = cur.col;
+    if (cur.kind == TOK_RESERVED && cur.text == "operator") {
+        advance();
+        name = operatorMemberName();
+        if (name.empty()) { delete t; skipConstruct(); suppressSync = true; return 0; }
+    } else if (cur.kind != TOK_IDENTIFIER) {
+        errorAtCurrent("expected a member name");
         delete t;
         skipConstruct();
         suppressSync = true;            // the skip IS the recovery
         return 0;
+    } else {
+        name = cur.text;
+        advance();
     }
-    const int line = cur.line, col = cur.col;
-    const std::string name = cur.text;
-    advance();
 
     if (cur.kind == TOK_LPAREN) {
         // MethodDecl IS a cc::Function, so the C layer's routine fills it.
@@ -274,6 +278,37 @@ Decl *Parser::parseMemberDecl(const std::string &className, Access access) {
     fd->col = col;
     expect(TOK_SEMI, ("after field " + name).c_str());
     return fd;
+}
+
+// The token(s) after `operator`, as the member's name: "operator+".  An
+// operator this version does not overload is refused by name here, where the
+// program is still readable, rather than misparsed further down.
+std::string Parser::operatorMemberName() {
+    struct Entry { TokenKind kind; const char *text; };
+    static const Entry table[] = {
+        { TOK_PLUS, "+" }, { TOK_MINUS, "-" }, { TOK_STAR, "*" },
+        { TOK_SLASH, "/" }, { TOK_PERCENT, "%" },
+        { TOK_EQ, "==" }, { TOK_NE, "!=" },
+        { TOK_LT, "<" }, { TOK_GT, ">" }, { TOK_LE, "<=" }, { TOK_GE, ">=" },
+        { TOK_ASSIGN, "=" }
+    };
+    const int count = static_cast<int>(sizeof(table) / sizeof(table[0]));
+    for (int i = 0; i < count; ++i) {
+        if (cur.kind == table[i].kind) {
+            advance();
+            return std::string("operator") + table[i].text;
+        }
+    }
+    if (cur.kind == TOK_LBRACKET) {
+        errorAtCurrent("operator[] is not supported in this version");
+        return std::string();
+    }
+    if (cur.kind == TOK_LPAREN) {
+        errorAtCurrent("operator() is not supported in this version");
+        return std::string();
+    }
+    errorAtCurrent(std::string("this operator cannot be overloaded in this version"));
+    return std::string();
 }
 
 bool Parser::namesAClass(const std::string &n) const {

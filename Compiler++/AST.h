@@ -201,10 +201,13 @@ struct IdentExpr : public Expr {
     void print(int indent);
 };
 
+struct Function;                    // an overloaded operator resolves to one
+
 struct UnaryExpr : public Expr {
     UnaryOp op;
     Expr *operand;
-    UnaryExpr(UnaryOp o, Expr *e) : op(o), operand(e) {}
+    Function *resolvedOperator;         // an overloaded unary '-'; not owned
+    UnaryExpr(UnaryOp o, Expr *e) : op(o), operand(e), resolvedOperator(0) {}
     ~UnaryExpr() { delete operand; }
     void print(int indent);
 };
@@ -213,7 +216,11 @@ struct BinaryExpr : public Expr {
     BinaryOp op;
     Expr *lhs;
     Expr *rhs;
-    BinaryExpr(BinaryOp o, Expr *l, Expr *r) : op(o), lhs(l), rhs(r) {}
+    // An overloaded operator, chosen by the semantic pass exactly as a call's
+    // overload is.  When set, this expression IS a call; not owned.
+    Function *resolvedOperator;
+    BinaryExpr(BinaryOp o, Expr *l, Expr *r)
+        : op(o), lhs(l), rhs(r), resolvedOperator(0) {}
     ~BinaryExpr();
     void print(int indent);
 };
@@ -227,7 +234,6 @@ struct CastExpr : public Expr {
     void print(int indent);
 };
 
-struct Function;
 
 struct CallExpr : public Expr {
     Expr *callee;

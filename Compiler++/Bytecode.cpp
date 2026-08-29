@@ -74,29 +74,60 @@ const char *opCodeName(OpCode op) {
     return "?";
 }
 
+namespace {
+struct NativeEntry { const char *name; NativeId id; int args; bool retFloat; };
+const NativeEntry NativeTable[] = {
+    { "print_int",    NAT_PrintInt,    1, false },
+    { "print_char",   NAT_PrintChar,   1, false },
+    { "print_double", NAT_PrintDouble, 1, false },
+    { "print_string", NAT_PrintString, 1, false },
+    { "print_line",   NAT_PrintLine,   0, false },
+    { "sqrt",         NAT_Sqrt,        1, true  },
+    { "sin",          NAT_Sin,         1, true  },
+    { "cos",          NAT_Cos,         1, true  },
+    { "tan",          NAT_Tan,         1, true  },
+    { "asin",         NAT_Asin,        1, true  },
+    { "acos",         NAT_Acos,        1, true  },
+    { "atan",         NAT_Atan,        1, true  },
+    { "atan2",        NAT_Atan2,       2, true  },
+    { "pow",          NAT_Pow,         2, true  },
+    { "fabs",         NAT_Fabs,        1, true  },
+    { "floor",        NAT_Floor,       1, true  },
+    { "ceil",         NAT_Ceil,        1, true  },
+    { "log",          NAT_Log,         1, true  },
+    { "log10",        NAT_Log10,       1, true  },
+    { "exp",          NAT_Exp,         1, true  },
+    { "abs",          NAT_Abs,         1, false }
+};
+const int NativeCount = static_cast<int>(sizeof(NativeTable) / sizeof(NativeTable[0]));
+}
+
 NativeId nativeByName(const std::string &name) {
-    if (name == "print_int")    return NAT_PrintInt;
-    if (name == "print_char")   return NAT_PrintChar;
-    if (name == "print_double") return NAT_PrintDouble;
-    if (name == "print_string") return NAT_PrintString;
-    if (name == "print_line")   return NAT_PrintLine;
+    for (int i = 0; i < NativeCount; ++i) {
+        if (name == NativeTable[i].name) return NativeTable[i].id;
+    }
     return NAT_Count;
 }
 
 const char *nativeName(NativeId id) {
-    switch (id) {
-    case NAT_PrintInt:    return "print_int";
-    case NAT_PrintChar:   return "print_char";
-    case NAT_PrintDouble: return "print_double";
-    case NAT_PrintString: return "print_string";
-    case NAT_PrintLine:   return "print_line";
-    case NAT_Count:       break;
+    for (int i = 0; i < NativeCount; ++i) {
+        if (NativeTable[i].id == id) return NativeTable[i].name;
     }
     return "?";
 }
 
 int nativeArgCount(NativeId id) {
-    return (id == NAT_PrintLine) ? 0 : 1;
+    for (int i = 0; i < NativeCount; ++i) {
+        if (NativeTable[i].id == id) return NativeTable[i].args;
+    }
+    return 0;
+}
+
+bool nativeReturnsFloat(NativeId id) {
+    for (int i = 0; i < NativeCount; ++i) {
+        if (NativeTable[i].id == id) return NativeTable[i].retFloat;
+    }
+    return false;
 }
 
 // --- the object file ---------------------------------------------------
@@ -190,6 +221,8 @@ bool Image::write(const std::string &path, std::string &error) const {
         for (std::size_t i = 0; i < fi.localSize.size(); ++i) putI64(out, fi.localSize[i]);
         putU(out, static_cast<unsigned long>(fi.localFloat.size()), 4);
         for (std::size_t i = 0; i < fi.localFloat.size(); ++i) putU(out, fi.localFloat[i], 1);
+        putU(out, static_cast<unsigned long>(fi.localObject.size()), 4);
+        for (std::size_t i = 0; i < fi.localObject.size(); ++i) putU(out, fi.localObject[i], 1);
 
         putU(out, static_cast<unsigned long>(fi.code.size()), 4);
         for (std::size_t i = 0; i < fi.code.size(); ++i) {
@@ -252,6 +285,9 @@ bool Image::read(const std::string &path, std::string &error) {
         n = r.getU(4);
         for (unsigned long i = 0; i < n && r.ok; ++i)
             fi.localFloat.push_back(static_cast<unsigned char>(r.getU(1)));
+        n = r.getU(4);
+        for (unsigned long i = 0; i < n && r.ok; ++i)
+            fi.localObject.push_back(static_cast<unsigned char>(r.getU(1)));
 
         n = r.getU(4);
         for (unsigned long i = 0; i < n && r.ok; ++i) {

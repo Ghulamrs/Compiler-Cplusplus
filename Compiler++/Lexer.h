@@ -44,4 +44,15 @@ private:
 
 Lexer *createLexer(const std::string &s);
 
+// Object-like macros, expanded before anything is lexed.
+//
+//     #define PI 3.14159
+//
+// is a textual substitution and nothing more -- which is all a constant needs,
+// and is why it can live here rather than in a pass of its own.  A directive
+// line is blanked rather than removed, so every later line keeps its number.
+// Function-like macros and conditional compilation are refused by name.
+class Diagnostics;
+std::string expandDefines(const std::string &src, Diagnostics &diag);
+
 #endif

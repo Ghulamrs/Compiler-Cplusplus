@@ -104,6 +104,7 @@ void CodeGen::generateFunction(const IRFunction &fn, FuncImage &out) {
         out.localOffset.push_back(offset);
         out.localSize.push_back(fn.locals[i].size);
         out.localFloat.push_back(fn.locals[i].isFloat ? 1 : 0);
+        out.localObject.push_back(fn.locals[i].isObject ? 1 : 0);
         offset += fn.locals[i].size > 0 ? fn.locals[i].size : 1;
     }
     if (offset % 8) offset += 8 - (offset % 8);

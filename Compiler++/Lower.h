@@ -143,7 +143,8 @@ protected:
     virtual Type *typeOf(Expr *e);
     void pushScope();
     void popScope();
-    int declareLocal(const std::string &name, int size, bool isParam, bool isFloat = false);
+    int declareLocal(const std::string &name, int size, bool isParam, bool isFloat = false,
+                     bool isObject = false);
     void emitGlobalInit(const std::vector<Decl*> &units);
     // One global's initialiser, given its address.  Virtual because a global
     // object is CONSTRUCTED, and only the C++ layer knows that.
@@ -151,6 +152,18 @@ protected:
     // True when a value of this type is copied whole rather than loaded into a
     // register.  Only the C++ layer has such a type.
     virtual bool isObjectType(Type *t);
+    // A function returning an object cannot hand it back in a register, and
+    // its own frame is gone by the time the caller could copy it.  So the
+    // CALLER supplies the space: a hidden pointer parameter, right after
+    // `this`, that `return` copies into.  This is what makes  V c = a + b;
+    // work at all.
+    static const char *ReturnSlotName;
+    bool returnsObject(Function *f);
+    // The ADDRESS of an object-valued expression, whether it is a name or the
+    // result of a call.
+    IRReg lowerObjectValue(Expr *e);
+    // Space for a call's object result, and the address the callee fills in.
+    IRReg allocReturnSlot(Function *target, int line);
     int findSlot(const std::string &name) const;
     virtual bool isReferenceExpr(Expr *e);  // its slot holds an address
     // A reference binds to an object, so it is passed and stored as that

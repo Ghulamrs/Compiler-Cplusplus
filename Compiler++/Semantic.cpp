@@ -367,6 +367,41 @@ void SemanticAnalyzer::resolveBases() {
 }
 
 // Most-derived first: the first match wins, which IS name hiding.
+// The member an operator expression calls, if the left operand is an object
+// that declares one.  A class without the operator is not an error here: the
+// builtin rules below will say what is actually wrong with it.
+cxx::MethodDecl *SemanticAnalyzer::findOperator(cc::Type *lt, cc::BinaryOp op,
+                                                cc::ASTNode *at) {
+    cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(stripReference(lt));
+    if (!ct) return 0;
+    cxx::ClassDecl *cd = findClass(ct->className);
+    if (!cd) return 0;
+    const std::string name = std::string("operator") + cc::binaryOpText(op);
+    cxx::ClassDecl *owner = 0;
+    cc::Decl *found = findMember(cd, name, &owner);
+    cxx::MethodDecl *md = dynamic_cast<cxx::MethodDecl*>(found);
+    if (!md) return 0;
+    if (!memberIsAccessible(md, owner)) {
+        error(at, "'" + md->name + "' is " + cxx::accessText(memberAccess(md))
+                  + " in class '" + owner->name + "'");
+    }
+    return md;
+}
+
+// An operator member takes exactly one argument, and it is the right operand.
+bool SemanticAnalyzer::checkOperatorOperand(cxx::MethodDecl *op, cc::Expr *rhs,
+                                            cc::Type *rt, cc::ASTNode *at) {
+    if (op->params.size() != 1) {
+        error(at, "'" + op->name + "' must take exactly one argument");
+        return false;
+    }
+    if (!convertible(rhs, rt, op->params[0]->type)) {
+        error(at, "cannot pass " + describe(rt) + " to " + op->name);
+        return false;
+    }
+    return true;
+}
+
 cc::Decl *SemanticAnalyzer::findMember(cxx::ClassDecl *cd, const std::string &member,
                                        cxx::ClassDecl **foundIn) {
     for (cxx::ClassDecl *c = cd; c; c = c->base) {
@@ -1526,6 +1561,16 @@ cc::Type *SemanticAnalyzer::analyzeExprImpl(cc::Expr *e, bool &isLValue) {
         cc::Type *lt = analyzeExpr(be->lhs, lL);
         cc::Type *rt = analyzeExpr(be->rhs, lR);
         if (!lt || !rt) return 0;       // the operand already reported its error
+
+        // An operand that is an object sends the whole expression looking for
+        // a member named for the operator.  Found, this is a call, and every
+        // rule below belongs to the builtin operators it is not.
+        if (cxx::MethodDecl *op = findOperator(lt, be->op, be)) {
+            if (!checkOperatorOperand(op, be->rhs, rt, be)) return 0;
+            be->resolvedOperator = op;
+            isLValue = false;
+            return op->retType;
+        }
 
         if (cc::binaryOpIsAssignment(be->op)) {
             // The other half of lvalue-ness: only an object can be assigned to.

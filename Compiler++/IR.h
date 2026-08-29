@@ -123,8 +123,12 @@ struct IRLocal {
     // A 4-byte float slot has to be written as a float, not as four bytes of
     // an integer -- otherwise a float parameter arrives as noise.
     bool isFloat;
-    IRLocal(const std::string &n, int s, int sz, bool p, bool f = false)
-        : name(n), slot(s), size(sz), isParam(p), isFloat(f) {}
+    // A by-value object parameter: the caller passes an ADDRESS and the VM
+    // copies the bytes in, because that is what "by value" means and an
+    // object does not fit in the register the argument travelled in.
+    bool isObject;
+    IRLocal(const std::string &n, int s, int sz, bool p, bool f = false, bool o = false)
+        : name(n), slot(s), size(sz), isParam(p), isFloat(f), isObject(o) {}
 };
 
 struct IRFunction {
@@ -141,7 +145,8 @@ struct IRFunction {
 
     IRReg newReg() { return nextReg++; }
     int newLabel() { return nextLabel++; }
-    int addLocal(const std::string &n, int size, bool isParam, bool isFloat = false);
+    int addLocal(const std::string &n, int size, bool isParam, bool isFloat = false,
+                 bool isObject = false);
 
     // Every emit returns its destination register, so expressions compose.
     IRReg emitConst(long value, int line);

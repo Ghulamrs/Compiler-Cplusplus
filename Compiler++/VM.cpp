@@ -5,6 +5,7 @@
 #include "VM.h"
 
 #include <cstddef>
+#include <cmath>
 #include <cstring>
 #include <iostream>
 #include <sstream>
@@ -142,31 +143,52 @@ void VM::release(long addr) {
 // --- natives ---
 
 void VM::callNative(NativeId id, int argc) {
-    // Every argument is popped, not just the one that gets used: leaving the
-    // rest behind would desync the operand stack for everything after.  The
-    // first is the one the natives take.
-    Value a;
-    a.i = 0;
-    for (int k = argc; k > 0; --k) {
+    // Arguments come off the stack in reverse, so the last one lands last.
+    // Every one is popped, whether the native reads it or not: leaving any
+    // behind would desync the stack for everything after.
+    Value a[NativeMaxArgs];
+    for (int i = 0; i < NativeMaxArgs; ++i) a[i].i = 0;
+    for (int k = argc - 1; k >= 0; --k) {
         const Value v = pop();
-        if (k == 1) a = v;
+        if (k < NativeMaxArgs) a[k] = v;
     }
+
     switch (id) {
-    case NAT_PrintInt:    std::cout << a.i; break;
-    case NAT_PrintChar:   std::cout << static_cast<char>(a.i); break;
-    case NAT_PrintDouble: std::cout << a.d; break;
+    case NAT_PrintInt:    std::cout << a[0].i; break;
+    case NAT_PrintChar:   std::cout << static_cast<char>(a[0].i); break;
+    case NAT_PrintDouble: std::cout << a[0].d; break;
     case NAT_PrintLine:   std::cout << std::endl; break;
     case NAT_PrintString: {
-        long p = a.i;
+        long p = a[0].i;
         while (p > 0 && p < static_cast<long>(mem.size()) && mem[p]) {
             std::cout << static_cast<char>(mem[p]);
             ++p;
         }
         break;
     }
+
+    // Maths.  The operand stack carries a double, which is exactly what the
+    // C library wants, so these are one call each.
+    case NAT_Sqrt:  pushD(std::sqrt(a[0].d));  return;
+    case NAT_Sin:   pushD(std::sin(a[0].d));   return;
+    case NAT_Cos:   pushD(std::cos(a[0].d));   return;
+    case NAT_Tan:   pushD(std::tan(a[0].d));   return;
+    case NAT_Asin:  pushD(std::asin(a[0].d));  return;
+    case NAT_Acos:  pushD(std::acos(a[0].d));  return;
+    case NAT_Atan:  pushD(std::atan(a[0].d));  return;
+    case NAT_Atan2: pushD(std::atan2(a[0].d, a[1].d)); return;
+    case NAT_Pow:   pushD(std::pow(a[0].d, a[1].d));   return;
+    case NAT_Fabs:  pushD(std::fabs(a[0].d));  return;
+    case NAT_Floor: pushD(std::floor(a[0].d)); return;
+    case NAT_Ceil:  pushD(std::ceil(a[0].d));  return;
+    case NAT_Log:   pushD(std::log(a[0].d));   return;
+    case NAT_Log10: pushD(std::log10(a[0].d)); return;
+    case NAT_Exp:   pushD(std::exp(a[0].d));   return;
+    case NAT_Abs:   push(a[0].i < 0 ? -a[0].i : a[0].i); return;
+
     case NAT_Count: break;
     }
-    push(0);                                    // every call yields a value
+    push(0);                                    // a print yields a value too
 }
 
 // --- the loop ---
@@ -398,6 +420,22 @@ long VM::run(const Image &image, bool &ok) {
             for (int k = 0; k < argc && k < static_cast<int>(callee.localSize.size()); ++k) {
                 // A float parameter is narrowed here; the operand stack always
                 // carries a double, and the slot may be four bytes wide.
+                const bool obj = k < static_cast<int>(callee.localObject.size())
+                                 && callee.localObject[k] != 0;
+                if (obj) {
+                    // By value: the argument is the source address, and the
+                    // parameter's own slot is the copy the callee owns.
+                    const long src = args[k].i;
+                    const long dst = nf.base + callee.localOffset[k];
+                    const long n = callee.localSize[k];
+                    if (src <= 0 || n < 0 || src + n > static_cast<long>(mem.size()) ||
+                        dst + n > static_cast<long>(mem.size())) {
+                        trap("object argument at an invalid address");
+                        break;
+                    }
+                    std::memmove(&mem[dst], &mem[src], static_cast<std::size_t>(n));
+                    continue;
+                }
                 const bool flt = k < static_cast<int>(callee.localFloat.size())
                                  && callee.localFloat[k] != 0;
                 if (flt) writeFloat(nf.base + callee.localOffset[k], callee.localSize[k], args[k].d);

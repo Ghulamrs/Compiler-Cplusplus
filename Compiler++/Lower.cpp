@@ -36,8 +36,9 @@ void Lowering::popScope() {
     }
 }
 
-int Lowering::declareLocal(const std::string &name, int size, bool isParam, bool isFloat) {
-    const int slot = fn->addLocal(name, size, isParam, isFloat);
+int Lowering::declareLocal(const std::string &name, int size, bool isParam, bool isFloat,
+                           bool isObject) {
+    const int slot = fn->addLocal(name, size, isParam, isFloat, isObject);
     slots[name] = slot;
     scopeNames.push_back(name);
     return slot;
@@ -264,6 +265,28 @@ bool Lowering::isObjectType(Type *) {
     return false;               // C has no class types
 }
 
+const char *Lowering::ReturnSlotName = "__ret";
+
+bool Lowering::returnsObject(Function *f) {
+    return f && isObjectType(f->retType);
+}
+
+IRReg Lowering::allocReturnSlot(Function *target, int line) {
+    const int size = sizeOfType(target->retType);
+    const int slot = declareLocal("__result", size > 0 ? size : Layout::PointerSize, false);
+    return fn->emitLocalAddr(slot, line);
+}
+
+IRReg Lowering::lowerObjectValue(Expr *e) {
+    // A call already yields the address of the caller-supplied slot; anything
+    // else with a place in memory yields that place.
+    if (dynamic_cast<CallExpr*>(e)) return lowerValue(e);
+    if (BinaryExpr *b = dynamic_cast<BinaryExpr*>(e)) {
+        if (b->resolvedOperator) return lowerValue(e);
+    }
+    return lowerAddress(e);
+}
+
 // --- Declarations ---
 
 void Lowering::lowerUnit(const std::vector<Decl*> &units) {
@@ -360,10 +383,16 @@ void Lowering::lowerFunction(Function *f, const std::string &mangled,
         declareLocal("this", Layout::PointerSize, true);
         ++irf->paramCount;
     }
+    // Then the hidden result pointer, if the function returns an object.
+    if (returnsObject(f)) {
+        declareLocal(ReturnSlotName, Layout::PointerSize, true);
+        ++irf->paramCount;
+    }
     for (std::size_t i = 0; i < f->params.size(); ++i) {
         VarDecl *p = f->params[i];
         const std::string pname = p->name.empty() ? "_" : p->name;
-        declareLocal(pname, sizeOfType(p->type), true, isFloatType(referentType(p->type)));
+        declareLocal(pname, sizeOfType(p->type), true, isFloatType(referentType(p->type)),
+                     isObjectType(p->type));
         localTypes[pname] = p->type;
         ++irf->paramCount;
     }
@@ -424,7 +453,18 @@ void Lowering::lowerStmt(Stmt *s) {
 
     if (ReturnStmt *rs = dynamic_cast<ReturnStmt*>(s)) {
         IRReg v = IR_NoReg;
-        if (rs->expr) {
+        if (rs->expr && isObjectType(currentReturnType)) {
+            // Copy into the caller's slot BEFORE the destructors run: the
+            // object being returned is one of the locals about to be destroyed.
+            const int slot = findSlot(ReturnSlotName);
+            if (slot >= 0) {
+                const IRReg dest = fn->emitLoad(fn->emitLocalAddr(slot, rs->line),
+                                                Layout::PointerSize, false, rs->line);
+                fn->emitMemCopy(dest, lowerObjectValue(rs->expr),
+                                sizeOfType(currentReturnType), rs->line);
+                v = dest;
+            }
+        } else if (rs->expr) {
             v = lowerValue(rs->expr);
             v = convert(v, typeOf(rs->expr), currentReturnType, rs->line);
         }
@@ -913,7 +953,11 @@ IRReg Lowering::lowerCall(CallExpr *e, bool wantsResult) {
         if (it != functions.end()) target = it->second;
     }
     const std::string sym = target ? symbolFor(target, "") : callee->name;
-    return fn->emitCall(sym, lowerArgs(e, target, 0), wantsResult, e->line);
+    std::vector<IRReg> args;
+    if (returnsObject(target)) args.push_back(allocReturnSlot(target, e->line));
+    const std::vector<IRReg> rest = lowerArgs(e, target, 0);
+    args.insert(args.end(), rest.begin(), rest.end());
+    return fn->emitCall(sym, args, wantsResult, e->line);
 }
 
 // Each argument is converted to its parameter's declared type.  Without this a
@@ -929,6 +973,10 @@ std::vector<IRReg> Lowering::lowerArgs(CallExpr *e, Function *target, std::size_
             // A reference parameter receives the object's address, never a
             // copy of its bytes.
             v = lowerAddress(e->args[i]);
+        } else if (want && isObjectType(want)) {
+            // By value: the address goes over, and the VM copies the object
+            // into the parameter's own slot.
+            v = lowerObjectValue(e->args[i]);
         } else {
             v = lowerValue(e->args[i]);
             if (want) v = convert(v, typeOf(e->args[i]), want, e->line);

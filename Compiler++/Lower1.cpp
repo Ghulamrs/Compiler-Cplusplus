@@ -184,6 +184,16 @@ bool Lowering::lowerLayerAddress(cc::Expr *e, IRReg &out) {
 }
 
 bool Lowering::lowerLayerValue(cc::Expr *e, IRReg &out) {
+    // An overloaded operator IS a call, so it is lowered as one: the left
+    // operand is the object, the right is the single argument.  Semantic chose
+    // the member; nothing is re-resolved here.
+    if (cc::BinaryExpr *be = dynamic_cast<cc::BinaryExpr*>(e)) {
+        if (MethodDecl *op = dynamic_cast<MethodDecl*>(be->resolvedOperator)) {
+            out = emitOperatorCall(op, be->lhs, be->rhs, be->line);
+            return true;
+        }
+    }
+
     if (dynamic_cast<ThisExpr*>(e)) {
         out = loadThis(e->line);
         return true;
@@ -345,12 +355,12 @@ void Lowering::lowerVarDecl(cc::VarDecl *vd) {
             emitConstruct(cd, fn->emitLocalAddr(slot, vd->line), one, vd->line);
             return;
         }
-        if (!isAddressable(vd->init)) {
+        if (!isAddressable(vd->init) && !yieldsObject(vd->init)) {
             diag.error(vd->line, vd->col,
                        "an object can only be copied from another object in this version");
             return;
         }
-        const IRReg src = lowerAddress(vd->init);
+        const IRReg src = lowerObjectValue(vd->init);
         fn->emitMemCopy(fn->emitLocalAddr(slot, vd->line), src, size, vd->line);
         return;
     }
@@ -405,6 +415,19 @@ void Lowering::emitArrayDestruct(ClassDecl *cd, IRReg base, long count,
     }
 }
 
+// A call or an overloaded operator whose result is an object: it has no name,
+// but it does have a place -- the slot the caller supplied for it.
+bool Lowering::yieldsObject(cc::Expr *e) const {
+    if (cc::CallExpr *c = dynamic_cast<cc::CallExpr*>(e)) {
+        return c->resolved && dynamic_cast<ClassType*>(c->resolved->retType) != 0;
+    }
+    if (cc::BinaryExpr *b = dynamic_cast<cc::BinaryExpr*>(e)) {
+        return b->resolvedOperator
+            && dynamic_cast<ClassType*>(b->resolvedOperator->retType) != 0;
+    }
+    return false;
+}
+
 // Only something with a place in memory can be copied from.
 bool Lowering::isAddressable(cc::Expr *e) const {
     if (dynamic_cast<cc::IdentExpr*>(e))    return true;
@@ -453,6 +476,32 @@ bool Lowering::isBoolType(cc::Type *t) {
 
 // --- Calls, including the one that matters ---
 
+// object.operatorX(argument) -- with the object passed as `this`, and the
+// argument obeying the same by-reference rule every other parameter does.
+IRReg Lowering::emitOperatorCall(MethodDecl *op, cc::Expr *lhsExpr,
+                                 cc::Expr *rhsExpr, int line) {
+    std::vector<IRReg> args;
+    args.push_back(lowerObjectValue(lhsExpr));
+    if (returnsObject(op)) args.push_back(allocReturnSlot(op, line));
+
+    cc::Type *want = op->params.empty() ? 0 : op->params[0]->type;
+    IRReg v;
+    if (want && isReferenceType(want)) {
+        v = lowerAddress(rhsExpr);
+    } else if (want && isObjectType(want)) {
+        // By value: the address goes over and the VM copies the object into
+        // the parameter's slot, which is the copy the callee owns.
+        v = lowerObjectValue(rhsExpr);
+    } else {
+        v = lowerValue(rhsExpr);
+        if (want) v = convert(v, referentType(typeOf(rhsExpr)), want, line);
+    }
+    args.push_back(v);
+
+    return fn->emitCall(mangleOverload(op->ownerClass, op->name, op->params),
+                        args, true, line);
+}
+
 IRReg Lowering::lowerCall(cc::CallExpr *e, bool wantsResult) {
     MemberAccessExpr *ma = dynamic_cast<MemberAccessExpr*>(e->callee);
     if (!ma) {
@@ -465,6 +514,7 @@ IRReg Lowering::lowerCall(cc::CallExpr *e, bool wantsResult) {
             if (m) {
                 std::vector<IRReg> args;
                 args.push_back(loadThis(e->line));
+                if (returnsObject(m)) args.push_back(allocReturnSlot(m, e->line));
                 const std::vector<IRReg> rest = lowerArgs(e, m, 0);
                 args.insert(args.end(), rest.begin(), rest.end());
                 return fn->emitCall(mangleOverload(m->ownerClass, m->name, m->params),
@@ -489,6 +539,7 @@ IRReg Lowering::lowerCall(cc::CallExpr *e, bool wantsResult) {
     // function runs, not how it is called.
     std::vector<IRReg> args;
     args.push_back(object);
+    if (returnsObject(m)) args.push_back(allocReturnSlot(m, e->line));
     const std::vector<IRReg> rest = lowerArgs(e, m, 0);
     args.insert(args.end(), rest.begin(), rest.end());
 

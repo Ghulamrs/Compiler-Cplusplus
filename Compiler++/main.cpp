@@ -43,6 +43,7 @@
 #include "CodeGen.h"
 #include "IR.h"
 #include "Layout.h"
+#include "Lexer.h"
 #include "Lower1.h"
 #include "Parser.h"
 #include "Parser1.h"
@@ -127,6 +128,9 @@ int main(int argc, char **argv) {
 
     // parseTranslationUnit() is the C layer's, but every hook it calls is
     // virtual, so a cxx::Parser parses the C++ forms through the same loop.
+    // #define is a textual substitution, so it happens before the first token.
+    source = expandDefines(source, diag);
+
     cxx::Parser parser(source, diag);
     std::vector<cc::Decl*> unit = parser.parseTranslationUnit();
 
