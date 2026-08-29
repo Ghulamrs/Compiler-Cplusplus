@@ -31,6 +31,15 @@ cc::Type *SemanticAnalyzer::makeBuiltin(cc::BuiltinKind k) {
     return t;
 }
 
+// Can this value answer "is it true?"  Anything arithmetic, any pointer, and
+// bool itself.
+bool SemanticAnalyzer::isTestable(cc::Type *t) {
+    if (!t) return true;                    // an earlier error already spoke
+    cc::BuiltinKind k;
+    if (arithmeticKind(t, k)) return true;
+    return dynamic_cast<cc::PointerType*>(stripReference(decay(t))) != 0;
+}
+
 bool SemanticAnalyzer::isBoolType(cc::Type *t) {
     return dynamic_cast<cxx::BoolType*>(stripReference(t)) != 0;
 }
@@ -119,8 +128,8 @@ void SemanticAnalyzer::warnIfNarrowing(cc::Expr *e, cc::Type *from, cc::Type *to
     if (!isNarrowing(kf, kt)) return;
     if (e && literalFitsIn(e, kt)) return;
     diag.warning(at->line, at->col,
-                 std::string("converting ") + describe(from) + " to " + describe(to)
-                 + " in " + what + " may lose value");
+                 std::string("narrowing ") + describe(from) + " to " + describe(to)
+                 + " in " + what);
 }
 
 // Legal, but worth saying out loud: the value may not survive the trip.
@@ -439,7 +448,7 @@ void SemanticAnalyzer::resolveOverrides(cxx::ClassDecl *cd) {
         if (!sameSignature(md, bm)) {
             diag.warning(md->line, md->col,
                          "'" + md->name + "' hides '" + bm->ownerClass + "::" + bm->name
-                         + "' rather than overriding it; the parameter lists differ");
+                         + "' rather than overriding it");
             continue;
         }
         if (!bm->isVirtual) continue;       // hiding a non-virtual is not an override
@@ -513,8 +522,7 @@ void SemanticAnalyzer::checkClassInvariants(cxx::ClassDecl *cd) {
             cxx::MethodDecl *b = dynamic_cast<cxx::MethodDecl*>(cd->members[j]);
             if (!b || b->name != a->name || b->isDestructor) continue;
             if (!sameParams(a, b)) continue;
-            error(b, "'" + cd->name + "::" + a->name + "' is declared more than once "
-                     "with the same parameters");
+            error(b, "'" + cd->name + "::" + a->name + "' is declared twice with the same parameters");
         }
         for (std::size_t j = 0; j < cd->members.size(); ++j) {
             cxx::FieldDecl *f = dynamic_cast<cxx::FieldDecl*>(cd->members[j]);
@@ -543,8 +551,7 @@ void SemanticAnalyzer::checkClassInvariants(cxx::ClassDecl *cd) {
     }
     if (polymorphic && cd->dtor && !cd->dtor->isVirtual) {
         diag.warning(cd->dtor->line, cd->dtor->col,
-                     "class '" + cd->name + "' has virtual functions but its destructor is not "
-                     "virtual; deleting through a base pointer would not run it");
+                     "class '" + cd->name + "' has virtual functions but a non-virtual destructor");
     }
 }
 
@@ -597,7 +604,7 @@ void SemanticAnalyzer::analyzeMemberInits(cxx::MethodDecl *ctor, cxx::ClassDecl 
             if (cd->base && findMember(cd->base, mi.name, &owner)) {
                 diag.error(mi.line, mi.col,
                            "'" + mi.name + "' is inherited from '" + owner->name
-                           + "' and cannot be initialised here; initialise the base class instead");
+                           + "'; initialise the base instead");
             } else {
                 diag.error(mi.line, mi.col,
                            "'" + mi.name + "' is not a member of class '" + cd->name + "'");
@@ -634,8 +641,7 @@ void SemanticAnalyzer::analyzeMemberInits(cxx::MethodDecl *ctor, cxx::ClassDecl 
     // list is written.  The bug only shows when one initialiser reads another.
     if (outOfOrder) {
         diag.warning(ctor->line, ctor->col,
-                     "the initialiser list is written out of declaration order; members are "
-                     "always constructed in the order they are declared");
+                     "initialiser list is out of declaration order; members construct in declaration order");
     }
 }
 
@@ -645,8 +651,7 @@ cxx::MethodDecl *SemanticAnalyzer::selectConstructor(cxx::ClassDecl *cd, std::si
     // No constructors at all is legal: the fields are uninitialised, as in C.
     if (cd->ctors.empty()) {
         if (argCount > 0) {
-            error(at, "class '" + cd->name + "' has no constructor, so " + what
-                      + " cannot take arguments");
+            error(at, "class '" + cd->name + "' has no constructor to take arguments");
         }
         return 0;
     }
@@ -794,9 +799,7 @@ void SemanticAnalyzer::declareTopLevel(const std::vector<cc::Decl*> &units) {
                 // Two functions cannot differ only in what they return: the
                 // call site has no way to say which one it wanted.
                 if (!sameType(set[k]->retType, fn->retType)) {
-                    error(fn, "'" + fn->name + "' cannot be overloaded on its return "
-                              "type alone (" + describe(set[k]->retType) + " and "
-                              + describe(fn->retType) + ")");
+                    error(fn, "'" + fn->name + "' cannot be overloaded on return type alone");
                 } else if (set[k]->body && fn->body) {
                     error(fn, "function '" + fn->name + "' is already defined");
                 }
@@ -1186,7 +1189,7 @@ cc::Function *SemanticAnalyzer::resolveOverload(const std::vector<cc::Function*>
     }
     if (viable.size() == 1) return viable[0];
     if (viable.size() > 1) {
-        error(call, "ambiguous call to '" + name + "': more than one overload matches");
+        error(call, "ambiguous call to '" + name + "'");
         return viable[0];
     }
     error(call, "no overload of '" + name + "' takes these arguments");
@@ -1306,8 +1309,7 @@ cc::Type *SemanticAnalyzer::analyzeExpr(cc::Expr *e, bool &isLValue) {
                 }
                 if (anyDerived) {
                     diag.warning(de->line, de->col,
-                                 "deleting through '" + describe(t) + "' whose destructor is not "
-                                 "virtual; a derived object would not be destroyed correctly");
+                                 "deleting through '" + describe(t) + "' with a non-virtual destructor");
                 }
             }
         }
@@ -1492,14 +1494,33 @@ cc::Type *SemanticAnalyzer::analyzeExpr(cc::Expr *e, bool &isLValue) {
         }
 
 
-        if (cc::binaryOpIsComparison(be->op) || cc::binaryOpIsLogical(be->op)) {
+        if (cc::binaryOpIsLogical(be->op)) {
+            // && and || only ask whether each side is true, and anything that
+            // converts to bool can answer that -- a number, or a pointer.
+            if (!isTestable(lt) || !isTestable(rt)) {
+                error(be, std::string("'") + cc::binaryOpText(be->op)
+                          + "' needs testable operands, not "
+                          + describe(lt) + " and " + describe(rt));
+                return 0;
+            }
+            return makeBool();
+        }
+
+        if (cc::binaryOpIsComparison(be->op)) {
             cc::BuiltinKind kl, kr;
             const bool bothArith = arithmeticKind(lt, kl) && arithmeticKind(rt, kr);
-            if (!bothArith && !canConvert(lt, rt) && !canConvert(rt, lt)) {
+            // Two pointers compare when one converts to the other, and a
+            // pointer compares with the literal 0 -- which is how a linked
+            // list finds its end.
+            const bool ptrCompare =
+                (dynamic_cast<cc::PointerType*>(stripReference(decay(lt))) ||
+                 dynamic_cast<cc::PointerType*>(stripReference(decay(rt)))) &&
+                (convertible(be->rhs, rt, lt) || convertible(be->lhs, lt, rt));
+            if (!bothArith && !ptrCompare) {
                 error(be, std::string("cannot compare ") + describe(lt) + " with " + describe(rt));
                 return 0;
             }
-            // In C++ a comparison yields bool, which this subset now has.
+            // In C++ a comparison yields bool.
             return makeBool();
         }
 

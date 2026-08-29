@@ -10,7 +10,7 @@
 namespace cc {
 
 Parser::Parser(const std::string &s, Diagnostics &d)
-    : lexer(createLexer(s)), diag(d) {
+    : lexer(createLexer(s)), diag(d), suppressSync(false) {
     advance();
 }
 
@@ -39,6 +39,61 @@ bool Parser::match(TokenKind k) {
     if (cur.kind != k) return false;
     advance();
     return true;
+}
+
+// One message, then step over the whole construct.  A feature the subset does
+// not have should cost the reader one line, not twenty.
+bool Parser::skipReservedConstruct() {
+    if (cur.kind != TOK_RESERVED) return false;
+    const char *help = reservedWordHelp(cur.text);
+    errorAtCurrent(help ? help : "this keyword is not supported in this version");
+    skipConstruct();
+    suppressSync = true;
+    return true;
+}
+
+void Parser::skipParenGroup() {
+    if (cur.kind != TOK_LPAREN) return;
+    int depth = 0;
+    while (cur.kind != TOK_EOF) {
+        if (cur.kind == TOK_LPAREN) ++depth;
+        else if (cur.kind == TOK_RPAREN) {
+            --depth;
+            advance();
+            if (depth == 0) return;
+            continue;
+        }
+        advance();
+    }
+}
+
+void Parser::skipConstruct() {
+    // try { ... } catch ( ... ) { ... }  is ONE construct, however many
+    // keywords it spells, so it earns one message.
+    const bool isTry = (cur.kind == TOK_RESERVED && cur.text == "try");
+    int depth = 0;
+    while (cur.kind != TOK_EOF) {
+        if (cur.kind == TOK_LBRACE) { ++depth; advance(); continue; }
+        if (cur.kind == TOK_RBRACE) {
+            if (depth == 0) return;         // belongs to an enclosing block
+            --depth;
+            advance();
+            if (depth == 0) {
+                // try { ... } catch ( ... ) { ... } is one construct: keep
+                // going rather than leaving `catch` to earn a second message.
+                if (isTry && cur.kind == TOK_RESERVED && cur.text == "catch") {
+                    advance();
+                    skipParenGroup();
+                    continue;
+                }
+                match(TOK_SEMI);            // a class or enum body may end with ;
+                return;
+            }
+            continue;
+        }
+        if (cur.kind == TOK_SEMI && depth == 0) { advance(); return; }
+        advance();
+    }
 }
 
 // Skip to a token that plausibly begins something new.
@@ -91,8 +146,10 @@ std::vector<Decl*> Parser::parseTranslationUnit() {
     std::vector<Decl*> units;
     while (cur.kind != TOK_EOF) {
         const std::size_t posBefore = lexer->tell().offset;
+        suppressSync = false;
         Decl *d = parseDeclaration();       // virtual
         if (d) units.push_back(d);
+        if (suppressSync) { suppressSync = false; continue; }
         // Only a FAILED parse resynchronises: one that produced a node left the
         // parser somewhere sensible even if it also reported.  The progress
         // check is the backstop that makes this loop terminate regardless.
@@ -118,6 +175,7 @@ Function *Parser::parseSingleFunction() {
 // --- declarations -----------------------------------------------------
 
 Decl *Parser::parseDeclaration() {
+    if (skipReservedConstruct()) return 0;
     Type *t = parseType();              // virtual
     if (!t) {
         errorAtCurrent(std::string("expected a declaration, found ") + tokenName(cur.kind));
@@ -221,8 +279,10 @@ CompoundStmt *Parser::parseBlock() {
     if (!expect(TOK_LBRACE, "to open a block")) return block;
     while (cur.kind != TOK_RBRACE && cur.kind != TOK_EOF) {
         const std::size_t posBefore = lexer->tell().offset;
+        suppressSync = false;
         Stmt *s = parseStatement();         // virtual
         if (s) block->body.push_back(s);
+        if (suppressSync) { suppressSync = false; continue; }
         if (!s) synchronize();
         if (lexer->tell().offset == posBefore && cur.kind != TOK_EOF) advance();
     }
@@ -234,6 +294,24 @@ CompoundStmt *Parser::parseBlock() {
 // the declaration rule is tried first and rewound if it fails.  parseType() is
 // VIRTUAL, so this one C rule also declares the C++ layer's types.
 Stmt *Parser::parseStatement() {
+    if (skipReservedConstruct()) return 0;
+
+    // A label is only useful with goto, which this subset does not have, so it
+    // is reported here rather than left to fail as a stray expression.
+    if (cur.kind == TOK_IDENTIFIER) {
+        const State st = save();
+        const std::string name = cur.text;
+        advance();
+        if (cur.kind == TOK_COLON) {
+            errorAtCurrent("labels are not supported in this version");
+            advance();
+            suppressSync = true;
+            return 0;
+        }
+        restore(st);
+        (void)name;
+    }
+
     const int line = cur.line, col = cur.col;
     Stmt *s = 0;
 
@@ -398,7 +476,7 @@ Type *Parser::parseType() {
         case TOK_SHORT:    if (length != LenNone) bad = true; length = LenShort; break;
         case TOK_LONG:
             if (length == LenLong) {
-                errorAtCurrent("'long long' is not supported in this subset");
+                errorAtCurrent("'long long' is not supported in this version");
                 bad = true;
                 alreadyReported = true;
             } else if (length != LenNone) bad = true;
@@ -683,6 +761,20 @@ Expr *Parser::parsePrimary() {
     }
     if (cur.kind == TOK_LPAREN) return parseCastOrParen();
 
+    if (cur.kind == TOK_RESERVED) {
+        const char *help = reservedWordHelp(cur.text);
+        errorAtCurrent(help ? help : "this keyword is not supported in this version");
+        advance();
+        // sizeof(T) and the named casts carry an operand; stepping over it
+        // keeps one message from becoming three.
+        skipParenGroup();
+        if (cur.kind == TOK_LT) {           // static_cast<T>(v)
+            while (cur.kind != TOK_EOF && cur.kind != TOK_GT) advance();
+            match(TOK_GT);
+            skipParenGroup();
+        }
+        return 0;
+    }
     errorAtCurrent(std::string("expected an expression, found ") + tokenName(cur.kind));
     return 0;
 }

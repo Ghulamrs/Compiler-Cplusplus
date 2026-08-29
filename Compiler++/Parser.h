@@ -45,6 +45,18 @@ protected:
     bool expect(TokenKind k, const char *context);  // reports if it does not match
     bool match(TokenKind k);                        // consume if it matches
     void synchronize();         // panic-mode: skip to a plausible restart point
+    // Reports the one message a reserved keyword deserves and skips the whole
+    // construct, so an unsupported feature costs one diagnostic and not a
+    // cascade of them.  Returns true when it consumed something.
+    bool skipReservedConstruct();
+    // Skips to the end of the current declaration or statement, counting
+    // braces so a body is stepped over whole.
+    void skipConstruct();
+    // Steps over a balanced ( ... ), for a reserved word used as an operator.
+    void skipParenGroup();
+    // Set by skipReservedConstruct so the caller does not resynchronise on top
+    // of a skip that already landed cleanly.
+    bool suppressSync;
 
     // --- speculation ------------------------------------------------------
     // Point p; and p.x = 1; both start with an identifier, so parseStatement()

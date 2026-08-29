@@ -86,9 +86,48 @@ const char *tokenName(TokenKind k) {
     case TOK_OROR:       return "'||'";
     case TOK_NOT:        return "'!'";
     case TOK_AMP:        return "'&'";
+    case TOK_RESERVED:   return "a reserved keyword";
     case TOK_UNKNOWN:    return "unknown token";
     }
     return "token";
+}
+
+// The features this subset deliberately leaves out, each with the message the
+// parser gives when it meets one.  Naming the feature and the alternative is
+// the difference between a compiler that teaches and one that merely refuses.
+const char *reservedWordHelp(const std::string &w) {
+    if (w == "template" || w == "typename" || w == "export") {
+        return "templates are not supported in this version";
+    }
+    if (w == "throw" || w == "try" || w == "catch") {
+        return "exceptions are not supported in this version";
+    }
+    if (w == "namespace" || w == "using") {
+        return "namespaces are not supported in this version";
+    }
+    if (w == "operator") {
+        return "operator overloading is not supported in this version";
+    }
+    if (w == "static") return "'static' is not supported in this version";
+    if (w == "friend")   return "'friend' is not supported in this version";
+    if (w == "mutable")  return "'mutable' is not supported in this version";
+    if (w == "explicit") return "'explicit' is not supported in this version";
+    if (w == "inline")   return "'inline' is not supported in this version";
+    if (w == "goto")     return "'goto' is not supported in this version";
+    if (w == "sizeof")   return "'sizeof' is not supported in this version";
+    if (w == "enum")     return "'enum' is not supported in this version";
+    if (w == "union")    return "'union' is not supported in this version";
+    if (w == "typedef")  return "'typedef' is not supported in this version";
+    if (w == "static_cast" || w == "const_cast" ||
+        w == "dynamic_cast" || w == "reinterpret_cast") {
+        return "named casts are not supported in this version; use (T)value";
+    }
+    if (w == "volatile" || w == "register" || w == "extern" || w == "auto") {
+        return "storage-class keywords are not supported in this version";
+    }
+    if (w == "wchar_t")  return "'wchar_t' is not supported in this version";
+    if (w == "asm")      return "assembly is not supported in this version";
+    return 0;
 }
 
 // One place for the escapes both literal forms share.
@@ -208,6 +247,7 @@ Token Lexer::nextToken() {
         else if (id == "this")      tok.kind = TOK_THIS;
         else if (id == "true")      tok.kind = TOK_TRUE;
         else if (id == "false")     tok.kind = TOK_FALSE;
+        else if (reservedWordHelp(id)) { tok.kind = TOK_RESERVED; tok.text = id; }
         else                        tok.text = id;
         return tok;
     }

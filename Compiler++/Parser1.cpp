@@ -119,8 +119,7 @@ ClassDecl *Parser::parseClass() {
         }
         // A deliberate limit, so say so rather than emitting a parse error.
         if (cur.kind == TOK_COMMA) {
-            errorAtCurrent("multiple inheritance is not supported; "
-                           "this compiler allows a single base class");
+            errorAtCurrent("multiple inheritance is not supported in this version");
             while (cur.kind != TOK_LBRACE && cur.kind != TOK_EOF) advance();
         }
     }
@@ -139,7 +138,9 @@ ClassDecl *Parser::parseClass() {
             continue;
         }
         const std::size_t posBefore = lexer->tell().offset;
+        suppressSync = false;
         Decl *m = parseMemberDecl(cname, access);
+        if (suppressSync) { suppressSync = false; continue; }
         if (m) {
             cd->members.push_back(m);
             // Aliases for lookup; `members` owns them.
@@ -173,6 +174,7 @@ bool Parser::looksLikeConstructor(const std::string &className) {
 }
 
 Decl *Parser::parseMemberDecl(const std::string &className, Access access) {
+    if (skipReservedConstruct()) return 0;
     // `virtual` precedes the return type and is meaningful only on a method.
     const bool sawVirtual = (cur.kind == TOK_VIRTUAL);
     if (sawVirtual) advance();

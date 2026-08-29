@@ -94,8 +94,8 @@ void Layout::computeFor(cxx::ClassDecl *cd) {
         // Rejecting it keeps every upcast a no-op.
         if (cl.hasVPtr && !baseLayout->hasVPtr) {
             diag.error(cd->line, cd->col,
-                       "class '" + cd->name + "' introduces a virtual function but its base '"
-                       + cd->base->name + "' has none; declare the base's function virtual");
+                       "class '" + cd->name + "' adds a virtual function but base '"
+                       + cd->base->name + "' has none");
             cl.hasVPtr = false;
         }
     } else if (cl.hasVPtr) {

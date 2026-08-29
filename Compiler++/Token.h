@@ -92,6 +92,13 @@ enum TokenKind {
     TOK_NOT,        // !
     TOK_AMP,        // &
 
+    // A keyword of real C++ that this subset leaves out.  It is lexed rather
+    // than left as an identifier so the parser can say WHICH feature is
+    // missing, once, instead of failing its way through the construct.  The
+    // set spans both layers -- goto and sizeof are C's, template and throw are
+    // C++'s -- so it belongs to the shared lexer, not to either grammar.
+    TOK_RESERVED,
+
     TOK_UNKNOWN
 };
 
@@ -112,5 +119,9 @@ struct Token {
 
 // Human-readable spelling, for "expected X, found Y" messages.
 const char *tokenName(TokenKind k);
+
+// Why a reserved word is not available, and what to do instead.  Returns 0
+// when the word is not one of them.
+const char *reservedWordHelp(const std::string &word);
 
 #endif

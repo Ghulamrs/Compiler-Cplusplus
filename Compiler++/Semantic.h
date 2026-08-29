@@ -122,6 +122,7 @@ private:
     // The builtin kind a type names, or BK_Void when it names none.
     static bool builtinKindOf(cc::Type *t, cc::BuiltinKind &out);
     static bool isBoolType(cc::Type *t);
+    bool isTestable(cc::Type *t);   // usable as a condition
     // The kind a type contributes to arithmetic.  bool answers BK_Int, because
     // that is what it promotes to -- which is why the C layer's kind table
     // needs no entry for a C++ type.
