@@ -385,6 +385,13 @@ bool SemanticAnalyzer::isConstExpr(cc::Expr *e) {
     // A member is const when the object is, whatever the field says.
     if (cxx::MemberAccessExpr *ma = dynamic_cast<cxx::MemberAccessExpr*>(e)) {
         if (!ma->isArrow && isConstExpr(ma->base)) return true;
+        // p->x through a const P*: the OBJECT is *p, so its constness is the
+        // pointee's, not the pointer's.
+        if (ma->isArrow && ma->base) {
+            cc::Type *bt = stripReference(ma->base->resolvedType);
+            cc::PointerType *pt = dynamic_cast<cc::PointerType*>(bt);
+            if (pt && pt->base && pt->base->isConst) return true;
+        }
     }
     // An element is const when the array is.
     if (cc::IndexExpr *ix = dynamic_cast<cc::IndexExpr*>(e)) {

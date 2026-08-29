@@ -451,6 +451,7 @@ cc::Type *Parser::parseType() {
         cc::Type *b = new BoolType();
         b->line = line;
         b->col = col;
+        b->isConst = leadingConst;
         return parsePointerSuffixes(b);
     }
 
@@ -483,6 +484,9 @@ cc::Type *Parser::parseType() {
             ClassType *ct = new ClassType(last);
             ct->line = line;
             ct->col = col;
+            // The const belongs to the VALUE: `const Point *p` is a pointer to
+            // a const Point, and p itself may still be moved.
+            ct->isConst = leadingConst;
             t = parsePointerSuffixes(ct);       // the * suffixes are the C layer's
         } else {
             delete qn;
@@ -490,7 +494,6 @@ cc::Type *Parser::parseType() {
     }
 
     if (!t) return 0;
-    if (leadingConst) t->isConst = true;
 
     // reference suffix T& -- new in C++, and only one is legal
     if (cur.kind == TOK_AMP) {
