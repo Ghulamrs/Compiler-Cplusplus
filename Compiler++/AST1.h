@@ -72,6 +72,18 @@ struct FieldDecl : public Decl {
     void print(int indent);
 };
 
+// One entry in a constructor's initialiser list:  x(1)  or  Base(a, b).
+// The name is either a field of this class or the base class's name; which one
+// it is, is decided by the semantic pass and recorded in `isBase`.
+struct MemberInit {
+    std::string name;
+    std::vector<cc::Expr*> args;
+    bool isBase;
+    int line;
+    int col;
+    MemberInit() : isBase(false), line(0), col(0) {}
+};
+
 // A member function.  A method IS a function -- same return type, name,
 // parameters and body -- that additionally knows its access, its class, and
 // whether it is virtual.  So it derives from cc::Function instead of
@@ -87,10 +99,23 @@ struct MethodDecl : public Function {
     // The base-class method this one overrides, filled in by the semantic
     // pass; 0 when this method overrides nothing.
     MethodDecl *overrides;
+
+    // A constructor and a destructor are member functions with no return type
+    // and a special name -- the class's own, and ~ plus the class's own.  They
+    // are not separate node types because everything else about them (access,
+    // parameters, a body, virtualness for a destructor) is a method's.
+    bool isConstructor;
+    bool isDestructor;
+    // Only a constructor has these:  Point(int a) : x(a) { }
+    std::vector<MemberInit> memberInits;
+
     MethodDecl(Type *r, const std::string &n, Access a)
-        : Function(r, n), access(a), isVirtual(false), overrides(0) {}
+        : Function(r, n), access(a), isVirtual(false), overrides(0),
+          isConstructor(false), isDestructor(false) {}
+    ~MethodDecl();
     // Only the first printed line differs from a plain function.
     void printSignature(int indent);
+    void printBodyPrefix(int indent);
 };
 
 // class D : public B { ... };
@@ -108,8 +133,13 @@ struct ClassDecl : public Decl {
     // Resolved by the semantic pass from baseName; NOT owned, and 0 until then.
     ClassDecl *base;
     std::vector<Decl*> members;
+    // Aliases INTO `members`, which owns them.  Constructors are indexed apart
+    // because they all share one name and so cannot be told apart by ordinary
+    // name lookup; they are selected by argument count instead.
+    std::vector<MethodDecl*> ctors;
+    MethodDecl *dtor;               // 0 when the class declares none
     ClassDecl(const std::string &n)
-        : name(n), baseAccess(ACC_Public), base(0) {}
+        : name(n), baseAccess(ACC_Public), base(0), dtor(0) {}
     ~ClassDecl();
     void print(int indent);
 };

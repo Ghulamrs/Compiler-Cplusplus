@@ -9,10 +9,10 @@
 #include "Semantic.h"
 
 #include <cstddef>
-#include <cstdio>
+#include <sstream>
 
 SemanticAnalyzer::SemanticAnalyzer(Diagnostics &d)
-    : diag(d), currentReturnType(0), loopDepth(0) {}
+    : diag(d), currentReturnType(0), currentIsCtorOrDtor(false), loopDepth(0) {}
 
 SemanticAnalyzer::~SemanticAnalyzer() {
     for (std::size_t i = 0; i < ownedTypes.size(); ++i) delete ownedTypes[i];
@@ -72,6 +72,12 @@ std::string SemanticAnalyzer::describe(cc::Type *t) {
     cxx::ReferenceType *rt = dynamic_cast<cxx::ReferenceType*>(t);
     if (rt) return describe(rt->base) + "&";
     return "<type>";
+}
+
+std::string SemanticAnalyzer::countText(std::size_t n) {
+    std::ostringstream ss;
+    ss << n;
+    return ss.str();
 }
 
 bool SemanticAnalyzer::isVoid(cc::Type *t) {
@@ -216,7 +222,12 @@ cc::Decl *SemanticAnalyzer::findMember(cxx::ClassDecl *cd, const std::string &me
             cxx::FieldDecl *fd = dynamic_cast<cxx::FieldDecl*>(c->members[i]);
             if (fd && fd->name == member) { if (foundIn) *foundIn = c; return fd; }
             cxx::MethodDecl *md = dynamic_cast<cxx::MethodDecl*>(c->members[i]);
-            if (md && md->name == member) { if (foundIn) *foundIn = c; return md; }
+            // Constructors share the class's name and destructors are never
+            // reached by ordinary lookup, so neither takes part in it.
+            if (md && !md->isConstructor && !md->isDestructor && md->name == member) {
+                if (foundIn) *foundIn = c;
+                return md;
+            }
         }
     }
     return 0;
@@ -281,9 +292,24 @@ cc::Type *SemanticAnalyzer::memberType(cc::Decl *m) {
 // method HIDES the base one rather than overriding it.
 void SemanticAnalyzer::resolveOverrides(cxx::ClassDecl *cd) {
     if (!cd->base) return;
+
+    // A destructor overrides by POSITION, not by name: ~Derived and ~Base are
+    // spelled differently but occupy the same vtable slot.  So it is matched
+    // here rather than by the name search below.
+    if (cd->dtor) {
+        for (cxx::ClassDecl *b = cd->base; b; b = b->base) {
+            if (!b->dtor) continue;
+            if (b->dtor->isVirtual) {
+                cd->dtor->overrides = b->dtor;
+                cd->dtor->isVirtual = true;
+            }
+            break;
+        }
+    }
+
     for (std::size_t i = 0; i < cd->members.size(); ++i) {
         cxx::MethodDecl *md = dynamic_cast<cxx::MethodDecl*>(cd->members[i]);
-        if (!md) continue;
+        if (!md || md->isConstructor || md->isDestructor) continue;
         cc::Decl *found = findMember(cd->base, md->name);
         cxx::MethodDecl *bm = dynamic_cast<cxx::MethodDecl*>(found);
         if (!bm) continue;
@@ -322,12 +348,188 @@ void SemanticAnalyzer::pushClassScope(cxx::ClassDecl *cd) {
                 continue;
             }
             cxx::MethodDecl *md = dynamic_cast<cxx::MethodDecl*>(c->members[i]);
-            if (md) {
+            if (md && !md->isConstructor && !md->isDestructor) {
                 Symbol *s = new Symbol(SYM_Method, md->name, md, md->retType);
                 if (!symbols.insert(md->name, s)) delete s;
             }
         }
     }
+}
+
+// Does a value of this type need a destructor call when it dies?  Only a
+// class object does -- and only one whose class, or some base of it, declares
+// a destructor.  A pointer never does: `delete` is explicit for a reason.
+bool SemanticAnalyzer::hasDestructor(cc::Type *t) {
+    if (!t) return false;
+    if (dynamic_cast<cc::PointerType*>(t)) return false;
+    if (dynamic_cast<cxx::ReferenceType*>(t)) return false;   // a reference owns nothing
+    cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(t);
+    if (!ct) return false;
+    for (cxx::ClassDecl *c = findClass(ct->className); c; c = c->base) {
+        if (c->dtor) return true;
+    }
+    return false;
+}
+
+// Rules about a class as a whole.
+void SemanticAnalyzer::checkClassInvariants(cxx::ClassDecl *cd) {
+    // A constructor runs BEFORE the object has a vtable pointer to dispatch
+    // through -- it is what puts one there -- so there is nothing for
+    // `virtual` to mean on it.  Cleared FIRST, so the polymorphism test below
+    // is not fooled by a keyword that should never have been there.
+    for (std::size_t i = 0; i < cd->ctors.size(); ++i) {
+        if (cd->ctors[i]->isVirtual) {
+            error(cd->ctors[i], "a constructor cannot be virtual");
+            cd->ctors[i]->isVirtual = false;
+        }
+    }
+
+    if (cd->dtor && !cd->dtor->params.empty()) {
+        error(cd->dtor, "a destructor cannot take parameters");
+    }
+
+    // Does this class, or any base, have a virtual function?  If so it is meant
+    // to be used through a base pointer, and deleting through that pointer with
+    // a non-virtual destructor would run the WRONG destructor -- the classic
+    // silent leak.  This subset has no exceptions to complicate it, so the rule
+    // is simply stated and worth stating.
+    bool polymorphic = false;
+    for (cxx::ClassDecl *c = cd; c && !polymorphic; c = c->base) {
+        for (std::size_t i = 0; i < c->members.size(); ++i) {
+            cxx::MethodDecl *md = dynamic_cast<cxx::MethodDecl*>(c->members[i]);
+            if (md && md->isVirtual && !md->isDestructor && !md->isConstructor) {
+                polymorphic = true;
+                break;
+            }
+        }
+    }
+    if (polymorphic && cd->dtor && !cd->dtor->isVirtual) {
+        diag.warning(cd->dtor->line, cd->dtor->col,
+                     "class '" + cd->name + "' has virtual functions but its destructor is not "
+                     "virtual; deleting through a base pointer would not run it");
+    }
+}
+
+// ': x(1), Base(2)' -- each name is either a field OF THIS CLASS or the base's
+// own name.  Inherited fields cannot be initialised here; that is the base
+// constructor's job, which is why the base gets an entry of its own.
+void SemanticAnalyzer::analyzeMemberInits(cxx::MethodDecl *ctor, cxx::ClassDecl *cd) {
+    std::vector<std::string> seen;
+    int lastFieldIndex = -1;
+    bool outOfOrder = false;
+
+    for (std::size_t i = 0; i < ctor->memberInits.size(); ++i) {
+        cxx::MemberInit &mi = ctor->memberInits[i];
+
+        for (std::size_t j = 0; j < seen.size(); ++j) {
+            if (seen[j] == mi.name) {
+                diag.error(mi.line, mi.col, "'" + mi.name + "' is initialised more than once");
+            }
+        }
+        seen.push_back(mi.name);
+
+        // the base class, by name
+        if (cd->base && mi.name == cd->base->name) {
+            mi.isBase = true;
+            if (i != 0) {
+                diag.warning(mi.line, mi.col,
+                             "the base class initialiser is written after a member, but the base "
+                             "is always constructed first");
+            }
+            for (std::size_t a = 0; a < mi.args.size(); ++a) {
+                bool lv = false;
+                analyzeExpr(mi.args[a], lv);
+            }
+            selectConstructor(cd->base, mi.args.size(), ctor,
+                              "base class '" + cd->base->name + "'");
+            continue;
+        }
+
+        // otherwise a field declared in THIS class
+        int fieldIndex = -1;
+        cxx::FieldDecl *field = 0;
+        int counter = 0;
+        for (std::size_t m = 0; m < cd->members.size(); ++m) {
+            cxx::FieldDecl *fd = dynamic_cast<cxx::FieldDecl*>(cd->members[m]);
+            if (!fd) continue;
+            if (fd->name == mi.name) { field = fd; fieldIndex = counter; break; }
+            ++counter;
+        }
+        if (!field) {
+            cxx::ClassDecl *owner = 0;
+            if (cd->base && findMember(cd->base, mi.name, &owner)) {
+                diag.error(mi.line, mi.col,
+                           "'" + mi.name + "' is inherited from '" + owner->name
+                           + "' and cannot be initialised here; initialise the base class instead");
+            } else {
+                diag.error(mi.line, mi.col,
+                           "'" + mi.name + "' is not a member of class '" + cd->name + "'");
+            }
+            continue;
+        }
+
+        if (fieldIndex < lastFieldIndex) outOfOrder = true;
+        lastFieldIndex = fieldIndex;
+
+        if (mi.args.size() != 1) {
+            if (mi.args.empty() && hasDestructor(field->type)) continue;   // default-construct
+            if (mi.args.size() > 1) {
+                diag.error(mi.line, mi.col,
+                           "'" + mi.name + "' takes one initialiser value");
+                continue;
+            }
+        }
+        for (std::size_t a = 0; a < mi.args.size(); ++a) {
+            bool lv = false;
+            cc::Type *at = analyzeExpr(mi.args[a], lv);
+            if (at && !convertible(mi.args[a], at, field->type)) {
+                diag.error(mi.line, mi.col,
+                           "cannot initialise '" + describe(field->type) + " " + mi.name
+                           + "' from an expression of type " + describe(at));
+            }
+        }
+    }
+
+    // THE ORDERING TRAP.  Members are constructed in DECLARATION order, never
+    // in the order the initialiser list happens to be written.  Code that
+    // writes them out of order usually believes otherwise, and the bug only
+    // shows when one member's initialiser reads another.
+    if (outOfOrder) {
+        diag.warning(ctor->line, ctor->col,
+                     "the initialiser list is written out of declaration order; members are "
+                     "always constructed in the order they are declared");
+    }
+}
+
+cxx::MethodDecl *SemanticAnalyzer::selectConstructor(cxx::ClassDecl *cd, std::size_t argCount,
+                                                     cc::ASTNode *at, const std::string &what) {
+    if (!cd) return 0;
+    // A class with no constructors at all needs none: its fields are simply
+    // uninitialised, exactly as in C.
+    if (cd->ctors.empty()) {
+        if (argCount > 0) {
+            error(at, "class '" + cd->name + "' has no constructor, so " + what
+                      + " cannot take arguments");
+        }
+        return 0;
+    }
+    // Selection is by argument COUNT.  Full overload resolution on parameter
+    // types is a later job; arity settles every case this subset can express.
+    cxx::MethodDecl *found = 0;
+    int matches = 0;
+    for (std::size_t i = 0; i < cd->ctors.size(); ++i) {
+        if (cd->ctors[i]->params.size() == argCount) { found = cd->ctors[i]; ++matches; }
+    }
+    if (matches == 0) {
+        error(at, "class '" + cd->name + "' has no constructor taking "
+                  + countText(argCount) + " argument(s), needed for " + what);
+        return 0;
+    }
+    if (matches > 1) {
+        error(at, "more than one constructor of class '" + cd->name
+                  + "' takes the same number of arguments");
+    }
+    return found;
 }
 
 // ---------------------------------------------------------------------
@@ -344,6 +546,11 @@ void SemanticAnalyzer::analyze(const std::vector<cc::Decl*> &units) {
     for (std::size_t i = 0; i < units.size(); ++i) {
         cxx::ClassDecl *cd = dynamic_cast<cxx::ClassDecl*>(units[i]);
         if (cd) resolveOverrides(cd);
+    }
+    // 3b) whole-class rules, once virtualness is settled
+    for (std::size_t i = 0; i < units.size(); ++i) {
+        cxx::ClassDecl *cd = dynamic_cast<cxx::ClassDecl*>(units[i]);
+        if (cd) checkClassInvariants(cd);
     }
     // 4) every top-level name, so functions may call each other in any order
     declareTopLevel(units);
@@ -441,8 +648,10 @@ void SemanticAnalyzer::analyzeFunction(cc::Function *fn) {
 
     cc::Type *savedReturn = currentReturnType;
     const std::string savedClass = currentClass;
+    const bool savedCtorDtor = currentIsCtorOrDtor;
     currentReturnType = fn->retType;
     currentClass = md ? md->ownerClass : std::string();
+    currentIsCtorOrDtor = md && (md->isConstructor || md->isDestructor);
 
     if (md) pushClassScope(findClass(md->ownerClass));
 
@@ -459,6 +668,10 @@ void SemanticAnalyzer::analyzeFunction(cc::Function *fn) {
         }
     }
 
+    // The initialiser list is checked INSIDE the parameter scope, because that
+    // is where its arguments live:  Point(int a) : x(a) { }
+    if (md && md->isConstructor) analyzeMemberInits(md, findClass(md->ownerClass));
+
     if (fn->body) analyzeBlock(fn->body);
 
     symbols.popScope();                         // parameters
@@ -466,6 +679,7 @@ void SemanticAnalyzer::analyzeFunction(cc::Function *fn) {
 
     currentReturnType = savedReturn;
     currentClass = savedClass;
+    currentIsCtorOrDtor = savedCtorDtor;
 }
 
 // ---------------------------------------------------------------------
@@ -474,8 +688,30 @@ void SemanticAnalyzer::analyzeFunction(cc::Function *fn) {
 
 void SemanticAnalyzer::analyzeBlock(cc::CompoundStmt *block) {
     symbols.pushScope();
-    for (std::size_t i = 0; i < block->body.size(); ++i) analyzeStmt(block->body[i]);
+    std::vector<cc::VarDecl*> declared;
+    for (std::size_t i = 0; i < block->body.size(); ++i) {
+        analyzeStmt(block->body[i]);
+        // Remember the class-typed locals, in the order they were declared.
+        cc::DeclStmt *ds = dynamic_cast<cc::DeclStmt*>(block->body[i]);
+        if (ds && ds->var) declared.push_back(ds->var);
+    }
+    recordScopeExitDestruction(block, declared);
     symbols.popScope();
+}
+
+// Objects are destroyed in the exact REVERSE of the order they were created:
+// the last one built is the first taken apart.  Recording the list here, on
+// the block, is what lets the lowering phase emit those calls on every path
+// that leaves -- the end of the block, a return, a break -- without having to
+// work the scoping out again.  With no exceptions in this subset, those are
+// the only paths there are, which is what keeps this simple.
+void SemanticAnalyzer::recordScopeExitDestruction(cc::CompoundStmt *block,
+                                                  const std::vector<cc::VarDecl*> &declared) {
+    block->destroyAtExit.clear();
+    for (std::size_t i = declared.size(); i > 0; --i) {
+        cc::VarDecl *vd = declared[i - 1];
+        if (hasDestructor(vd->type)) block->destroyAtExit.push_back(vd);
+    }
 }
 
 void SemanticAnalyzer::analyzeVarDecl(cc::VarDecl *vd, bool declareIt) {
@@ -508,6 +744,28 @@ void SemanticAnalyzer::analyzeVarDecl(cc::VarDecl *vd, bool declareIt) {
                   + "' from an expression of type " + describe(initType));
     }
 
+    // A class-typed object is CONSTRUCTED.  `Point p;` needs a constructor
+    // taking no arguments whenever the class declares any at all, and
+    // `Point q(1, 2)` needs one taking two.
+    cxx::ClassDecl *cls = 0;
+    {
+        cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(stripReference(vd->type));
+        if (ct) cls = findClass(ct->className);
+    }
+    if (cls && !dynamic_cast<cxx::ReferenceType*>(vd->type)) {
+        for (std::size_t i = 0; i < vd->ctorArgs.size(); ++i) {
+            bool lv = false;
+            analyzeExpr(vd->ctorArgs[i], lv);
+        }
+        if (!vd->init) {
+            selectConstructor(cls, vd->ctorArgs.size(), vd,
+                              "the declaration of '" + vd->name + "'");
+        }
+    } else if (vd->hasCtorArgs) {
+        error(vd, "'" + describe(vd->type) + "' is not a class type, so '" + vd->name
+                  + "' cannot be constructed with arguments");
+    }
+
     if (!declareIt) return;
     if (symbols.lookupLocal(vd->name)) {
         error(vd, "redeclaration of '" + vd->name + "' in the same scope");
@@ -533,6 +791,10 @@ void SemanticAnalyzer::analyzeStmt(cc::Stmt *s) {
     if (rs) {
         bool lv = false;
         cc::Type *got = rs->expr ? analyzeExpr(rs->expr, lv) : 0;
+        if (currentIsCtorOrDtor) {
+            if (rs->expr) error(rs, "a constructor or destructor cannot return a value");
+            return;
+        }
         if (!currentReturnType) return;
         if (!rs->expr) {
             if (!isVoid(currentReturnType)) {
@@ -597,14 +859,8 @@ void SemanticAnalyzer::analyzeStmt(cc::Stmt *s) {
 
 void SemanticAnalyzer::checkCallArgs(cc::CallExpr *call, cc::Function *fn) {
     if (call->args.size() != fn->params.size()) {
-        std::string got, want;
-        {
-            char b1[32], b2[32];
-            std::sprintf(b1, "%lu", static_cast<unsigned long>(call->args.size()));
-            std::sprintf(b2, "%lu", static_cast<unsigned long>(fn->params.size()));
-            got = b1; want = b2;
-        }
-        error(call, "'" + fn->name + "' expects " + want + " argument(s) but got " + got);
+        error(call, "'" + fn->name + "' expects " + countText(fn->params.size())
+                    + " argument(s) but got " + countText(call->args.size()));
         return;
     }
     for (std::size_t i = 0; i < call->args.size(); ++i) {
@@ -678,6 +934,13 @@ cc::Type *SemanticAnalyzer::analyzeExpr(cc::Expr *e, bool &isLValue) {
             bool lv = false;
             analyzeExpr(ne->args[i], lv);
         }
+        // new T(args) allocates AND constructs, so the arguments must match a
+        // constructor exactly as they would for a named object.
+        cxx::ClassType *nct = dynamic_cast<cxx::ClassType*>(ne->allocType);
+        if (nct) selectConstructor(findClass(nct->className), ne->args.size(), ne, "'new'");
+        else if (!ne->args.empty()) {
+            error(ne, "'new " + describe(ne->allocType) + "' cannot take constructor arguments");
+        }
         // new T yields T*, and the T belongs to the AST node, so it is copied
         return makePointerTo(ne->allocType);
     }
@@ -686,8 +949,26 @@ cc::Type *SemanticAnalyzer::analyzeExpr(cc::Expr *e, bool &isLValue) {
     if (de) {
         bool lv = false;
         cc::Type *t = analyzeExpr(de->operand, lv);
-        if (t && !dynamic_cast<cc::PointerType*>(t)) {
+        cc::PointerType *pt = t ? dynamic_cast<cc::PointerType*>(t) : 0;
+        if (t && !pt) {
             error(de, "'delete' applied to " + describe(t) + ", which is not a pointer");
+        } else if (pt) {
+            // Deleting through a base pointer runs the destructor found by the
+            // vtable -- but only if there IS one in the vtable.
+            cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(pt->base);
+            cxx::ClassDecl *cd = ct ? findClass(ct->className) : 0;
+            if (cd && cd->dtor && !cd->dtor->isVirtual) {
+                bool anyDerived = false;
+                std::map<std::string, cxx::ClassDecl*>::iterator it;
+                for (it = classes.begin(); it != classes.end(); ++it) {
+                    if (it->second != cd && isDerivedFrom(it->second, cd)) { anyDerived = true; break; }
+                }
+                if (anyDerived) {
+                    diag.warning(de->line, de->col,
+                                 "deleting through '" + describe(t) + "' whose destructor is not "
+                                 "virtual; a derived object would not be destroyed correctly");
+                }
+            }
         }
         return makeBuiltin("void");
     }

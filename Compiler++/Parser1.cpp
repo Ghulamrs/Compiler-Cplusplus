@@ -76,10 +76,27 @@ ClassDecl *Parser::parseClass() {
             expect(TOK_COLON, "after an access specifier");
             continue;
         }
-        const int before = diag.errorCount();
+        const std::size_t posBefore = lexer->tell().offset;
         Decl *m = parseMemberDecl(cname, access);
-        if (m) cd->members.push_back(m);
-        if (diag.errorCount() != before) synchronize();
+        if (m) {
+            cd->members.push_back(m);
+            // Index the constructors and the destructor.  They live in
+            // `members`, which owns them; these are aliases for lookup, because
+            // constructors all share one name and a destructor is never found
+            // by ordinary name lookup at all.
+            MethodDecl *md = dynamic_cast<MethodDecl*>(m);
+            if (md && md->isConstructor) cd->ctors.push_back(md);
+            if (md && md->isDestructor) {
+                if (cd->dtor) diag.error(md->line, md->col,
+                                         "class '" + cname + "' already has a destructor");
+                else cd->dtor = md;
+            }
+        }
+        // A member that produced a node left the parser somewhere sensible,
+        // even if it also produced a diagnostic; only a failed parse needs
+        // resynchronising, and only a stalled one needs forcing along.
+        if (!m) synchronize();
+        if (lexer->tell().offset == posBefore && cur.kind != TOK_EOF) advance();
     }
 
     expect(TOK_RBRACE, "to close a class body");
@@ -90,11 +107,64 @@ ClassDecl *Parser::parseClass() {
 // A member is a field or a method.  Both start with a type and a name, so the
 // parameter list is what tells them apart -- and the method case reuses the C
 // layer's parseFunctionRest(), which also parses the body.
+// Two tokens of lookahead:  IDENT '('  where IDENT is the class's own name.
+// Anything else -- including a field or method that merely starts with a type
+// -- is not a constructor.
+bool Parser::looksLikeConstructor(const std::string &className) {
+    if (cur.kind != TOK_IDENTIFIER || cur.text != className) return false;
+    State st = save();
+    advance();
+    const bool yes = (cur.kind == TOK_LPAREN);
+    restore(st);
+    return yes;
+}
+
 Decl *Parser::parseMemberDecl(const std::string &className, Access access) {
     // `virtual` precedes the return type and is meaningful only on a method.
     const bool sawVirtual = (cur.kind == TOK_VIRTUAL);
-    const int virtualLine = cur.line, virtualCol = cur.col;
     if (sawVirtual) advance();
+
+    // --- destructor:  ~ClassName ( ) ---
+    if (cur.kind == TOK_TILDE) {
+        const int line = cur.line, col = cur.col;
+        advance();
+        if (cur.kind != TOK_IDENTIFIER) {
+            errorAtCurrent("expected a class name after '~'");
+            return 0;
+        }
+        const std::string dname = cur.text;
+        if (dname != className) {
+            errorAtCurrent("destructor name '~" + dname + "' does not match class '"
+                           + className + "'");
+        }
+        advance();
+        // No return type: a destructor has none, so retType stays 0.
+        MethodDecl *md = new MethodDecl(0, "~" + className, access);
+        md->ownerClass = className;
+        md->isDestructor = true;
+        md->isVirtual = sawVirtual;
+        md->line = line;
+        md->col = col;
+        parseFunctionParamsAndBody(md);
+        return md;
+    }
+
+    // --- constructor:  ClassName ( ... ) ---
+    if (looksLikeConstructor(className)) {
+        const int line = cur.line, col = cur.col;
+        advance();                              // consume the class name
+        MethodDecl *md = new MethodDecl(0, className, access);
+        md->ownerClass = className;
+        md->isConstructor = true;
+        // Recorded, not rejected: whether a constructor may be virtual is a
+        // rule about meaning, and reporting it here would make the parser
+        // resynchronise over a member it actually parsed perfectly well.
+        md->isVirtual = sawVirtual;
+        md->line = line;
+        md->col = col;
+        parseFunctionParamsAndBody(md);         // the tail hook picks up  : x(1)
+        return md;
+    }
 
     cc::Type *t = parseType();                  // virtual: knows C++ types
     if (!t) {
@@ -126,7 +196,7 @@ Decl *Parser::parseMemberDecl(const std::string &className, Access access) {
     }
 
     if (sawVirtual) {
-        diag.error(virtualLine, virtualCol, "'virtual' can only be applied to a member function");
+        diag.error(line, col, "'virtual' can only be applied to a member function");
     }
     FieldDecl *fd = new FieldDecl(t, name, access);
     fd->ownerClass = className;
@@ -167,6 +237,61 @@ cc::Type *Parser::parseType() {
         t = new ReferenceType(t);
     }
     return t;
+}
+
+// ': ' name '(' args ')' { ',' name '(' args ')' }  -- only on a constructor.
+// The names are not resolved here: whether `x` is a field of this class or the
+// name of its base is a question about the hierarchy, which is the semantic
+// pass's business, not the grammar's.
+void Parser::parseFunctionTail(cc::Function *fn) {
+    MethodDecl *md = dynamic_cast<MethodDecl*>(fn);
+    if (cur.kind != TOK_COLON) return;
+    if (!md || !md->isConstructor) {
+        errorAtCurrent("only a constructor may have an initialiser list");
+        while (cur.kind != TOK_LBRACE && cur.kind != TOK_SEMI && cur.kind != TOK_EOF) advance();
+        return;
+    }
+    advance();                                  // consume ':'
+
+    for (;;) {
+        if (cur.kind != TOK_IDENTIFIER) {
+            errorAtCurrent("expected a member or base name in the initialiser list");
+            break;
+        }
+        MemberInit init;
+        init.name = cur.text;
+        init.line = cur.line;
+        init.col = cur.col;
+        advance();
+        if (!expect(TOK_LPAREN, "after an initialiser name")) break;
+        while (cur.kind != TOK_RPAREN && cur.kind != TOK_EOF) {
+            cc::Expr *a = parseExpression();
+            if (!a) break;
+            init.args.push_back(a);
+            if (!match(TOK_COMMA)) break;
+        }
+        expect(TOK_RPAREN, "after initialiser arguments");
+        md->memberInits.push_back(init);
+        if (!match(TOK_COMMA)) break;
+    }
+}
+
+// C initialises with  = expr .  C++ adds direct initialisation,  Point q(1, 2),
+// which is how a constructor is called on a named object.
+void Parser::parseVarInitializer(cc::VarDecl *vd) {
+    if (cur.kind == TOK_LPAREN) {
+        advance();
+        vd->hasCtorArgs = true;
+        while (cur.kind != TOK_RPAREN && cur.kind != TOK_EOF) {
+            cc::Expr *a = parseExpression();
+            if (!a) break;
+            vd->ctorArgs.push_back(a);
+            if (!match(TOK_COMMA)) break;
+        }
+        expect(TOK_RPAREN, "after constructor arguments");
+        return;
+    }
+    cc::Parser::parseVarInitializer(vd);
 }
 
 QualifiedName *Parser::parseQualifiedName() {

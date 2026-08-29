@@ -37,16 +37,41 @@ void FieldDecl::print(int indent) {
     else std::cout << "<none>" << std::endl;
 }
 
+MethodDecl::~MethodDecl() {
+    for (std::size_t i = 0; i < memberInits.size(); ++i) {
+        for (std::size_t j = 0; j < memberInits[i].args.size(); ++j) {
+            delete memberInits[i].args[j];
+        }
+    }
+}
+
 // Everything but this first line comes from cc::Function::print().
 void MethodDecl::printSignature(int indent) {
     printIndent(indent);
-    std::cout << "Method " << accessText(access) << " ";
+    const char *what = isConstructor ? "Constructor" : (isDestructor ? "Destructor" : "Method");
+    std::cout << what << " " << accessText(access) << " ";
     if (isVirtual) std::cout << "virtual ";
     if (overrides) std::cout << "overriding ";
     if (!ownerClass.empty()) std::cout << ownerClass << "::";
-    std::cout << name << " returns ";
-    if (retType) retType->print(0);
-    else std::cout << "<none>" << std::endl;
+    std::cout << name;
+    if (isConstructor || isDestructor) {
+        std::cout << std::endl;
+    } else {
+        std::cout << " returns ";
+        if (retType) retType->print(0);
+        else std::cout << "<none>" << std::endl;
+    }
+}
+
+void MethodDecl::printBodyPrefix(int indent) {
+    for (std::size_t i = 0; i < memberInits.size(); ++i) {
+        printIndent(indent);
+        std::cout << (memberInits[i].isBase ? "init base " : "init member ")
+                  << memberInits[i].name << std::endl;
+        for (std::size_t j = 0; j < memberInits[i].args.size(); ++j) {
+            memberInits[i].args[j]->print(indent + 1);
+        }
+    }
 }
 
 ClassDecl::~ClassDecl() {

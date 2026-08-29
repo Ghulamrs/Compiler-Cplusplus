@@ -111,6 +111,7 @@ void CallExpr::print(int indent) {
 VarDecl::~VarDecl() {
     delete type;
     delete init;
+    for (std::size_t i = 0; i < ctorArgs.size(); ++i) delete ctorArgs[i];
 }
 
 void VarDecl::print(int indent) {
@@ -122,6 +123,11 @@ void VarDecl::print(int indent) {
         printIndent(indent + 1);
         std::cout << "init:" << std::endl;
         init->print(indent + 2);
+    }
+    if (hasCtorArgs) {
+        printIndent(indent + 1);
+        std::cout << "construct with " << ctorArgs.size() << " argument(s):" << std::endl;
+        for (std::size_t i = 0; i < ctorArgs.size(); ++i) ctorArgs[i]->print(indent + 2);
     }
 }
 
@@ -139,6 +145,9 @@ void Function::printSignature(int indent) {
     else std::cout << "<none>" << std::endl;
 }
 
+void Function::printBodyPrefix(int) {
+}
+
 void Function::print(int indent) {
     printSignature(indent);
     for (std::size_t i = 0; i < params.size(); ++i) {
@@ -146,6 +155,7 @@ void Function::print(int indent) {
         std::cout << "param:" << std::endl;
         params[i]->print(indent + 2);
     }
+    printBodyPrefix(indent + 1);        // virtual: a constructor's init list
     if (body) body->print(indent + 1);
 }
 
@@ -159,6 +169,10 @@ void CompoundStmt::print(int indent) {
     printIndent(indent);
     std::cout << "Block" << std::endl;
     for (std::size_t i = 0; i < body.size(); ++i) body[i]->print(indent + 1);
+    for (std::size_t i = 0; i < destroyAtExit.size(); ++i) {
+        printIndent(indent + 1);
+        std::cout << "[on exit: destroy " << destroyAtExit[i]->name << "]" << std::endl;
+    }
 }
 
 void DeclStmt::print(int indent) {

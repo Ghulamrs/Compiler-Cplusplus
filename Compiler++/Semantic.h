@@ -63,6 +63,9 @@ private:
     // Context for the function currently being analysed.
     cc::Type *currentReturnType;
     std::string currentClass;       // empty outside a method body
+    // A constructor and a destructor have no return type at all, which is not
+    // the same as returning void: `return;` is fine, `return x;` is not.
+    bool currentIsCtorOrDtor;
     int loopDepth;                  // break/continue legality
 
     // Types the analyzer creates for expression results.  They belong to no
@@ -83,6 +86,20 @@ private:
     void resolveBases();
     // Marks a method that matches a base virtual as an override.
     void resolveOverrides(cxx::ClassDecl *cd);
+    // A constructor's  : x(1), Base(2)  list.
+    void analyzeMemberInits(cxx::MethodDecl *ctor, cxx::ClassDecl *cd);
+    // Rules that concern a class as a whole rather than one member.
+    void checkClassInvariants(cxx::ClassDecl *cd);
+    // Chooses the constructor taking argCount arguments; reports if there is
+    // none, or more than one.  0 means "the class declares no constructors",
+    // which is legal and means there is nothing to call.
+    cxx::MethodDecl *selectConstructor(cxx::ClassDecl *cd, std::size_t argCount,
+                                       cc::ASTNode *at, const std::string &what);
+    // Records, on each block, the locals whose destructors must run on exit.
+    void recordScopeExitDestruction(cc::CompoundStmt *block,
+                                    const std::vector<cc::VarDecl*> &declared);
+    // Does an object of this type need a destructor call when it dies?
+    bool hasDestructor(cc::Type *t);
     void declareTopLevel(const std::vector<cc::Decl*> &units);
     void analyzeDecl(cc::Decl *d);
     void analyzeClass(cxx::ClassDecl *cd);
@@ -128,6 +145,9 @@ private:
     // The class a type names, looking through one pointer or reference.
     cxx::ClassDecl *classOf(cc::Type *t);
     static bool isVoid(cc::Type *t);
+    // std::size_t as text.  A stream rather than sprintf, so the code carries
+    // no fixed-size buffer and MSVC raises no deprecation warning.
+    static std::string countText(std::size_t n);
     void checkTypeIsKnown(cc::Type *t, cc::ASTNode *at, const std::string &where);
     void checkCallArgs(cc::CallExpr *call, cc::Function *fn);
 

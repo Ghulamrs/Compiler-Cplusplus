@@ -124,6 +124,12 @@ protected:
     virtual Type *parseType();
     // Returns 0 when the current token does not start a member access.
     virtual Expr *parseMemberSuffix(Expr *base);
+    // Called after a function's ')' and before its ';' or '{'.  C has nothing
+    // to put there; C++ has a constructor's initialiser list.
+    virtual void parseFunctionTail(Function *fn);
+    // Parses whatever follows a declared name:  = expr  in C, and additionally
+    // the direct-initialisation form  (args)  in C++.
+    virtual void parseVarInitializer(VarDecl *vd);
 
 private:
     // not copyable (C++98 way: declared private, never defined)

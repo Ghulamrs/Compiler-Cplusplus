@@ -85,12 +85,16 @@ void Parser::restore(const State &st) {
 std::vector<Decl*> Parser::parseTranslationUnit() {
     std::vector<Decl*> units;
     while (cur.kind != TOK_EOF) {
-        const int before = diag.errorCount();
+        const std::size_t posBefore = lexer->tell().offset;
         Decl *d = parseDeclaration();       // virtual
         if (d) units.push_back(d);
-        // If that declaration failed, resynchronise before trying the next, or
-        // the same bad token would be reported forever.
-        if (diag.errorCount() != before) synchronize();
+        // Only a FAILED parse needs resynchronising.  A declaration that
+        // produced a node left the parser in a sensible place even if it also
+        // produced a diagnostic, and skipping from there would swallow the
+        // next declaration whole.  The progress check is the backstop that
+        // makes this loop terminate whatever happens.
+        if (!d) synchronize();
+        if (lexer->tell().offset == posBefore && cur.kind != TOK_EOF) advance();
     }
     return units;
 }
@@ -157,6 +161,8 @@ void Parser::parseFunctionParamsAndBody(Function *fn) {
     }
     expect(TOK_RPAREN, "after parameter list");
 
+    parseFunctionTail(fn);                          // virtual: C++ adds  : x(1)
+
     if (match(TOK_SEMI)) return;                    // a declaration only
     if (cur.kind == TOK_LBRACE) {
         fn->body = parseBlock();
@@ -168,13 +174,16 @@ void Parser::parseFunctionParamsAndBody(Function *fn) {
 // IDENT already consumed:  [ '=' expr ] ';'
 VarDecl *Parser::parseVarDeclTail(Type *type, const std::string &name,
                                   int nameLine, int nameCol) {
-    Expr *init = 0;
-    if (match(TOK_ASSIGN)) init = parseExpression();
-    expect(TOK_SEMI, ("after declaration of " + name).c_str());
-    VarDecl *vd = new VarDecl(type, name, init);
+    VarDecl *vd = new VarDecl(type, name, 0);
     vd->line = nameLine;
     vd->col = nameCol;
+    parseVarInitializer(vd);            // virtual: C++ adds  (args)
+    expect(TOK_SEMI, ("after declaration of " + name).c_str());
     return vd;
+}
+
+void Parser::parseVarInitializer(VarDecl *vd) {
+    if (match(TOK_ASSIGN)) vd->init = parseExpression();
 }
 
 // --- statements -------------------------------------------------------
@@ -185,10 +194,11 @@ CompoundStmt *Parser::parseBlock() {
     block->col = cur.col;
     if (!expect(TOK_LBRACE, "to open a block")) return block;
     while (cur.kind != TOK_RBRACE && cur.kind != TOK_EOF) {
-        const int before = diag.errorCount();
+        const std::size_t posBefore = lexer->tell().offset;
         Stmt *s = parseStatement();         // virtual
         if (s) block->body.push_back(s);
-        if (diag.errorCount() != before) synchronize();
+        if (!s) synchronize();
+        if (lexer->tell().offset == posBefore && cur.kind != TOK_EOF) advance();
     }
     expect(TOK_RBRACE, "to close a block");
     return block;
@@ -502,6 +512,10 @@ Expr *Parser::parsePrimary() {
 // them with classes, in the layer above.
 Expr *Parser::parseMemberSuffix(Expr *) {
     return 0;
+}
+
+// C puts nothing between a parameter list and a body.
+void Parser::parseFunctionTail(Function *) {
 }
 
 } // namespace cc

@@ -42,6 +42,16 @@ struct FieldLayout {
     int size;
 };
 
+// One step of building or taking apart an object.  The plan is computed per
+// class and is the same for every constructor of it, apart from which body
+// runs -- because the ORDER is fixed by the class, never by the constructor.
+struct InitStep {
+    enum Kind { StepBase, StepVPtr, StepField, StepBody };
+    Kind kind;
+    std::string name;
+    InitStep(Kind k, const std::string &n) : kind(k), name(n) {}
+};
+
 struct ClassLayout {
     std::string name;
     int size;                   // bytes, including the vptr and any padding
@@ -50,7 +60,15 @@ struct ClassLayout {
     int firstOwnField;          // index into `fields` where this class's own start
     std::vector<FieldLayout> fields;             // base fields first
     std::vector<cxx::MethodDecl*> vtable;        // slot -> final override
-    ClassLayout() : size(0), align(1), hasVPtr(false), firstOwnField(0) {}
+    // Base first, then this class's own fields in DECLARATION order, then the
+    // constructor body.  Destruction is this list reversed, exactly.
+    std::vector<InitStep> constructionPlan;
+    std::vector<InitStep> destructionPlan;
+    bool hasDtor;                                // this class or any base
+    bool hasCtor;                                // this class declares one
+    ClassLayout()
+        : size(0), align(1), hasVPtr(false), firstOwnField(0),
+          hasDtor(false), hasCtor(false) {}
 };
 
 class Layout {

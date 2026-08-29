@@ -42,6 +42,10 @@ private:
     ClassDecl *parseClass();
     Decl *parseMemberDecl(const std::string &className, Access access);
     QualifiedName *parseQualifiedName();
+    // Is the token stream sitting on  ClassName (  -- i.e. a constructor?
+    // Needs two tokens of lookahead, which the inherited save()/restore()
+    // rewind provides.
+    bool looksLikeConstructor(const std::string &className);
 
     // extension points taken over from the C layer.
     // C++98 has no `override` keyword -- each signature must match
@@ -50,6 +54,8 @@ private:
     virtual cc::Expr *parsePrimary();
     virtual cc::Expr *parseMemberSuffix(cc::Expr *base);
     virtual cc::Type *parseType();
+    virtual void parseFunctionTail(cc::Function *fn);
+    virtual void parseVarInitializer(cc::VarDecl *vd);
 };
 
 } // namespace cxx

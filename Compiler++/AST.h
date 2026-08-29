@@ -211,8 +211,13 @@ struct Decl : public ASTNode {
 struct VarDecl : public Decl {
     Type *type;
     std::string name;
-    Expr *init;                 // may be 0
-    VarDecl(Type *t, const std::string &n, Expr *i) : type(t), name(n), init(i) {}
+    Expr *init;                 // for  = expr ; 0 otherwise
+    // For the direct-initialisation form  Point q(1, 2);  which the C++ layer
+    // adds.  `init` and `ctorArgs` are alternatives, never both.
+    std::vector<Expr*> ctorArgs;
+    bool hasCtorArgs;           // true even for  Point q();  with no arguments
+    VarDecl(Type *t, const std::string &n, Expr *i)
+        : type(t), name(n), init(i), hasCtorArgs(false) {}
     ~VarDecl();
     void print(int indent);
 };
@@ -231,6 +236,9 @@ struct Function : public Decl {
     void print(int indent);
     // Lets MethodDecl add "Method"/"Class::" without repeating the rest.
     virtual void printSignature(int indent);
+    // Printed between the parameters and the body; C has nothing to put there,
+    // a C++ constructor has its initialiser list.
+    virtual void printBodyPrefix(int indent);
 };
 
 // --- Statements -------------------------------------------------------
@@ -240,6 +248,12 @@ struct Stmt : public ASTNode {};
 // a vector held by whoever needed one.
 struct CompoundStmt : public Stmt {
     std::vector<Stmt*> body;
+    // Class-typed locals declared in this block, in REVERSE declaration order:
+    // the list of destructors the lowering phase must run on every path that
+    // leaves this block -- falling off the end, a return, a break.  Filled in
+    // by the semantic pass, which is the only thing that knows which types have
+    // destructors.  Aliases into the block's own DeclStmts; not owned.
+    std::vector<VarDecl*> destroyAtExit;
     ~CompoundStmt();
     void print(int indent);
 };
