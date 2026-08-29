@@ -129,7 +129,7 @@ void Lowering::lowerDecl(cc::Decl *d) {
             MethodDecl *md = dynamic_cast<MethodDecl*>(cd->members[i]);
             if (!md || !md->body) continue;
             std::string mangled;
-            if (md->isConstructor)     mangled = mangleConstructor(cd->name, md->params.size());
+            if (md->isConstructor)     mangled = mangleConstructor(cd->name, md->params);
             else if (md->isDestructor) mangled = mangleDestructor(cd->name);
             else                       mangled = mangleOverload(cd->name, md->name, md->params);
             // A function with `this` in front -- all "member function" means
@@ -238,7 +238,7 @@ bool Lowering::lowerLayerValue(cc::Expr *e, IRReg &out) {
         ClassDecl *cd = classOfType(ne->allocType);
         const int size = cd ? layout.sizeOf(ne->allocType) : layout.sizeOf(ne->allocType);
         out = fn->emitAlloc(size > 0 ? size : Layout::IntSize, e->line);
-        if (cd) emitConstruct(cd, out, ne->args, e->line);
+        if (cd) emitConstruct(cd, out, ne->args, e->line, ne->resolvedCtor);
         return true;
     }
 
@@ -364,7 +364,8 @@ void Lowering::lowerVarDecl(cc::VarDecl *vd) {
         fn->emitMemCopy(fn->emitLocalAddr(slot, vd->line), src, size, vd->line);
         return;
     }
-    emitConstruct(cd, fn->emitLocalAddr(slot, vd->line), vd->ctorArgs, vd->line);
+    emitConstruct(cd, fn->emitLocalAddr(slot, vd->line), vd->ctorArgs, vd->line,
+                  vd->resolvedCtor);
 }
 
 // A constructor taking one argument of this same class -- by reference, since
@@ -440,7 +441,7 @@ bool Lowering::isAddressable(cc::Expr *e) const {
 // storage lives differs.
 void Lowering::initGlobal(cc::VarDecl *vd, IRReg addr) {
     if (ClassDecl *cd = classOfMemberType(vd->type)) {
-        emitConstruct(cd, addr, vd->ctorArgs, vd->line);
+        emitConstruct(cd, addr, vd->ctorArgs, vd->line, vd->resolvedCtor);
         return;
     }
     cc::Lowering::initGlobal(vd, addr);
@@ -604,32 +605,34 @@ void Lowering::emitVPtrStore(ClassDecl *cd, IRReg objectAddr, int line) {
 }
 
 void Lowering::emitConstruct(ClassDecl *cd, IRReg objectAddr,
-                             const std::vector<cc::Expr*> &args, int line) {
+                             const std::vector<cc::Expr*> &args, int line,
+                             cc::Function *chosen) {
     if (cd->ctors.empty()) {
         // No constructor, but a polymorphic object still needs its vptr.
         emitVPtrStore(cd, objectAddr, line);
         return;
     }
-    MethodDecl *ctor = 0;
-    for (std::size_t i = 0; i < cd->ctors.size(); ++i) {
-        if (cd->ctors[i]->params.size() == args.size()) { ctor = cd->ctors[i]; break; }
+
+    // The semantic pass chose, by signature.  The fallback by argument count
+    // is for the constructions lowering makes itself -- a member, an array
+    // element, a base -- which are always the no-argument one.
+    MethodDecl *ctor = dynamic_cast<MethodDecl*>(chosen);
+    if (!ctor) {
+        for (std::size_t i = 0; i < cd->ctors.size(); ++i) {
+            if (cd->ctors[i]->params.size() == args.size()) { ctor = cd->ctors[i]; break; }
+        }
     }
+    if (!ctor) return;                  // the analysis already reported why
+
     std::vector<IRReg> callArgs;
     callArgs.push_back(objectAddr);
     for (std::size_t i = 0; i < args.size(); ++i) {
-        cc::Type *want = (ctor && i < ctor->params.size()) ? ctor->params[i]->type : 0;
-        IRReg v;
-        // Same rule a call obeys: a reference parameter receives the object's
-        // ADDRESS.  A constructor is a call, and used to be the exception.
-        if (want && isReferenceType(want)) {
-            v = lowerAddress(args[i]);
-        } else {
-            v = lowerValue(args[i]);
-            if (want) v = convert(v, typeOf(args[i]), want, line);
-        }
-        callArgs.push_back(v);
+        cc::Type *want = i < ctor->params.size() ? ctor->params[i]->type : 0;
+        // Same rules a call obeys: a reference parameter receives the object's
+        // ADDRESS, an object by value receives one too and the VM copies it.
+        callArgs.push_back(lowerOperandFor(want, args[i], line));
     }
-    fn->emitCall(mangleConstructor(cd->name, args.size()), callArgs, false, line);
+    fn->emitCall(mangleConstructor(cd->name, ctor->params), callArgs, false, line);
 }
 
 // `concreteType`: the exact class is known (a named local), so the destructor
@@ -683,7 +686,8 @@ void Lowering::emitPrologue(cc::Function *f) {
         bool wroteBase = false;
         for (std::size_t i = 0; i < md->memberInits.size(); ++i) {
             if (!md->memberInits[i].isBase) continue;
-            emitConstruct(cd->base, self, md->memberInits[i].args, f->line);
+            emitConstruct(cd->base, self, md->memberInits[i].args, f->line,
+                          md->memberInits[i].resolvedCtor);
             wroteBase = true;
             break;
         }
@@ -720,7 +724,7 @@ void Lowering::emitPrologue(cc::Function *f) {
         if (ClassDecl *member = classOfMemberType(fd->type)) {
             const IRReg addr = fn->emitFieldAddr(loadThis(f->line), fl->offset, line);
             if (mi) {
-                emitConstruct(member, addr, mi->args, line);
+                emitConstruct(member, addr, mi->args, line, mi->resolvedCtor);
             } else {
                 std::vector<cc::Expr*> none;
                 emitConstruct(member, addr, none, line);

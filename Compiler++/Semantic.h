@@ -76,7 +76,8 @@ private:
     void checkClassInvariants(cxx::ClassDecl *cd);
     // By argument count.  0 means the class declares no constructors, which is
     // legal and means there is nothing to call.
-    cxx::MethodDecl *selectConstructor(cxx::ClassDecl *cd, std::size_t argCount,
+    cxx::MethodDecl *selectConstructor(cxx::ClassDecl *cd,
+                                       const std::vector<cc::Expr*> &args,
                                        cc::ASTNode *at, const std::string &what);
     void recordScopeExitDestruction(cc::CompoundStmt *block,
                                     const std::vector<cc::VarDecl*> &declared);

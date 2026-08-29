@@ -80,7 +80,8 @@ struct MemberInit {
     bool isBase;
     int line;
     int col;
-    MemberInit() : isBase(false), line(0), col(0) {}
+    cc::Function *resolvedCtor;         // chosen by the semantic pass; not owned
+    MemberInit() : isBase(false), line(0), col(0), resolvedCtor(0) {}
 };
 
 // A method IS a function that also knows its access, its class and whether it
@@ -165,7 +166,8 @@ struct BoolExpr : public cc::Expr {
 struct NewExpr : public cc::Expr {
     Type *allocType;
     std::vector<cc::Expr*> args;
-    NewExpr(Type *t) : allocType(t) {}
+    cc::Function *resolvedCtor;         // chosen by the semantic pass; not owned
+    NewExpr(Type *t) : allocType(t), resolvedCtor(0) {}
     ~NewExpr();
     void print(int indent);
 };

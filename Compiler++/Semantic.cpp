@@ -723,7 +723,7 @@ void SemanticAnalyzer::analyzeMemberInits(cxx::MethodDecl *ctor, cxx::ClassDecl 
                 bool lv = false;
                 analyzeExpr(mi.args[a], lv);
             }
-            selectConstructor(cd->base, mi.args.size(), ctor,
+            mi.resolvedCtor = selectConstructor(cd->base, mi.args, ctor,
                               "base class '" + cd->base->name + "'");
             continue;
         }
@@ -753,6 +753,16 @@ void SemanticAnalyzer::analyzeMemberInits(cxx::MethodDecl *ctor, cxx::ClassDecl 
 
         if (fieldIndex < lastFieldIndex) outOfOrder = true;
         lastFieldIndex = fieldIndex;
+
+        // A member that is itself an object is CONSTRUCTED here, with whatever
+        // arguments are written -- `Outer() : in(7)` calls Inner(int).  Only a
+        // scalar member is initialised from a single value.
+        if (cxx::ClassType *fct = dynamic_cast<cxx::ClassType*>(field->type)) {
+            cxx::ClassDecl *fcd = findClass(fct->className);
+            mi.resolvedCtor = selectConstructor(fcd, mi.args, ctor,
+                                                "the initialiser for '" + mi.name + "'");
+            continue;
+        }
 
         if (mi.args.size() != 1) {
             if (mi.args.empty() && hasDestructor(field->type)) continue;   // default-construct
@@ -784,9 +794,12 @@ void SemanticAnalyzer::analyzeMemberInits(cxx::MethodDecl *ctor, cxx::ClassDecl 
     }
 }
 
-cxx::MethodDecl *SemanticAnalyzer::selectConstructor(cxx::ClassDecl *cd, std::size_t argCount,
+cxx::MethodDecl *SemanticAnalyzer::selectConstructor(cxx::ClassDecl *cd,
+                                                     const std::vector<cc::Expr*> &args,
                                                      cc::ASTNode *at, const std::string &what) {
     if (!cd) return 0;
+    const std::size_t argCount = args.size();
+
     // No constructors at all is legal: the fields are uninitialised, as in C.
     if (cd->ctors.empty()) {
         if (argCount > 0) {
@@ -794,22 +807,45 @@ cxx::MethodDecl *SemanticAnalyzer::selectConstructor(cxx::ClassDecl *cd, std::si
         }
         return 0;
     }
-    // By argument COUNT.  Full overload resolution is a later job.
-    cxx::MethodDecl *found = 0;
-    int matches = 0;
+
+    // By SIGNATURE, like any other overload.  P(int,int) and P(double,double)
+    // are two constructors, and choosing on the count alone could only ever
+    // reject the pair.
+    std::vector<cc::Type*> argTypes;
+    for (std::size_t i = 0; i < argCount; ++i) {
+        bool lv = false;
+        argTypes.push_back(analyzeExpr(args[i], lv));
+    }
+
+    std::vector<cxx::MethodDecl*> exact, viable;
     for (std::size_t i = 0; i < cd->ctors.size(); ++i) {
-        if (cd->ctors[i]->params.size() == argCount) { found = cd->ctors[i]; ++matches; }
+        cxx::MethodDecl *c = cd->ctors[i];
+        if (c->params.size() != argCount) continue;
+        bool allExact = true, allOk = true;
+        for (std::size_t k = 0; k < argCount; ++k) {
+            if (!argTypes[k]) continue;
+            cc::Type *want = c->params[k]->type;
+            if (!sameType(argTypes[k], stripReference(want))) allExact = false;
+            if (!convertible(args[k], argTypes[k], want)) allOk = false;
+        }
+        if (allExact) exact.push_back(c);
+        if (allOk) viable.push_back(c);
     }
-    if (matches == 0) {
-        error(at, "class '" + cd->name + "' has no constructor taking "
-                  + countText(argCount) + " argument(s), needed for " + what);
-        return 0;
+
+    if (exact.size() == 1) return exact[0];
+    if (exact.size() > 1) {
+        error(at, "ambiguous constructor for class '" + cd->name + "'");
+        return exact[0];
     }
-    if (matches > 1) {
-        error(at, "more than one constructor of class '" + cd->name
-                  + "' takes the same number of arguments");
+    if (viable.size() == 1) return viable[0];
+    if (viable.size() > 1) {
+        error(at, "ambiguous constructor for class '" + cd->name + "'");
+        return viable[0];
     }
-    return found;
+
+    error(at, "class '" + cd->name + "' has no constructor taking "
+              + countText(argCount) + " argument(s), needed for " + what);
+    return 0;
 }
 
 // --- Entry point ---
@@ -1127,7 +1163,7 @@ void SemanticAnalyzer::analyzeVarDecl(cc::VarDecl *vd, bool declareIt) {
             analyzeExpr(vd->ctorArgs[i], lv);
         }
         if (!vd->init) {
-            selectConstructor(cls, vd->ctorArgs.size(), vd,
+            vd->resolvedCtor = selectConstructor(cls, vd->ctorArgs, vd,
                               "the declaration of '" + vd->name + "'");
         }
     } else if (vd->hasCtorArgs) {
@@ -1431,7 +1467,8 @@ cc::Type *SemanticAnalyzer::analyzeExprImpl(cc::Expr *e, bool &isLValue) {
         }
         // new allocates AND constructs, so the arguments must match a ctor.
         cxx::ClassType *nct = dynamic_cast<cxx::ClassType*>(ne->allocType);
-        if (nct) selectConstructor(findClass(nct->className), ne->args.size(), ne, "'new'");
+        if (nct) ne->resolvedCtor = selectConstructor(findClass(nct->className),
+                                                     ne->args, ne, "'new'");
         else if (!ne->args.empty()) {
             error(ne, "'new " + describe(ne->allocType) + "' cannot take constructor arguments");
         }

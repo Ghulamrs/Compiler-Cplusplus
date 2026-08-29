@@ -96,8 +96,12 @@ private:
     virtual cc::Type *cloneForeignType(cc::Type *t);
 
     // --- object lifetime ---
+    // `chosen` is the constructor the semantic pass picked.  Lowering does not
+    // pick one of its own: two constructors may take the same number of
+    // arguments, and only the analysis knows the operand types.
     void emitConstruct(ClassDecl *cd, IRReg objectAddr,
-                       const std::vector<cc::Expr*> &args, int line);
+                       const std::vector<cc::Expr*> &args, int line,
+                       cc::Function *chosen = 0);
     void emitDestruct(ClassDecl *cd, IRReg objectAddr, int line,
                       bool concreteType = false);
     void emitVPtrStore(ClassDecl *cd, IRReg objectAddr, int line);

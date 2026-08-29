@@ -230,7 +230,8 @@ std::string mangleSignature(const std::vector<cc::VarDecl*> &params);
 std::string mangleFunction(const std::string &className, const std::string &name);
 std::string mangleOverload(const std::string &className, const std::string &name,
                            const std::vector<cc::VarDecl*> &params);
-std::string mangleConstructor(const std::string &className, std::size_t argCount);
+std::string mangleConstructor(const std::string &className,
+                              const std::vector<cc::VarDecl*> &params);
 std::string mangleDestructor(const std::string &className);
 std::string mangleVTable(const std::string &className);
 

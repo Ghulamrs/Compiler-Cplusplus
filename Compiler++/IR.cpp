@@ -127,10 +127,11 @@ std::string mangleFunction(const std::string &className, const std::string &name
 }
 
 // Constructors overload by argument count, so the count distinguishes them.
-std::string mangleConstructor(const std::string &className, std::size_t argCount) {
-    std::ostringstream ss;
-    ss << className << "__ctor" << argCount;
-    return ss.str();
+std::string mangleConstructor(const std::string &className,
+                              const std::vector<cc::VarDecl*> &params) {
+    // By SIGNATURE, not by argument count: P(int,int) and P(double,double) are
+    // two constructors, and encoding only the arity gave them one symbol.
+    return className + "__ctor$" + mangleSignature(params);
 }
 
 std::string mangleDestructor(const std::string &className) {

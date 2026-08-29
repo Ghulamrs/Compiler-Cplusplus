@@ -262,8 +262,11 @@ struct VarDecl : public Decl {
     // Direct initialisation, Point q(1, 2) -- an alternative to init, never both.
     std::vector<Expr*> ctorArgs;
     bool hasCtorArgs;           // true even for  Point q();
+    // Which constructor those arguments selected.  Chosen by the semantic
+    // pass, exactly as a call's overload is; not owned.
+    Function *resolvedCtor;
     VarDecl(Type *t, const std::string &n, Expr *i)
-        : type(t), name(n), init(i), hasCtorArgs(false) {}
+        : type(t), name(n), init(i), hasCtorArgs(false), resolvedCtor(0) {}
     ~VarDecl();
     void print(int indent);
 };
