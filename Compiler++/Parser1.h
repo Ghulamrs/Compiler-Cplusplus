@@ -26,6 +26,9 @@ public:
 private:
     // new in the C++ layer
     ClassDecl *parseClass();
+    // int Point::getX() { ... } at file scope: the body of a method declared
+    // inside the class.  Returns 0 when the declaration is not qualified.
+    Decl *parseOutOfLineDefinition();
     Decl *parseMemberDecl(const std::string &className, Access access);
     QualifiedName *parseQualifiedName();
     // Is the token stream sitting on  ClassName (  -- i.e. a constructor?

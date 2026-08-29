@@ -72,6 +72,8 @@ protected:
     Stmt *parseWhile();
     Stmt *parseFor();
     Stmt *parseReturn();
+    Stmt *parseDoWhile();
+    Stmt *parseSwitch();
     Stmt *parseExprStatement();
 
     // --- the precedence chain, defined ONCE, here -------------------------
@@ -84,6 +86,9 @@ protected:
     Expr *parseAddSub();
     Expr *parseMulDiv();
     Expr *parseUnary();
+    // (T)expr, told from a parenthesised expression by trying the type rule
+    // and rewinding when it does not fit.
+    Expr *parseCastOrParen();
     Expr *parsePostfix();
     Expr *parseCallSuffix(Expr *callee);
     // a[i] is desugared to *(a + i), which is what it means in C -- so it
@@ -92,6 +97,10 @@ protected:
 
     // C's type grammar:  int   int*   int**
     Type *parsePointerSuffixes(Type *base);
+    // In C the array part follows the NAME -- int a[10] -- so it is applied by
+    // the declarator, not by parseType.  Dimensions nest inside out:
+    // int a[3][4] is 3 arrays of 4 ints.
+    Type *parseArraySuffixes(Type *element);
 
     // --- extension points overridden by the C++ layer ---------------------
     virtual Decl *parseDeclaration();

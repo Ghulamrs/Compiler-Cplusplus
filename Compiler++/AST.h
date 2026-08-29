@@ -111,6 +111,17 @@ struct BuiltinType : public Type {
     void print(int indent);
 };
 
+// T[n].  An array is NOT a pointer: it owns its elements and knows how many
+// there are.  It only becomes a pointer when used in an expression, which the
+// semantic pass calls decay.
+struct ArrayType : public Type {
+    Type *element;
+    long count;
+    ArrayType(Type *e, long n) : element(e), count(n) {}
+    ~ArrayType() { delete element; }
+    void print(int indent);
+};
+
 // Pointer type T*
 struct PointerType : public Type {
     Type *base;
@@ -125,14 +136,27 @@ struct PointerType : public Type {
 enum BinaryOp {
     BIN_Add, BIN_Sub, BIN_Mul, BIN_Div, BIN_Mod,
     BIN_Assign,
+    // a += b evaluates a ONCE, so it is its own operator rather than sugar for
+    // a = a + b, which would evaluate a twice.
+    BIN_AddAssign, BIN_SubAssign, BIN_MulAssign, BIN_DivAssign, BIN_ModAssign,
     BIN_EQ, BIN_NE, BIN_LT, BIN_GT, BIN_LE, BIN_GE,
     BIN_LAnd, BIN_LOr
 };
 const char *binaryOpText(BinaryOp op);
 bool binaryOpIsComparison(BinaryOp op);
 bool binaryOpIsLogical(BinaryOp op);
+// True for = and for every compound form.
+bool binaryOpIsAssignment(BinaryOp op);
+// The arithmetic behind a compound assignment: += yields +.
+BinaryOp binaryOpUnderlying(BinaryOp op);
 
-enum UnaryOp { UN_Neg, UN_Not, UN_Deref, UN_AddrOf };
+enum UnaryOp {
+    UN_Neg, UN_Not, UN_Deref, UN_AddrOf,
+    // Prefix yields the new value, postfix the old one -- the only difference
+    // between them, and the reason they are four operators and not two.
+    UN_PreInc, UN_PreDec, UN_PostInc, UN_PostDec
+};
+bool unaryOpIsIncDec(UnaryOp op);
 const char *unaryOpText(UnaryOp op);
 
 struct Expr : public ASTNode {};
@@ -183,10 +207,25 @@ struct BinaryExpr : public Expr {
     void print(int indent);
 };
 
+// (T)expr
+struct CastExpr : public Expr {
+    Type *type;
+    Expr *expr;
+    CastExpr(Type *t, Expr *e) : type(t), expr(e) {}
+    ~CastExpr();
+    void print(int indent);
+};
+
+struct Function;
+
 struct CallExpr : public Expr {
     Expr *callee;
     std::vector<Expr*> args;
-    CallExpr(Expr *c) : callee(c) {}
+    // Which function this call resolved to, chosen by the semantic pass once
+    // overloading made the name alone insufficient.  Lowering uses it rather
+    // than resolving again; not owned.
+    Function *resolved;
+    CallExpr(Expr *c) : callee(c), resolved(0) {}
     ~CallExpr();
     void print(int indent);
 };
@@ -276,6 +315,33 @@ struct WhileStmt : public Stmt {
     Stmt *body;
     WhileStmt(Expr *c, Stmt *b) : cond(c), body(b) {}
     ~WhileStmt();
+    void print(int indent);
+};
+
+// do body while (cond);  -- the body runs before the condition is first tested.
+struct DoWhileStmt : public Stmt {
+    Stmt *body;
+    Expr *cond;
+    DoWhileStmt(Stmt *b, Expr *c) : body(b), cond(c) {}
+    ~DoWhileStmt();
+    void print(int indent);
+};
+
+// A case label is a LABEL, not a block: control enters at the matching one and
+// runs on through the rest until a break.  Modelling it as a statement inside
+// the switch body is what makes fall-through work by construction.
+struct CaseStmt : public Stmt {
+    long value;
+    bool isDefault;
+    CaseStmt(long v, bool d) : value(v), isDefault(d) {}
+    void print(int indent);
+};
+
+struct SwitchStmt : public Stmt {
+    Expr *cond;
+    CompoundStmt *body;
+    SwitchStmt(Expr *c, CompoundStmt *b) : cond(c), body(b) {}
+    ~SwitchStmt();
     void print(int indent);
 };
 

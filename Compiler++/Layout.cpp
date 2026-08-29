@@ -26,6 +26,10 @@ int Layout::sizeOf(cc::Type *t) const {
     cxx::ReferenceType *rt = dynamic_cast<cxx::ReferenceType*>(t);
     if (rt) return PointerSize;
     if (dynamic_cast<cc::PointerType*>(t)) return PointerSize;
+    // An array is its elements, laid end to end.
+    if (cc::ArrayType *at = dynamic_cast<cc::ArrayType*>(t)) {
+        return static_cast<int>(at->count) * sizeOf(at->element);
+    }
     // The type model owns every builtin's size; Layout does not restate them.
     cc::BuiltinType *bt = dynamic_cast<cc::BuiltinType*>(t);
     if (bt) return cc::builtinSize(bt->kind);
@@ -38,6 +42,8 @@ int Layout::sizeOf(cc::Type *t) const {
 }
 
 int Layout::alignOf(cc::Type *t) const {
+    // An array aligns like one element, however many it holds.
+    if (cc::ArrayType *at = dynamic_cast<cc::ArrayType*>(t)) return alignOf(at->element);
     cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(t);
     if (ct) {
         const ClassLayout *cl = forClass(ct->className);

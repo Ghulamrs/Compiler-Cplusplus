@@ -26,6 +26,10 @@ enum TokenKind {
     TOK_FLOAT,
     TOK_DOUBLE,
     TOK_CONST,
+    TOK_DO,
+    TOK_SWITCH,
+    TOK_CASE,
+    TOK_DEFAULT,
     TOK_RETURN,
     TOK_IF,
     TOK_ELSE,
@@ -67,6 +71,13 @@ enum TokenKind {
     TOK_SLASH,
     TOK_PERCENT,
     TOK_ASSIGN,     // =
+    TOK_PLUSPLUS,   // ++
+    TOK_MINUSMINUS, // --
+    TOK_PLUSEQ,     // +=
+    TOK_MINUSEQ,    // -=
+    TOK_STAREQ,     // *=
+    TOK_SLASHEQ,    // /=
+    TOK_PERCENTEQ,  // %=
     TOK_EQ,         // ==
     TOK_NE,         // !=
     TOK_LT,         // <

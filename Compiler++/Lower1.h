@@ -73,6 +73,7 @@ private:
     virtual void emitAllOpenScopeExits();
     virtual void lowerVarDecl(cc::VarDecl *vd);     // constructs class locals
     virtual cc::Type *typeOf(cc::Expr *e);          // the C++ forms
+    virtual cc::Type *cloneForeignType(cc::Type *t);
 
     // --- object lifetime ---
     void emitConstruct(ClassDecl *cd, IRReg objectAddr,

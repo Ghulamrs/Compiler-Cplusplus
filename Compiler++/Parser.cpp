@@ -51,6 +51,8 @@ void Parser::synchronize() {
         case TOK_STRUCT:
         case TOK_IF:
         case TOK_WHILE:
+        case TOK_DO:
+        case TOK_SWITCH:
         case TOK_FOR:
         case TOK_RETURN:
         case TOK_INT:
@@ -175,12 +177,35 @@ void Parser::parseFunctionParamsAndBody(Function *fn) {
 // IDENT already consumed:  [ '=' expr ] ';'
 VarDecl *Parser::parseVarDeclTail(Type *type, const std::string &name,
                                   int nameLine, int nameCol) {
+    type = parseArraySuffixes(type);            // int a[10]
     VarDecl *vd = new VarDecl(type, name, 0);
     vd->line = nameLine;
     vd->col = nameCol;
     parseVarInitializer(vd);            // virtual: C++ adds  (args)
     expect(TOK_SEMI, ("after declaration of " + name).c_str());
     return vd;
+}
+
+Type *Parser::parseArraySuffixes(Type *element) {
+    std::vector<long> dims;
+    while (cur.kind == TOK_LBRACKET) {
+        advance();
+        long n = 0;
+        if (cur.kind == TOK_NUMBER) {
+            n = cur.numberValue;
+            advance();
+        } else {
+            errorAtCurrent("an array bound must be a constant integer");
+        }
+        if (n <= 0) errorAtCurrent("an array must have at least one element");
+        dims.push_back(n > 0 ? n : 1);
+        expect(TOK_RBRACKET, "after an array bound");
+    }
+    // Built inside out, so the LAST bound is the innermost element count.
+    for (std::size_t i = dims.size(); i > 0; --i) {
+        element = new ArrayType(element, dims[i - 1]);
+    }
+    return element;
 }
 
 void Parser::parseVarInitializer(VarDecl *vd) {
@@ -216,6 +241,23 @@ Stmt *Parser::parseStatement() {
     case TOK_LBRACE:   s = parseBlock(); break;
     case TOK_IF:       s = parseIf(); break;
     case TOK_WHILE:    s = parseWhile(); break;
+    case TOK_DO:       s = parseDoWhile(); break;
+    case TOK_SWITCH:   s = parseSwitch(); break;
+    case TOK_CASE: {
+        advance();
+        Expr *v = parseExpression();
+        NumberExpr *n = dynamic_cast<NumberExpr*>(v);
+        if (!n) errorAtCurrent("a case label needs a constant integer");
+        s = new CaseStmt(n ? n->value : 0, false);
+        delete v;
+        expect(TOK_COLON, "after a case label");
+        break;
+    }
+    case TOK_DEFAULT:
+        advance();
+        expect(TOK_COLON, "after 'default'");
+        s = new CaseStmt(0, true);
+        break;
     case TOK_FOR:      s = parseFor(); break;
     case TOK_RETURN:   s = parseReturn(); break;
     case TOK_BREAK:    advance(); expect(TOK_SEMI, "after break"); s = new BreakStmt(); break;
@@ -276,6 +318,29 @@ Stmt *Parser::parseFor() {
     if (cur.kind != TOK_RPAREN) step = parseExpression();
     expect(TOK_RPAREN, "after for clauses");
     return new ForStmt(init, cond, step, parseStatement());
+}
+
+Stmt *Parser::parseDoWhile() {
+    advance();                                      // consume 'do'
+    Stmt *body = parseStatement();
+    expect(TOK_WHILE, "after a do body");
+    expect(TOK_LPAREN, "after 'while'");
+    Expr *cond = parseExpression();
+    expect(TOK_RPAREN, "after a do-while condition");
+    expect(TOK_SEMI, "after do-while");
+    return new DoWhileStmt(body, cond);
+}
+
+Stmt *Parser::parseSwitch() {
+    advance();                                      // consume 'switch'
+    expect(TOK_LPAREN, "after 'switch'");
+    Expr *cond = parseExpression();
+    expect(TOK_RPAREN, "after a switch subject");
+    if (cur.kind != TOK_LBRACE) {
+        errorAtCurrent("expected '{' after switch");
+        return new SwitchStmt(cond, new CompoundStmt());
+    }
+    return new SwitchStmt(cond, parseBlock());
 }
 
 Stmt *Parser::parseReturn() {
@@ -405,15 +470,22 @@ Expr *Parser::parseExpression() {
 // is assignable is the semantic pass's question, not the grammar's.
 Expr *Parser::parseAssign() {
     Expr *left = parseLogicalOr();
-    if (left && cur.kind == TOK_ASSIGN) {
-        const int line = cur.line, col = cur.col;
-        advance();
-        Expr *right = parseAssign();
-        Expr *e = new BinaryExpr(BIN_Assign, left, right);
-        e->line = line; e->col = col;
-        return e;
+    if (!left) return left;
+    BinaryOp op;
+    switch (cur.kind) {
+    case TOK_ASSIGN:    op = BIN_Assign; break;
+    case TOK_PLUSEQ:    op = BIN_AddAssign; break;
+    case TOK_MINUSEQ:   op = BIN_SubAssign; break;
+    case TOK_STAREQ:    op = BIN_MulAssign; break;
+    case TOK_SLASHEQ:   op = BIN_DivAssign; break;
+    case TOK_PERCENTEQ: op = BIN_ModAssign; break;
+    default: return left;
     }
-    return left;
+    const int line = cur.line, col = cur.col;
+    advance();
+    Expr *e = new BinaryExpr(op, left, parseAssign());
+    e->line = line; e->col = col;
+    return e;
 }
 
 Expr *Parser::parseLogicalOr() {
@@ -506,10 +578,12 @@ Expr *Parser::parseMulDiv() {
 Expr *Parser::parseUnary() {
     UnaryOp op;
     switch (cur.kind) {
-    case TOK_MINUS: op = UN_Neg; break;
-    case TOK_NOT:   op = UN_Not; break;
-    case TOK_STAR:  op = UN_Deref; break;
-    case TOK_AMP:   op = UN_AddrOf; break;
+    case TOK_MINUS:      op = UN_Neg; break;
+    case TOK_NOT:        op = UN_Not; break;
+    case TOK_STAR:       op = UN_Deref; break;
+    case TOK_AMP:        op = UN_AddrOf; break;
+    case TOK_PLUSPLUS:   op = UN_PreInc; break;
+    case TOK_MINUSMINUS: op = UN_PreDec; break;
     default: return parsePostfix();
     }
     const int line = cur.line, col = cur.col;
@@ -526,6 +600,15 @@ Expr *Parser::parsePostfix() {
     while (e) {
         if (cur.kind == TOK_LPAREN) { e = parseCallSuffix(e); continue; }
         if (cur.kind == TOK_LBRACKET) { e = parseIndexSuffix(e); continue; }
+        if (cur.kind == TOK_PLUSPLUS || cur.kind == TOK_MINUSMINUS) {
+            const UnaryOp op = (cur.kind == TOK_PLUSPLUS) ? UN_PostInc : UN_PostDec;
+            const int line = cur.line, col = cur.col;
+            advance();
+            Expr *p = new UnaryExpr(op, e);
+            p->line = line; p->col = col;
+            e = p;
+            continue;
+        }
         Expr *m = parseMemberSuffix(e);             // virtual; 0 in the C layer
         if (m) { e = m; continue; }
         break;
@@ -598,14 +681,34 @@ Expr *Parser::parsePrimary() {
         e->line = line; e->col = col;
         return e;
     }
-    if (cur.kind == TOK_LPAREN) {
-        advance();
-        Expr *e = parseExpression();
-        expect(TOK_RPAREN, "after parenthesised expression");
-        return e;
-    }
+    if (cur.kind == TOK_LPAREN) return parseCastOrParen();
+
     errorAtCurrent(std::string("expected an expression, found ") + tokenName(cur.kind));
     return 0;
+}
+
+// '(' is ambiguous: it opens either a cast or a parenthesised expression, and
+// only what follows tells them apart.  Try the type rule and rewind when it
+// does not fit -- the same speculation parseStatement() uses.
+Expr *Parser::parseCastOrParen() {
+    const int line = cur.line, col = cur.col;
+    State st = save();
+    advance();                                      // consume '('
+    Type *t = parseType();                          // virtual: knows C++ types
+    if (t && cur.kind == TOK_RPAREN) {
+        advance();
+        Expr *inner = parseUnary();                 // a cast binds like a unary
+        Expr *e = new CastExpr(t, inner);
+        e->line = line; e->col = col;
+        return e;
+    }
+    delete t;
+    restore(st);
+
+    advance();                                      // consume '(' again
+    Expr *e = parseExpression();
+    expect(TOK_RPAREN, "after parenthesised expression");
+    return e;
 }
 
 // This subset introduces member access with classes, in the layer above.

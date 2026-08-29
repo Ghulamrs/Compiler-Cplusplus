@@ -21,6 +21,7 @@
 
 #include "AST.h"
 #include "Diagnostics.h"
+#include "Bytecode.h"
 #include "IR.h"
 #include "Layout.h"
 
@@ -46,12 +47,16 @@ protected:
     // Labels to jump to for `break` and `continue`, innermost last.
     std::vector<int> breakTargets;
     std::vector<int> continueTargets;
+    // Case labels of the switch being lowered, filled on a first pass so the
+    // comparison chain can be emitted before the body.
+    std::map<const CaseStmt*, int> caseLabels;
     // Innermost last.  A `return` inside nested scopes runs the destructors of
     // every one of them, walking this list.
     std::vector<CompoundStmt*> openBlocks;
 
     // --- declarations -------------------------------------------------
     virtual void lowerDecl(Decl *d);
+    std::string symbolFor(Function *f, const std::string &className);
     void lowerFunction(Function *f, const std::string &mangled,
                        const std::string &sourceName, bool hasThis);
     virtual void emitPrologue(Function *f);     // a ctor's base call and inits
@@ -61,6 +66,8 @@ protected:
     virtual void lowerStmt(Stmt *s);
     void lowerBlock(CompoundStmt *block);
     void lowerIf(IfStmt *s);
+    void lowerDoWhile(DoWhileStmt *s);
+    void lowerSwitch(SwitchStmt *s);
     void lowerWhile(WhileStmt *s);
     void lowerFor(ForStmt *s);
     virtual void lowerVarDecl(VarDecl *vd);
@@ -80,13 +87,27 @@ protected:
     // before the operator runs.
     static bool arithKind(Type *t, BuiltinKind &out);
     static bool isFloatType(Type *t);
+    // An array's VALUE is the address of its first element -- there is no
+    // load, because an array is not something a register can hold.
+    static bool isArrayType(Type *t);
     static BuiltinKind commonKind(BuiltinKind a, BuiltinKind b);
     Type *literalType(BuiltinKind k);
+    Type *decayType(Type *t);
+    Type *cloneTypeShallow(Type *t);
+    // The C++ layer's types are unknown here, so copying one is its job.
+    virtual Type *cloneForeignType(Type *t) { return t; }
+    std::vector<Type*> ownedDecays;
     Type *commonType(BuiltinKind k);
     // Builtin types this pass forms, one per kind, owned here.
     std::map<int, Type*> builtinCache;
     IRReg lowerUnary(UnaryExpr *e);
     IRReg lowerAssign(BinaryExpr *e);
+    // ++ / -- and += share one shape: take the address ONCE, load through it,
+    // compute, store back.  Evaluating the target twice would be wrong the
+    // moment it has a side effect.
+    IRReg lowerIncDec(UnaryExpr *e);
+    // The step for ++ on a pointer is the pointee's size, not one.
+    IRReg stepFor(Type *t, int line);
     IRReg lowerShortCircuit(BinaryExpr *e);
     virtual IRReg lowerCall(CallExpr *e, bool wantsResult);
     std::vector<IRReg> lowerArgs(CallExpr *e, Function *target, std::size_t skip);

@@ -40,6 +40,9 @@ private:
     Diagnostics &diag;
 
     std::map<std::string, cxx::ClassDecl*> classes;
+    // A name no longer identifies a function, so every declaration of a name
+    // is kept and the call site chooses between them.
+    std::map<std::string, std::vector<cc::Function*> > overloads;
 
     // Context for the function being analysed.
     cc::Type *currentReturnType;
@@ -47,6 +50,7 @@ private:
     // A ctor/dtor has no return type at all, which is not the same as void.
     bool currentIsCtorOrDtor;
     int loopDepth;                  // break/continue legality
+    int switchDepth;                // `break` is legal inside a switch too
 
     // Types the analyzer forms itself belong to no AST node, so it owns them
     // and frees them in its destructor.  A formed type must own every node in
@@ -60,6 +64,8 @@ private:
     void collectClasses(const std::vector<cc::Decl*> &units);
     // Runs before anything looks a member up: member lookup walks this chain.
     void resolveBases();
+    // Attaches each out-of-line definition to the declaration inside its class.
+    void attachOutOfLineDefinitions(const std::vector<cc::Decl*> &units);
     void resolveOverrides(cxx::ClassDecl *cd);
     void analyzeMemberInits(cxx::MethodDecl *ctor, cxx::ClassDecl *cd);
     void checkClassInvariants(cxx::ClassDecl *cd);
@@ -75,6 +81,7 @@ private:
     void analyzeClass(cxx::ClassDecl *cd);
     void analyzeFunction(cc::Function *fn);
     void analyzeStmt(cc::Stmt *s);
+    void analyzeSwitch(cc::SwitchStmt *s);
     void analyzeBlock(cc::CompoundStmt *block);
     void analyzeVarDecl(cc::VarDecl *vd, bool declareIt);
     cc::Type *analyzeExpr(cc::Expr *e, bool &isLValue);
@@ -99,6 +106,9 @@ private:
     // helpers
     void error(cc::ASTNode *at, const std::string &msg);
     static cc::Type *stripReference(cc::Type *t);
+    // An array used in an expression becomes a pointer to its first element.
+    // Only & and a declaration see the array type itself.
+    cc::Type *decay(cc::Type *t);
     static std::string describe(cc::Type *t);
     static bool sameType(cc::Type *a, cc::Type *b);
     // sameType plus the upcasts single inheritance makes free.
@@ -129,6 +139,16 @@ private:
     // case the caller skips further checks rather than cascading.
     bool checkTypeIsKnown(cc::Type *t, cc::ASTNode *at, const std::string &where);
     void checkCallArgs(cc::CallExpr *call, cc::Function *fn);
+    // Picks the overload a call names.  An exact match wins outright; failing
+    // that a single convertible candidate wins; anything else is an error the
+    // programmer has to resolve.
+    cc::Function *resolveOverload(const std::vector<cc::Function*> &candidates,
+                                  cc::CallExpr *call, const std::string &name);
+    // Do two declarations of one name describe the same function?
+    static bool sameParams(cc::Function *a, cc::Function *b);
+    // Every method of this name in the class and its bases, most derived
+    // first -- the candidate set a member call chooses from.
+    std::vector<cc::Function*> findMethods(cxx::ClassDecl *cd, const std::string &name);
 
     // not copyable (C++98 way: declared private, never defined)
     SemanticAnalyzer(const SemanticAnalyzer &);

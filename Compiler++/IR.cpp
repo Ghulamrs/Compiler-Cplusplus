@@ -4,8 +4,11 @@
 
 #include "IR.h"
 
+#include <cstddef>
 #include <iostream>
 #include <sstream>
+
+#include "AST1.h"
 
 const char *irOpName(IROp op) {
     switch (op) {
@@ -68,6 +71,53 @@ const char *irOpName(IROp op) {
 }
 
 // --- name mangling ----------------------------------------------------
+
+// A short code per type: i d c s l f v, P for a pointer, R for a reference,
+// and a class by name.  Readable in a dump, and unique.
+static std::string typeCode(cc::Type *t) {
+    if (!t) return "v";
+    if (cc::PointerType *pt = dynamic_cast<cc::PointerType*>(t)) return "P" + typeCode(pt->base);
+    if (cc::ArrayType *at = dynamic_cast<cc::ArrayType*>(t)) return "P" + typeCode(at->element);
+    if (cc::BuiltinType *bt = dynamic_cast<cc::BuiltinType*>(t)) {
+        switch (bt->kind) {
+        case cc::BK_Void:   return "v";
+        case cc::BK_Char:   return "c";
+        case cc::BK_SChar:  return "a";
+        case cc::BK_UChar:  return "h";
+        case cc::BK_Short:  return "s";
+        case cc::BK_UShort: return "t";
+        case cc::BK_Int:    return "i";
+        case cc::BK_UInt:   return "j";
+        case cc::BK_Long:   return "l";
+        case cc::BK_ULong:  return "m";
+        case cc::BK_Float:  return "f";
+        case cc::BK_Double: return "d";
+        }
+    }
+    if (cxx::ReferenceType *rt = dynamic_cast<cxx::ReferenceType*>(t)) {
+        return "R" + typeCode(rt->base);
+    }
+    if (cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(t)) {
+        std::ostringstream ss;
+        ss << ct->className.size() << ct->className;
+        return ss.str();
+    }
+    return "X";
+}
+
+std::string mangleSignature(const std::vector<cc::VarDecl*> &params) {
+    if (params.empty()) return "v";
+    std::string out;
+    for (std::size_t i = 0; i < params.size(); ++i) {
+        out += typeCode(params[i]->type);
+    }
+    return out;
+}
+
+std::string mangleOverload(const std::string &className, const std::string &name,
+                           const std::vector<cc::VarDecl*> &params) {
+    return mangleFunction(className, name) + "$" + mangleSignature(params);
+}
 
 std::string mangleFunction(const std::string &className, const std::string &name) {
     if (className.empty()) return name;

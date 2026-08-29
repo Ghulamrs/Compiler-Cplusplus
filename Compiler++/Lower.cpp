@@ -16,6 +16,7 @@ Lowering::~Lowering() {
          it != builtinCache.end(); ++it) {
         delete it->second;
     }
+    for (std::size_t i = 0; i < ownedDecays.size(); ++i) delete ownedDecays[i];
 }
 
 // --- Scopes and slots ---
@@ -54,6 +55,26 @@ int Lowering::sizeOfType(Type *t) const {
 
 // Types the lowering pass forms for literals and for the common type of a
 // binary operator.  Owned here, because they belong to no AST node.
+// Lowering does pointer arithmetic on decayed types, so an array is turned
+// into a pointer to its element here, exactly as the semantic pass did.
+Type *Lowering::decayType(Type *t) {
+    ArrayType *at = dynamic_cast<ArrayType*>(t);
+    if (!at) return t;
+    Type *p = new PointerType(cloneTypeShallow(at->element));
+    ownedDecays.push_back(p);
+    return p;
+}
+
+// A deep copy, so a formed pointer owns its pointee rather than borrowing a
+// subtree the AST will delete.
+Type *Lowering::cloneTypeShallow(Type *t) {
+    if (!t) return 0;
+    if (BuiltinType *bt = dynamic_cast<BuiltinType*>(t)) return new BuiltinType(bt->kind);
+    if (PointerType *pt = dynamic_cast<PointerType*>(t)) return new PointerType(cloneTypeShallow(pt->base));
+    if (ArrayType *at = dynamic_cast<ArrayType*>(t)) return new ArrayType(cloneTypeShallow(at->element), at->count);
+    return cloneForeignType(t);
+}
+
 Type *Lowering::literalType(BuiltinKind k) {
     std::map<int, Type*>::iterator it = builtinCache.find(static_cast<int>(k));
     if (it != builtinCache.end()) return it->second;
@@ -74,6 +95,10 @@ BuiltinKind Lowering::commonKind(BuiltinKind a, BuiltinKind b) {
     const int ra = builtinRank(a), rb = builtinRank(b);
     if (ra != rb) return (ra > rb) ? a : b;
     return builtinIsSigned(a) ? b : a;
+}
+
+bool Lowering::isArrayType(Type *t) {
+    return dynamic_cast<ArrayType*>(t) != 0;
 }
 
 bool Lowering::isFloatType(Type *t) {
@@ -133,19 +158,24 @@ Type *Lowering::typeOf(Expr *e) {
     }
     if (UnaryExpr *u = dynamic_cast<UnaryExpr*>(e)) {
         if (u->op == UN_Deref) {
-            Type *base = typeOf(u->operand);
+            Type *base = decayType(typeOf(u->operand));
             if (PointerType *pt = dynamic_cast<PointerType*>(base)) return pt->base;
         }
+        if (u->op == UN_AddrOf) return 0;
         return 0;
     }
+    if (CastExpr *c = dynamic_cast<CastExpr*>(e)) return c->type;
+    if (UnaryExpr *u2 = dynamic_cast<UnaryExpr*>(e)) {
+        if (unaryOpIsIncDec(u2->op)) return typeOf(u2->operand);
+    }
     if (BinaryExpr *b = dynamic_cast<BinaryExpr*>(e)) {
-        if (b->op == BIN_Assign) return typeOf(b->lhs);
+        if (binaryOpIsAssignment(b->op)) return typeOf(b->lhs);
         // p + n and p - n stay pointers, which is what makes a[i] load the
         // right width.
         if (b->op == BIN_Add || b->op == BIN_Sub) {
-            Type *lt = typeOf(b->lhs);
+            Type *lt = decayType(typeOf(b->lhs));
             if (dynamic_cast<PointerType*>(lt)) return lt;
-            Type *rt = typeOf(b->rhs);
+            Type *rt = decayType(typeOf(b->rhs));
             if (b->op == BIN_Add && dynamic_cast<PointerType*>(rt)) return rt;
         }
         return 0;
@@ -182,9 +212,22 @@ void Lowering::lowerUnit(const std::vector<Decl*> &units) {
     for (std::size_t i = 0; i < units.size(); ++i) lowerDecl(units[i]);
 }
 
+// A native keeps its plain name so the VM can recognise it; everything else
+// carries its signature, because a name alone no longer identifies a function.
+std::string Lowering::symbolFor(Function *f, const std::string &className) {
+    if (className.empty()) {
+        // main is the entry point and cannot be overloaded, so it keeps its
+        // plain name -- as it does in a real toolchain.
+        if (f->name == "main") return f->name;
+        // A native is recognised by name, so it keeps its own too.
+        if (!f->body && nativeByName(f->name) != NAT_Count) return f->name;
+    }
+    return mangleOverload(className, f->name, f->params);
+}
+
 void Lowering::lowerDecl(Decl *d) {
     Function *f = dynamic_cast<Function*>(d);
-    if (f && f->body) lowerFunction(f, f->name, f->name, false);
+    if (f && f->body) lowerFunction(f, symbolFor(f, ""), f->name, false);
 }
 
 void Lowering::lowerFunction(Function *f, const std::string &mangled,
@@ -276,6 +319,14 @@ void Lowering::lowerStmt(Stmt *s) {
     }
 
     if (IfStmt *is = dynamic_cast<IfStmt*>(s))    { lowerIf(is); return; }
+    if (DoWhileStmt *dw = dynamic_cast<DoWhileStmt*>(s)) { lowerDoWhile(dw); return; }
+    if (SwitchStmt *sw = dynamic_cast<SwitchStmt*>(s))   { lowerSwitch(sw); return; }
+    if (CaseStmt *cs = dynamic_cast<CaseStmt*>(s)) {
+        // A case label is exactly that: a place to jump to.
+        std::map<const CaseStmt*, int>::const_iterator it = caseLabels.find(cs);
+        if (it != caseLabels.end()) fn->emitLabel(it->second);
+        return;
+    }
     if (WhileStmt *ws = dynamic_cast<WhileStmt*>(s)) { lowerWhile(ws); return; }
     if (ForStmt *fs = dynamic_cast<ForStmt*>(s))  { lowerFor(fs); return; }
 
@@ -325,6 +376,65 @@ void Lowering::lowerIf(IfStmt *s) {
     } else {
         fn->emitLabel(elseLabel);
     }
+}
+
+// The body runs before the condition is first tested, which is the whole of
+// the difference from `while`.
+void Lowering::lowerDoWhile(DoWhileStmt *s) {
+    const int top = fn->newLabel();
+    const int test = fn->newLabel();
+    const int done = fn->newLabel();
+
+    fn->emitLabel(top);
+    breakTargets.push_back(done);
+    continueTargets.push_back(test);        // `continue` goes to the test
+    lowerStmt(s->body);
+    continueTargets.pop_back();
+    breakTargets.pop_back();
+
+    fn->emitLabel(test);
+    const IRReg cond = lowerValue(s->cond);
+    fn->emitBranchNZ(cond, top, s->line);
+    fn->emitLabel(done);
+}
+
+// A comparison chain, then the body emitted straight through -- so control
+// enters at the matching label and runs on until a break, which is what
+// fall-through is.  A jump table would be faster and would hide that.
+void Lowering::lowerSwitch(SwitchStmt *s) {
+    const int done = fn->newLabel();
+    int defaultLabel = done;
+
+    std::map<const CaseStmt*, int> saved;
+    saved.swap(caseLabels);
+
+    const IRReg subject = lowerValue(s->cond);
+
+    std::vector<const CaseStmt*> cases;
+    if (s->body) {
+        for (std::size_t i = 0; i < s->body->body.size(); ++i) {
+            CaseStmt *c = dynamic_cast<CaseStmt*>(s->body->body[i]);
+            if (!c) continue;
+            const int label = fn->newLabel();
+            caseLabels[c] = label;
+            if (c->isDefault) defaultLabel = label;
+            else              cases.push_back(c);
+        }
+    }
+
+    for (std::size_t i = 0; i < cases.size(); ++i) {
+        const IRReg want = fn->emitConst(cases[i]->value, s->line);
+        const IRReg eq = fn->emitBinary(IR_CmpEQ, subject, want, s->line);
+        fn->emitBranchNZ(eq, caseLabels[cases[i]], s->line);
+    }
+    fn->emitJump(defaultLabel, s->line);
+
+    breakTargets.push_back(done);
+    lowerStmt(s->body);
+    breakTargets.pop_back();
+    fn->emitLabel(done);
+
+    caseLabels.swap(saved);
 }
 
 void Lowering::lowerWhile(WhileStmt *s) {
@@ -399,7 +509,7 @@ IRReg Lowering::lowerAddress(Expr *e) {
 
     if (BinaryExpr *b = dynamic_cast<BinaryExpr*>(e)) {
         // An assignment is an lvalue; its address is the left side's.
-        if (b->op == BIN_Assign) { lowerAssign(b); return lowerAddress(b->lhs); }
+        if (binaryOpIsAssignment(b->op)) { lowerAssign(b); return lowerAddress(b->lhs); }
     }
 
     diag.error(e->line, e->col, "internal: expression has no address to lower");
@@ -426,10 +536,17 @@ IRReg Lowering::lowerValue(Expr *e) {
         const IRReg addr = lowerAddress(e);
         Type *t = typeOf(e);
         (void)id;
+        // An array decays: its value IS its address, with nothing loaded.
+        if (isArrayType(t)) return addr;
         return fn->emitLoad(addr, t ? sizeOfType(t) : Layout::IntSize,
                             isFloatType(t), e->line);
     }
 
+    if (CastExpr *ce = dynamic_cast<CastExpr*>(e)) {
+        // A cast is an explicit conversion; the same machinery serves.
+        const IRReg v = lowerValue(ce->expr);
+        return convert(v, typeOf(ce->expr), ce->type, e->line);
+    }
     if (CallExpr *call = dynamic_cast<CallExpr*>(e)) return lowerCall(call, true);
     if (UnaryExpr *u = dynamic_cast<UnaryExpr*>(e))  return lowerUnary(u);
     if (BinaryExpr *b = dynamic_cast<BinaryExpr*>(e)) return lowerBinary(b);
@@ -438,7 +555,37 @@ IRReg Lowering::lowerValue(Expr *e) {
     return fn->emitConst(0, e->line);
 }
 
+// ++p on a pointer moves by one object, not one byte.
+IRReg Lowering::stepFor(Type *t, int line) {
+    PointerType *pt = dynamic_cast<PointerType*>(t);
+    return fn->emitConst(pt ? sizeOfType(pt->base) : 1, line);
+}
+
+// The target's address is taken ONCE and reused for the load and the store.
+// Prefix yields the new value, postfix the old one; nothing else differs.
+IRReg Lowering::lowerIncDec(UnaryExpr *e) {
+    Type *t = typeOf(e->operand);
+    const int size = t ? sizeOfType(t) : Layout::IntSize;
+    const bool flt = isFloatType(t);
+
+    const IRReg addr = lowerAddress(e->operand);
+    const IRReg oldValue = fn->emitLoad(addr, size, flt, e->line);
+    const IRReg step = stepFor(t, e->line);
+    const bool up = (e->op == UN_PreInc || e->op == UN_PostInc);
+
+    IRReg newValue;
+    if (flt) {
+        const IRReg fstep = fn->emitConvert(IR_IntToFloat, step, 0, IR_NoReg, e->line);
+        newValue = fn->emitBinary(up ? IR_FAdd : IR_FSub, oldValue, fstep, e->line);
+    } else {
+        newValue = fn->emitBinary(up ? IR_Add : IR_Sub, oldValue, step, e->line);
+    }
+    fn->emitStore(addr, newValue, size, flt, e->line);
+    return (e->op == UN_PreInc || e->op == UN_PreDec) ? newValue : oldValue;
+}
+
 IRReg Lowering::lowerUnary(UnaryExpr *e) {
+    if (unaryOpIsIncDec(e->op)) return lowerIncDec(e);
     switch (e->op) {
     case UN_Neg: {
         BuiltinKind k;
@@ -450,9 +597,14 @@ IRReg Lowering::lowerUnary(UnaryExpr *e) {
     case UN_Deref: {
         const IRReg addr = lowerValue(e->operand);
         Type *t = typeOf(e);
+        // *p on a pointer-to-array yields the array's address; there is
+        // nothing to load, because an array is not a register-sized value.
+        if (isArrayType(t)) return addr;
         return fn->emitLoad(addr, t ? sizeOfType(t) : Layout::IntSize,
                             isFloatType(t), e->line);
     }
+    default:
+        break;
     }
     return IR_NoReg;
 }
@@ -461,7 +613,7 @@ IRReg Lowering::lowerUnary(UnaryExpr *e) {
 // runs, and the operator chosen depends on that type: integer, unsigned and
 // floating arithmetic are three different machine operations.
 IRReg Lowering::lowerBinary(BinaryExpr *e) {
-    if (e->op == BIN_Assign) return lowerAssign(e);
+    if (binaryOpIsAssignment(e->op)) return lowerAssign(e);
     if (e->op == BIN_LAnd || e->op == BIN_LOr) return lowerShortCircuit(e);
 
     Type *lt = typeOf(e->lhs);
@@ -472,6 +624,8 @@ IRReg Lowering::lowerBinary(BinaryExpr *e) {
     // Pointer arithmetic counts objects, not bytes, so the integer side is
     // scaled by the pointee's size before the add.  This is the whole of what
     // makes a[i] reach element i rather than byte i.
+    lt = decayType(lt);
+    rt = decayType(rt);
     PointerType *pl = dynamic_cast<PointerType*>(lt);
     PointerType *pr = dynamic_cast<PointerType*>(rt);
     if ((pl || pr) && (e->op == BIN_Add || e->op == BIN_Sub)) {
@@ -522,15 +676,50 @@ IRReg Lowering::lowerBinary(BinaryExpr *e) {
 }
 
 IRReg Lowering::lowerAssign(BinaryExpr *e) {
-    // Right side first: the order the language leaves open, and the one that
-    // keeps the address live for the shortest time.
-    IRReg value = lowerValue(e->rhs);
     Type *t = typeOf(e->lhs);
-    value = convert(value, typeOf(e->rhs), t, e->line);
+    const int size = t ? sizeOfType(t) : Layout::IntSize;
+    const bool flt = isFloatType(t);
+
+    if (e->op == BIN_Assign) {
+        // Right side first: the order the language leaves open, and the one
+        // that keeps the address live for the shortest time.
+        IRReg value = lowerValue(e->rhs);
+        value = convert(value, typeOf(e->rhs), t, e->line);
+        const IRReg addr = lowerAddress(e->lhs);
+        fn->emitStore(addr, value, size, flt, e->line);
+        return value;
+    }
+
+    // a += b: the address is taken ONCE.  Lowering it as a = a + b would
+    // evaluate a twice, which is wrong the moment a has a side effect.
     const IRReg addr = lowerAddress(e->lhs);
-    fn->emitStore(addr, value, t ? sizeOfType(t) : Layout::IntSize,
-                  isFloatType(t), e->line);
-    return value;
+    const IRReg oldValue = fn->emitLoad(addr, size, flt, e->line);
+    IRReg rhs = lowerValue(e->rhs);
+    rhs = convert(rhs, typeOf(e->rhs), t, e->line);
+
+    const BinaryOp under = binaryOpUnderlying(e->op);
+    IROp op = IR_Add;
+    if (flt) {
+        switch (under) {
+        case BIN_Add: op = IR_FAdd; break;
+        case BIN_Sub: op = IR_FSub; break;
+        case BIN_Mul: op = IR_FMul; break;
+        default:      op = IR_FDiv; break;
+        }
+    } else {
+        BuiltinKind k;
+        const bool uns = arithKind(t, k) && !builtinIsSigned(k);
+        switch (under) {
+        case BIN_Add: op = IR_Add; break;
+        case BIN_Sub: op = IR_Sub; break;
+        case BIN_Mul: op = IR_Mul; break;
+        case BIN_Div: op = uns ? IR_UDiv : IR_Div; break;
+        default:      op = uns ? IR_UMod : IR_Mod; break;
+        }
+    }
+    const IRReg result = fn->emitBinary(op, oldValue, rhs, e->line);
+    fn->emitStore(addr, result, size, flt, e->line);
+    return result;
 }
 
 // The right side must not run when the left already decides -- a control-flow
@@ -561,9 +750,14 @@ IRReg Lowering::lowerCall(CallExpr *e, bool wantsResult) {
         diag.error(e->line, e->col, "internal: unsupported callee in lowering");
         return fn->emitConst(0, e->line);
     }
-    std::map<std::string, Function*>::const_iterator it = functions.find(callee->name);
-    Function *target = (it == functions.end()) ? 0 : it->second;
-    return fn->emitCall(callee->name, lowerArgs(e, target, 0), wantsResult, e->line);
+    // The semantic pass already chose which overload this is.
+    Function *target = e->resolved;
+    if (!target) {
+        std::map<std::string, Function*>::const_iterator it = functions.find(callee->name);
+        if (it != functions.end()) target = it->second;
+    }
+    const std::string sym = target ? symbolFor(target, "") : callee->name;
+    return fn->emitCall(sym, lowerArgs(e, target, 0), wantsResult, e->line);
 }
 
 // Each argument is converted to its parameter's declared type.  Without this a

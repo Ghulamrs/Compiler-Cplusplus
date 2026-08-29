@@ -58,6 +58,8 @@ const FieldLayout *Lowering::findField(const std::string &className,
     return 0;
 }
 
+// The semantic pass already chose the overload; this finds one by name only,
+// for the cases where no call is involved.
 MethodDecl *Lowering::findMethod(ClassDecl *cd, const std::string &member) const {
     for (ClassDecl *c = cd; c; c = c->base) {
         for (std::size_t i = 0; i < c->members.size(); ++i) {
@@ -96,7 +98,7 @@ void Lowering::lowerClasses() {
         for (std::size_t s = 0; s < cl->vtable.size(); ++s) {
             MethodDecl *m = cl->vtable[s];
             if (m->isDestructor) vt.slots.push_back(mangleDestructor(m->ownerClass));
-            else                 vt.slots.push_back(mangleFunction(m->ownerClass, m->name));
+            else vt.slots.push_back(mangleOverload(m->ownerClass, m->name, m->params));
         }
         mod.vtables.push_back(vt);
     }
@@ -115,7 +117,7 @@ void Lowering::lowerDecl(cc::Decl *d) {
             std::string mangled;
             if (md->isConstructor)     mangled = mangleConstructor(cd->name, md->params.size());
             else if (md->isDestructor) mangled = mangleDestructor(cd->name);
-            else                       mangled = mangleFunction(cd->name, md->name);
+            else                       mangled = mangleOverload(cd->name, md->name, md->params);
             // A function with `this` in front -- all "member function" means
             // once the C++ is gone.
             lowerFunction(md, mangled, cd->name + "::" + md->name, true);
@@ -287,6 +289,13 @@ bool Lowering::isReferenceExpr(cc::Expr *e) {
     return t && dynamic_cast<ReferenceType*>(t) != 0;
 }
 
+// The C layer cannot copy a class or reference type; this layer can.
+cc::Type *Lowering::cloneForeignType(cc::Type *t) {
+    cc::Type *c = cloneType(t);
+    if (c) ownedTypes.push_back(c);
+    return c ? c : t;
+}
+
 bool Lowering::isReferenceType(cc::Type *t) {
     return dynamic_cast<ReferenceType*>(t) != 0;
 }
@@ -300,14 +309,15 @@ IRReg Lowering::lowerCall(cc::CallExpr *e, bool wantsResult) {
         cc::IdentExpr *id = dynamic_cast<cc::IdentExpr*>(e->callee);
         if (id && !currentClass.empty() && findSlot(id->name) < 0) {
             ClassDecl *cd = findClass(currentClass);
-            MethodDecl *m = cd ? findMethod(cd, id->name) : 0;
+            MethodDecl *m = dynamic_cast<MethodDecl*>(e->resolved);
+            if (!m && cd) m = findMethod(cd, id->name);
             if (m) {
                 std::vector<IRReg> args;
                 args.push_back(loadThis(e->line));
                 const std::vector<IRReg> rest = lowerArgs(e, m, 0);
                 args.insert(args.end(), rest.begin(), rest.end());
-                return fn->emitCall(mangleFunction(m->ownerClass, m->name), args,
-                                    wantsResult, e->line);
+                return fn->emitCall(mangleOverload(m->ownerClass, m->name, m->params),
+                                    args, wantsResult, e->line);
             }
         }
         return cc::Lowering::lowerCall(e, wantsResult);
@@ -316,7 +326,9 @@ IRReg Lowering::lowerCall(cc::CallExpr *e, bool wantsResult) {
     const IRReg object = lowerObjectAddress(ma);
     ClassDecl *cd = classOfType(typeOf(ma->base));
     if (!cd) cd = findClass(currentClass);
-    MethodDecl *m = cd ? findMethod(cd, ma->member) : 0;
+    // The overload was decided during analysis; using it here keeps one answer.
+    MethodDecl *m = dynamic_cast<MethodDecl*>(e->resolved);
+    if (!m && cd) m = findMethod(cd, ma->member);
     if (!m) {
         diag.error(e->line, e->col, "internal: method not found while lowering a call");
         return fn->emitConst(0, e->line);
@@ -357,7 +369,8 @@ IRReg Lowering::lowerCall(cc::CallExpr *e, bool wantsResult) {
             }
         }
     }
-    return fn->emitCall(mangleFunction(m->ownerClass, m->name), args, wantsResult, e->line);
+    return fn->emitCall(mangleOverload(m->ownerClass, m->name, m->params), args,
+                        wantsResult, e->line);
 }
 
 // --- Object lifetime ---

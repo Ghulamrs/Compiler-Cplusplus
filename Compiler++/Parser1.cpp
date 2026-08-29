@@ -14,7 +14,73 @@ Parser::Parser(const std::string &s, Diagnostics &d) : cc::Parser(s, d) {}
 // Only the class form is new; the rest goes back to the base class.
 cc::Decl *Parser::parseDeclaration() {
     if (cur.kind == TOK_CLASS || cur.kind == TOK_STRUCT) return parseClass();
+    if (Decl *d = parseOutOfLineDefinition()) return d;
     return cc::Parser::parseDeclaration();
+}
+
+// A qualified name at file scope means a member defined outside its class.
+// Telling it from an ordinary declaration needs the type, the name and then a
+// '::', so the whole attempt is speculative and rewinds if it does not fit.
+Decl *Parser::parseOutOfLineDefinition() {
+    State st = save();
+
+    // The return type must be parsed WITHOUT the C++ layer's qualified-name
+    // rule, or `Point::Point` would be swallowed whole as a class type.  A
+    // constructor and a destructor have none at all, so its absence is not a
+    // failure here.
+    cc::Type *ret = 0;
+    switch (cur.kind) {
+    case TOK_INT: case TOK_CHAR: case TOK_VOID: case TOK_SHORT: case TOK_LONG:
+    case TOK_SIGNED: case TOK_UNSIGNED: case TOK_FLOAT: case TOK_DOUBLE:
+    case TOK_CONST:
+        ret = cc::Parser::parseType();          // builtins and pointers only
+        break;
+    case TOK_IDENTIFIER: {
+        // A class return type looks like  Point Point::make() : two names in a
+        // row.  One name followed by '::' is the qualifier itself.
+        const State probe = save();
+        advance();
+        const bool classReturn = (cur.kind == TOK_IDENTIFIER);
+        restore(probe);
+        if (classReturn) ret = parseType();
+        break;
+    }
+    default:
+        break;
+    }
+
+    if (cur.kind != TOK_IDENTIFIER) { delete ret; restore(st); return 0; }
+    const std::string className = cur.text;
+    const int line = cur.line, col = cur.col;
+    advance();
+    if (cur.kind != TOK_COLONCOLON) { delete ret; restore(st); return 0; }
+    advance();
+
+    bool isDtor = false;
+    if (cur.kind == TOK_TILDE) { isDtor = true; advance(); }
+    if (cur.kind != TOK_IDENTIFIER) {
+        errorAtCurrent("expected a member name after '::'");
+        delete ret;
+        return 0;
+    }
+    const std::string member = cur.text;
+    advance();
+    if (cur.kind != TOK_LPAREN) { delete ret; restore(st); return 0; }
+
+    // A constructor is spelled Point::Point, a destructor Point::~Point.
+    const bool isCtor = (!isDtor && !ret && member == className);
+    MethodDecl *md = new MethodDecl(ret, isDtor ? "~" + className : member,
+                                    ACC_Public);
+    md->ownerClass = className;
+    md->isConstructor = isCtor;
+    md->isDestructor = isDtor;
+    md->line = line;
+    md->col = col;
+    parseFunctionParamsAndBody(md);
+    if (!md->body) {
+        errorAtCurrent("an out-of-line definition needs a body");
+    }
+    return md;
 }
 
 ClassDecl *Parser::parseClass() {

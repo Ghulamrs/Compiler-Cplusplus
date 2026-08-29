@@ -62,6 +62,17 @@ const char *tokenName(TokenKind k) {
     case TOK_SLASH:      return "'/'";
     case TOK_PERCENT:    return "'%'";
     case TOK_ASSIGN:     return "'='";
+    case TOK_PLUSPLUS:   return "'++'";
+    case TOK_MINUSMINUS: return "'--'";
+    case TOK_PLUSEQ:     return "'+='";
+    case TOK_MINUSEQ:    return "'-='";
+    case TOK_STAREQ:     return "'*='";
+    case TOK_SLASHEQ:    return "'/='";
+    case TOK_PERCENTEQ:  return "'%='";
+    case TOK_DO:         return "do";
+    case TOK_SWITCH:     return "switch";
+    case TOK_CASE:       return "case";
+    case TOK_DEFAULT:    return "default";
     case TOK_EQ:         return "'=='";
     case TOK_NE:         return "'!='";
     case TOK_LT:         return "'<'";
@@ -178,6 +189,10 @@ Token Lexer::nextToken() {
         else if (id == "for")       tok.kind = TOK_FOR;
         else if (id == "break")     tok.kind = TOK_BREAK;
         else if (id == "continue")  tok.kind = TOK_CONTINUE;
+        else if (id == "do")        tok.kind = TOK_DO;
+        else if (id == "switch")    tok.kind = TOK_SWITCH;
+        else if (id == "case")      tok.kind = TOK_CASE;
+        else if (id == "default")   tok.kind = TOK_DEFAULT;
         else if (id == "class")     tok.kind = TOK_CLASS;
         else if (id == "struct")    tok.kind = TOK_STRUCT;
         else if (id == "public")    tok.kind = TOK_PUBLIC;
@@ -267,13 +282,28 @@ Token Lexer::nextToken() {
     case ']': kind = TOK_RBRACKET; break;
     case ',': kind = TOK_COMMA; break;
     case '~': kind = TOK_TILDE; break;
-    case '+': kind = TOK_PLUS; break;
-    case '*': kind = TOK_STAR; break;
-    case '/': kind = TOK_SLASH; break;
-    case '%': kind = TOK_PERCENT; break;
+    case '+':
+        if (peek() == '+')      { get(); kind = TOK_PLUSPLUS; }
+        else if (peek() == '=') { get(); kind = TOK_PLUSEQ; }
+        else kind = TOK_PLUS;
+        break;
+    case '*':
+        if (peek() == '=') { get(); kind = TOK_STAREQ; }
+        else kind = TOK_STAR;
+        break;
+    case '/':
+        if (peek() == '=') { get(); kind = TOK_SLASHEQ; }
+        else kind = TOK_SLASH;
+        break;
+    case '%':
+        if (peek() == '=') { get(); kind = TOK_PERCENTEQ; }
+        else kind = TOK_PERCENT;
+        break;
     case '.': kind = TOK_DOT; break;
     case '-':
-        if (peek() == '>') { get(); kind = TOK_ARROW; }
+        if (peek() == '>')      { get(); kind = TOK_ARROW; }
+        else if (peek() == '-') { get(); kind = TOK_MINUSMINUS; }
+        else if (peek() == '=') { get(); kind = TOK_MINUSEQ; }
         else kind = TOK_MINUS;
         break;
     case '=':

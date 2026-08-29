@@ -16,6 +16,11 @@ const char *binaryOpText(BinaryOp op) {
     case BIN_Div:    return "/";
     case BIN_Mod:    return "%";
     case BIN_Assign: return "=";
+    case BIN_AddAssign: return "+=";
+    case BIN_SubAssign: return "-=";
+    case BIN_MulAssign: return "*=";
+    case BIN_DivAssign: return "/=";
+    case BIN_ModAssign: return "%=";
     case BIN_EQ:     return "==";
     case BIN_NE:     return "!=";
     case BIN_LT:     return "<";
@@ -37,14 +42,39 @@ bool binaryOpIsLogical(BinaryOp op) {
     return op == BIN_LAnd || op == BIN_LOr;
 }
 
+bool binaryOpIsAssignment(BinaryOp op) {
+    return op == BIN_Assign || op == BIN_AddAssign || op == BIN_SubAssign
+        || op == BIN_MulAssign || op == BIN_DivAssign || op == BIN_ModAssign;
+}
+
+BinaryOp binaryOpUnderlying(BinaryOp op) {
+    switch (op) {
+    case BIN_AddAssign: return BIN_Add;
+    case BIN_SubAssign: return BIN_Sub;
+    case BIN_MulAssign: return BIN_Mul;
+    case BIN_DivAssign: return BIN_Div;
+    case BIN_ModAssign: return BIN_Mod;
+    default:            return op;
+    }
+}
+
 const char *unaryOpText(UnaryOp op) {
     switch (op) {
     case UN_Neg:    return "-";
     case UN_Not:    return "!";
     case UN_Deref:  return "*";
     case UN_AddrOf: return "&";
+    case UN_PreInc:  return "++ (prefix)";
+    case UN_PreDec:  return "-- (prefix)";
+    case UN_PostInc: return "++ (postfix)";
+    case UN_PostDec: return "-- (postfix)";
     }
     return "?";
+}
+
+bool unaryOpIsIncDec(UnaryOp op) {
+    return op == UN_PreInc || op == UN_PreDec
+        || op == UN_PostInc || op == UN_PostDec;
 }
 
 // --- builtin types ---
@@ -131,6 +161,12 @@ bool builtinIsSigned(BuiltinKind k) {
 void BuiltinType::print(int indent) {
     printIndent(indent);
     std::cout << name() << std::endl;
+}
+
+void ArrayType::print(int indent) {
+    printIndent(indent);
+    std::cout << "array[" << count << "] of ";
+    element->print(0);
 }
 
 void PointerType::print(int indent) {
@@ -300,6 +336,49 @@ void IfStmt::print(int indent) {
         std::cout << "else:" << std::endl;
         elseBranch->print(indent + 1);
     }
+}
+
+CastExpr::~CastExpr() {
+    delete type;
+    delete expr;
+}
+
+void CastExpr::print(int indent) {
+    printIndent(indent);
+    std::cout << "Cast to ";
+    if (type) type->print(0);
+    else std::cout << "<none>" << std::endl;
+    if (expr) expr->print(indent + 1);
+}
+
+DoWhileStmt::~DoWhileStmt() {
+    delete body;
+    delete cond;
+}
+
+void DoWhileStmt::print(int indent) {
+    printIndent(indent);
+    std::cout << "DoWhile" << std::endl;
+    if (body) body->print(indent + 1);
+    if (cond) cond->print(indent + 1);
+}
+
+void CaseStmt::print(int indent) {
+    printIndent(indent);
+    if (isDefault) std::cout << "default:" << std::endl;
+    else           std::cout << "case " << value << ":" << std::endl;
+}
+
+SwitchStmt::~SwitchStmt() {
+    delete cond;
+    delete body;
+}
+
+void SwitchStmt::print(int indent) {
+    printIndent(indent);
+    std::cout << "Switch" << std::endl;
+    if (cond) cond->print(indent + 1);
+    if (body) body->print(indent + 1);
 }
 
 WhileStmt::~WhileStmt() {

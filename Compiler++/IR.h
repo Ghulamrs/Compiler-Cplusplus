@@ -211,7 +211,13 @@ private:
 };
 
 // One flat namespace of symbols, so the owning class folds into the name.
+// Overloading means a name is no longer a symbol.  The signature is folded in
+// so that add(int,int) and add(double,double) become different symbols, which
+// is the whole reason real C++ mangles names at all.
+std::string mangleSignature(const std::vector<cc::VarDecl*> &params);
 std::string mangleFunction(const std::string &className, const std::string &name);
+std::string mangleOverload(const std::string &className, const std::string &name,
+                           const std::vector<cc::VarDecl*> &params);
 std::string mangleConstructor(const std::string &className, std::size_t argCount);
 std::string mangleDestructor(const std::string &className);
 std::string mangleVTable(const std::string &className);

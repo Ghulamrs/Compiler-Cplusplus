@@ -13,7 +13,8 @@
 #include <sstream>
 
 SemanticAnalyzer::SemanticAnalyzer(Diagnostics &d)
-    : diag(d), currentReturnType(0), currentIsCtorOrDtor(false), loopDepth(0) {}
+    : diag(d), currentReturnType(0), currentIsCtorOrDtor(false), loopDepth(0),
+      switchDepth(0) {}
 
 SemanticAnalyzer::~SemanticAnalyzer() {
     for (std::size_t i = 0; i < ownedTypes.size(); ++i) delete ownedTypes[i];
@@ -126,6 +127,8 @@ cc::Type *SemanticAnalyzer::cloneType(cc::Type *t) {
     if (ct) return new cxx::ClassType(ct->className);
     cc::PointerType *pt = dynamic_cast<cc::PointerType*>(t);
     if (pt) return new cc::PointerType(cloneType(pt->base));
+    cc::ArrayType *at = dynamic_cast<cc::ArrayType*>(t);
+    if (at) return new cc::ArrayType(cloneType(at->element), at->count);
     cxx::ReferenceType *rt = dynamic_cast<cxx::ReferenceType*>(t);
     if (rt) return new cxx::ReferenceType(cloneType(rt->base));
     return 0;
@@ -138,6 +141,16 @@ cc::Type *SemanticAnalyzer::makePointerTo(cc::Type *t) {
 }
 
 // --- Type helpers ---
+
+// The one place arrays turn into pointers.  Everything that asks "what type
+// does this expression have" goes through here; a declaration does not.
+cc::Type *SemanticAnalyzer::decay(cc::Type *t) {
+    cc::ArrayType *at = dynamic_cast<cc::ArrayType*>(stripReference(t));
+    if (!at) return t;
+    cc::Type *p = new cc::PointerType(cloneType(at->element));
+    ownedTypes.push_back(p);
+    return p;
+}
 
 cc::Type *SemanticAnalyzer::stripReference(cc::Type *t) {
     cxx::ReferenceType *rt = dynamic_cast<cxx::ReferenceType*>(t);
@@ -152,6 +165,12 @@ std::string SemanticAnalyzer::describe(cc::Type *t) {
     if (ct) return ct->className;
     cc::PointerType *pt = dynamic_cast<cc::PointerType*>(t);
     if (pt) return describe(pt->base) + "*";
+    cc::ArrayType *at = dynamic_cast<cc::ArrayType*>(t);
+    if (at) {
+        std::ostringstream ss;
+        ss << describe(at->element) << "[" << at->count << "]";
+        return ss.str();
+    }
     cxx::ReferenceType *rt = dynamic_cast<cxx::ReferenceType*>(t);
     if (rt) return describe(rt->base) + "&";
     return "<type>";
@@ -246,6 +265,8 @@ bool SemanticAnalyzer::checkTypeIsKnown(cc::Type *t, cc::ASTNode *at, const std:
     if (!t) return true;
     cc::PointerType *pt = dynamic_cast<cc::PointerType*>(t);
     if (pt) return checkTypeIsKnown(pt->base, at, where);
+    cc::ArrayType *arr = dynamic_cast<cc::ArrayType*>(t);
+    if (arr) return checkTypeIsKnown(arr->element, at, where);
     cxx::ReferenceType *rt = dynamic_cast<cxx::ReferenceType*>(t);
     if (rt) return checkTypeIsKnown(rt->base, at, where);
     cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(t);
@@ -457,6 +478,27 @@ void SemanticAnalyzer::checkClassInvariants(cxx::ClassDecl *cd) {
         }
     }
 
+    // Two members of one name and one signature: the call site could not
+    // choose between them.
+    for (std::size_t i = 0; i < cd->members.size(); ++i) {
+        cxx::MethodDecl *a = dynamic_cast<cxx::MethodDecl*>(cd->members[i]);
+        if (!a || a->isDestructor) continue;
+        for (std::size_t j = i + 1; j < cd->members.size(); ++j) {
+            cxx::MethodDecl *b = dynamic_cast<cxx::MethodDecl*>(cd->members[j]);
+            if (!b || b->name != a->name || b->isDestructor) continue;
+            if (!sameParams(a, b)) continue;
+            error(b, "'" + cd->name + "::" + a->name + "' is declared more than once "
+                     "with the same parameters");
+        }
+        for (std::size_t j = 0; j < cd->members.size(); ++j) {
+            cxx::FieldDecl *f = dynamic_cast<cxx::FieldDecl*>(cd->members[j]);
+            if (f && f->name == a->name) {
+                error(f, "'" + f->name + "' is both a field and a member function of '"
+                         + cd->name + "'");
+            }
+        }
+    }
+
     if (cd->dtor && !cd->dtor->params.empty()) {
         error(cd->dtor, "a destructor cannot take parameters");
     }
@@ -607,6 +649,9 @@ void SemanticAnalyzer::analyze(const std::vector<cc::Decl*> &units) {
     collectClasses(units);
     // 2) link the hierarchy, before anything tries to look a member up
     resolveBases();
+    // 2b) give each out-of-line body to the member it belongs to, so the rest
+    //     of the pass sees one complete class
+    attachOutOfLineDefinitions(units);
     // 3) work out which methods override which, so virtualness is known before
     //    any body is analysed
     for (std::size_t i = 0; i < units.size(); ++i) {
@@ -643,14 +688,102 @@ void SemanticAnalyzer::collectClasses(const std::vector<cc::Decl*> &units) {
     }
 }
 
+bool SemanticAnalyzer::sameParams(cc::Function *a, cc::Function *b) {
+    if (a->params.size() != b->params.size()) return false;
+    for (std::size_t i = 0; i < a->params.size(); ++i) {
+        if (!sameType(a->params[i]->type, b->params[i]->type)) return false;
+    }
+    return true;
+}
+
+// An out-of-line definition is a body looking for its declaration.  Moving the
+// body onto the member inside the class means everything downstream -- layout,
+// vtables, lowering -- sees one complete class and needs no special case.
+void SemanticAnalyzer::attachOutOfLineDefinitions(const std::vector<cc::Decl*> &units) {
+    for (std::size_t i = 0; i < units.size(); ++i) {
+        cxx::MethodDecl *def = dynamic_cast<cxx::MethodDecl*>(units[i]);
+        if (!def || def->ownerClass.empty()) continue;
+
+        cxx::ClassDecl *cd = findClass(def->ownerClass);
+        if (!cd) {
+            error(def, "'" + def->ownerClass + "' is not a class");
+            continue;
+        }
+
+        cxx::MethodDecl *decl = 0;
+        for (std::size_t m = 0; m < cd->members.size(); ++m) {
+            cxx::MethodDecl *cand = dynamic_cast<cxx::MethodDecl*>(cd->members[m]);
+            if (!cand || cand->name != def->name) continue;
+            if (cand->isConstructor != def->isConstructor) continue;
+            if (cand->isDestructor != def->isDestructor) continue;
+            if (!sameParams(cand, def)) continue;
+            decl = cand;
+            break;
+        }
+        if (!decl) {
+            error(def, "no member '" + def->name + "' of class '" + def->ownerClass
+                       + "' matches this definition");
+            continue;
+        }
+        if (decl->body) {
+            error(def, "'" + def->ownerClass + "::" + def->name + "' is already defined");
+            continue;
+        }
+        if (!def->isConstructor && !def->isDestructor &&
+            !sameType(decl->retType, def->retType)) {
+            error(def, "'" + def->ownerClass + "::" + def->name
+                       + "' is defined with a different return type");
+            continue;
+        }
+
+        // Hand the body and the initialiser list over; the definition node
+        // keeps neither, so nothing is deleted twice.
+        decl->body = def->body;
+        def->body = 0;
+        decl->memberInits = def->memberInits;
+        def->memberInits.clear();
+        // The parameter NAMES come from the definition -- the declaration may
+        // have had none.
+        for (std::size_t p = 0; p < decl->params.size() && p < def->params.size(); ++p) {
+            if (decl->params[p]->name.empty()) decl->params[p]->name = def->params[p]->name;
+        }
+    }
+}
+
 void SemanticAnalyzer::declareTopLevel(const std::vector<cc::Decl*> &units) {
     for (std::size_t i = 0; i < units.size(); ++i) {
         cc::Function *fn = dynamic_cast<cc::Function*>(units[i]);
+        // An out-of-line definition is not a free function; its body has
+        // already been given to the member it belongs to.
+        cxx::MethodDecl *asMethod = dynamic_cast<cxx::MethodDecl*>(units[i]);
+        if (asMethod && !asMethod->ownerClass.empty()) continue;
         if (fn) {
-            Symbol *s = new Symbol(SYM_Method, fn->name, fn, fn->retType);
-            if (!symbols.insert(fn->name, s)) {
-                error(fn, "function '" + fn->name + "' is already declared");
-                delete s;
+            std::vector<cc::Function*> &set = overloads[fn->name];
+            // Two declarations with the same parameters are the same function;
+            // a definition following a declaration is normal, two definitions
+            // are not.
+            bool duplicate = false;
+            for (std::size_t k = 0; k < set.size(); ++k) {
+                if (!sameParams(set[k], fn)) continue;
+                // Two functions cannot differ only in what they return: the
+                // call site has no way to say which one it wanted.
+                if (!sameType(set[k]->retType, fn->retType)) {
+                    error(fn, "'" + fn->name + "' cannot be overloaded on its return "
+                              "type alone (" + describe(set[k]->retType) + " and "
+                              + describe(fn->retType) + ")");
+                } else if (set[k]->body && fn->body) {
+                    error(fn, "function '" + fn->name + "' is already defined");
+                }
+                if (fn->body) set[k] = fn;      // the definition wins
+                duplicate = true;
+                break;
+            }
+            if (!duplicate) set.push_back(fn);
+
+            // One symbol per name is enough for lookup; the call site consults
+            // the overload set.
+            if (!symbols.lookup(fn->name)) {
+                symbols.insert(fn->name, new Symbol(SYM_Method, fn->name, fn, fn->retType));
             }
             continue;
         }
@@ -799,6 +932,8 @@ void SemanticAnalyzer::analyzeVarDecl(cc::VarDecl *vd, bool declareIt) {
             error(vd, "cannot bind '" + describe(vd->type) + " " + vd->name
                       + "' to an initialiser of type " + describe(initType));
         }
+    } else if (dynamic_cast<cc::ArrayType*>(vd->type)) {
+        if (vd->init) error(vd, "an array cannot be initialised from an expression");
     } else if (vd->init && initType && typeKnown && !convertible(vd->init, initType, vd->type)) {
         error(vd, "cannot initialise '" + describe(vd->type) + " " + vd->name
                   + "' from an expression of type " + describe(initType));
@@ -884,6 +1019,24 @@ void SemanticAnalyzer::analyzeStmt(cc::Stmt *s) {
         return;
     }
 
+    cc::DoWhileStmt *dws = dynamic_cast<cc::DoWhileStmt*>(s);
+    if (dws) {
+        ++loopDepth;
+        analyzeStmt(dws->body);
+        --loopDepth;
+        bool lv = false;
+        analyzeExpr(dws->cond, lv);
+        return;
+    }
+
+    cc::SwitchStmt *sw = dynamic_cast<cc::SwitchStmt*>(s);
+    if (sw) { analyzeSwitch(sw); return; }
+
+    if (dynamic_cast<cc::CaseStmt*>(s)) {
+        if (switchDepth == 0) error(s, "a case label outside a switch");
+        return;
+    }
+
     cc::WhileStmt *ws = dynamic_cast<cc::WhileStmt*>(s);
     if (ws) {
         bool lv = false;
@@ -909,13 +1062,109 @@ void SemanticAnalyzer::analyzeStmt(cc::Stmt *s) {
     }
 
     if (dynamic_cast<cc::BreakStmt*>(s)) {
-        if (loopDepth == 0) error(s, "'break' outside a loop");
+        if (loopDepth == 0 && switchDepth == 0) error(s, "'break' outside a loop or switch");
         return;
     }
     if (dynamic_cast<cc::ContinueStmt*>(s)) {
         if (loopDepth == 0) error(s, "'continue' outside a loop");
         return;
     }
+}
+
+// A switch needs an integer subject, and its labels must be distinct -- two
+// cases with the same value would make one unreachable.
+void SemanticAnalyzer::analyzeSwitch(cc::SwitchStmt *s) {
+    bool lv = false;
+    cc::Type *ct = analyzeExpr(s->cond, lv);
+    cc::BuiltinKind k;
+    if (ct && (!builtinKindOf(ct, k) || !cc::builtinIsInteger(k))) {
+        error(s, "a switch needs an integer subject, not " + describe(ct));
+    }
+
+    std::vector<long> seen;
+    bool sawDefault = false;
+    if (s->body) {
+        for (std::size_t i = 0; i < s->body->body.size(); ++i) {
+            cc::CaseStmt *c = dynamic_cast<cc::CaseStmt*>(s->body->body[i]);
+            if (!c) continue;
+            if (c->isDefault) {
+                if (sawDefault) error(c, "a switch may have only one 'default'");
+                sawDefault = true;
+                continue;
+            }
+            for (std::size_t j = 0; j < seen.size(); ++j) {
+                if (seen[j] == c->value) {
+                    error(c, "duplicate case label");
+                    break;
+                }
+            }
+            seen.push_back(c->value);
+        }
+    }
+
+    ++switchDepth;
+    analyzeStmt(s->body);
+    --switchDepth;
+}
+
+// Exact match first, then a single viable one.  Real C++ ranks conversions in
+// far more detail; arity plus exactness settles everything this subset can say.
+std::vector<cc::Function*> SemanticAnalyzer::findMethods(cxx::ClassDecl *cd,
+                                                         const std::string &name) {
+    std::vector<cc::Function*> out;
+    for (cxx::ClassDecl *c = cd; c; c = c->base) {
+        for (std::size_t i = 0; i < c->members.size(); ++i) {
+            cxx::MethodDecl *md = dynamic_cast<cxx::MethodDecl*>(c->members[i]);
+            if (!md || md->isConstructor || md->isDestructor) continue;
+            if (md->name != name) continue;
+            // A derived overload with the same parameters hides the base one.
+            bool hidden = false;
+            for (std::size_t k = 0; k < out.size(); ++k) {
+                if (sameParams(out[k], md)) { hidden = true; break; }
+            }
+            if (!hidden) out.push_back(md);
+        }
+    }
+    return out;
+}
+
+cc::Function *SemanticAnalyzer::resolveOverload(const std::vector<cc::Function*> &candidates,
+                                                cc::CallExpr *call, const std::string &name) {
+    if (candidates.empty()) return 0;
+    if (candidates.size() == 1) return candidates[0];
+
+    std::vector<cc::Type*> argTypes;
+    for (std::size_t i = 0; i < call->args.size(); ++i) {
+        bool lv = false;
+        argTypes.push_back(analyzeExpr(call->args[i], lv));
+    }
+
+    std::vector<cc::Function*> exact, viable;
+    for (std::size_t c = 0; c < candidates.size(); ++c) {
+        cc::Function *f = candidates[c];
+        if (f->params.size() != argTypes.size()) continue;
+        bool allExact = true, allOk = true;
+        for (std::size_t i = 0; i < argTypes.size(); ++i) {
+            if (!argTypes[i]) continue;
+            if (!sameType(argTypes[i], f->params[i]->type)) allExact = false;
+            if (!convertible(call->args[i], argTypes[i], f->params[i]->type)) allOk = false;
+        }
+        if (allExact) exact.push_back(f);
+        if (allOk) viable.push_back(f);
+    }
+
+    if (exact.size() == 1) return exact[0];
+    if (exact.size() > 1) {
+        error(call, "ambiguous call to '" + name + "'");
+        return exact[0];
+    }
+    if (viable.size() == 1) return viable[0];
+    if (viable.size() > 1) {
+        error(call, "ambiguous call to '" + name + "': more than one overload matches");
+        return viable[0];
+    }
+    error(call, "no overload of '" + name + "' takes these arguments");
+    return 0;
 }
 
 // --- Calls ---
@@ -981,6 +1230,10 @@ cc::Type *SemanticAnalyzer::analyzeExpr(cc::Expr *e, bool &isLValue) {
                       + " in class '" + owner->name + "'");
         }
         isLValue = (dynamic_cast<cxx::FieldDecl*>(m) != 0);
+        if (dynamic_cast<cc::ArrayType*>(stripReference(memberType(m)))) {
+            isLValue = false;
+            return decay(memberType(m));
+        }
         return stripReference(memberType(m));
     }
 
@@ -1053,6 +1306,11 @@ cc::Type *SemanticAnalyzer::analyzeExpr(cc::Expr *e, bool &isLValue) {
                 return 0;
             }
         }
+        // An array does not decay to an lvalue: `a` cannot be assigned to.
+        if (dynamic_cast<cc::ArrayType*>(stripReference(s->type))) {
+            isLValue = false;
+            return decay(s->type);
+        }
         isLValue = (s->kind == SYM_Var || s->kind == SYM_Field);
         return stripReference(s->type);
     }
@@ -1072,10 +1330,17 @@ cc::Type *SemanticAnalyzer::analyzeExpr(cc::Expr *e, bool &isLValue) {
         cc::Function *fn = 0;
         cc::IdentExpr *cid = dynamic_cast<cc::IdentExpr*>(call->callee);
         if (cid) {
-            Symbol *s = symbols.lookup(cid->name);
-            if (!s) { error(cid, "undeclared function '" + cid->name + "'"); return 0; }
-            fn = dynamic_cast<cc::Function*>(s->decl);
-            if (!fn) { error(call, "'" + cid->name + "' is not a function"); return 0; }
+            std::map<std::string, std::vector<cc::Function*> >::iterator ov =
+                overloads.find(cid->name);
+            if (ov != overloads.end()) {
+                fn = resolveOverload(ov->second, call, cid->name);
+                if (!fn) return 0;
+            } else {
+                Symbol *s = symbols.lookup(cid->name);
+                if (!s) { error(cid, "undeclared function '" + cid->name + "'"); return 0; }
+                fn = dynamic_cast<cc::Function*>(s->decl);
+                if (!fn) { error(call, "'" + cid->name + "' is not a function"); return 0; }
+            }
         } else {
             cxx::MemberAccessExpr *cma = dynamic_cast<cxx::MemberAccessExpr*>(call->callee);
             if (!cma) { error(call, "expression is not callable"); return 0; }
@@ -1097,9 +1362,16 @@ cc::Type *SemanticAnalyzer::analyzeExpr(cc::Expr *e, bool &isLValue) {
                 error(cma, "'" + cma->member + "' is " + cxx::accessText(memberAccess(m))
                            + " in class '" + owner->name + "'");
             }
-            fn = dynamic_cast<cxx::MethodDecl*>(m);
-            if (!fn) { error(cma, "'" + cma->member + "' is not a method"); return 0; }
+            const std::vector<cc::Function*> cands = findMethods(cd, cma->member);
+            if (cands.empty()) {
+                error(cma, "'" + cma->member + "' is not a method");
+                return 0;
+            }
+            fn = resolveOverload(cands, call, cma->member);
+            if (!fn) return 0;
         }
+        // Recorded so lowering does not resolve the call a second time.
+        call->resolved = fn;
         checkCallArgs(call, fn);
         return stripReference(fn->retType);
     }
@@ -1109,6 +1381,25 @@ cc::Type *SemanticAnalyzer::analyzeExpr(cc::Expr *e, bool &isLValue) {
         bool operandLV = false;
         cc::Type *t = analyzeExpr(ue->operand, operandLV);
         if (!t) return 0;
+
+        // ++ and -- read and write their operand, so it must be an object --
+        // the same rule assignment obeys.
+        if (cc::unaryOpIsIncDec(ue->op)) {
+            if (!operandLV) {
+                error(ue, std::string("'") + cc::unaryOpText(ue->op)
+                          + "' needs an lvalue");
+                return 0;
+            }
+            cc::BuiltinKind k;
+            const bool arith = builtinKindOf(t, k) && cc::builtinIsArithmetic(k);
+            if (!arith && !dynamic_cast<cc::PointerType*>(stripReference(t))) {
+                error(ue, std::string("'") + cc::unaryOpText(ue->op)
+                          + "' needs an arithmetic or pointer operand, got " + describe(t));
+                return 0;
+            }
+            return t;
+        }
+
         switch (ue->op) {
         case cc::UN_Neg: {
             cc::BuiltinKind k;
@@ -1121,8 +1412,14 @@ cc::Type *SemanticAnalyzer::analyzeExpr(cc::Expr *e, bool &isLValue) {
         case cc::UN_Not:
             return makeBuiltin(cc::BK_Int);
         case cc::UN_Deref: {
-            cc::PointerType *pt = dynamic_cast<cc::PointerType*>(t);
+            cc::PointerType *pt = dynamic_cast<cc::PointerType*>(decay(t));
             if (!pt) { error(ue, "unary '*' applied to " + describe(t) + ", which is not a pointer"); return 0; }
+            // *p on a pointer-to-array yields an array, which decays in turn.
+            // That is what makes g[1][2] reach the right element.
+            if (dynamic_cast<cc::ArrayType*>(pt->base)) {
+                isLValue = false;
+                return decay(pt->base);
+            }
             isLValue = true;
             return pt->base;
         }
@@ -1130,8 +1427,22 @@ cc::Type *SemanticAnalyzer::analyzeExpr(cc::Expr *e, bool &isLValue) {
             if (!operandLV) { error(ue, "cannot take the address of a non-lvalue"); return 0; }
             return makePointerTo(t);
         }
+        default:
+            break;
         }
         return 0;
+    }
+
+    cc::CastExpr *ce = dynamic_cast<cc::CastExpr*>(e);
+    if (ce) {
+        bool lv = false;
+        cc::Type *from = analyzeExpr(ce->expr, lv);
+        checkTypeIsKnown(ce->type, ce, "a cast");
+        // A cast is the programmer overriding the conversion rules, so it is
+        // not checked against them -- but it still must not invent a value out
+        // of nothing.
+        if (from && isVoid(ce->type)) return makeBuiltin(cc::BK_Void);
+        return ce->type;
     }
 
     cc::BinaryExpr *be = dynamic_cast<cc::BinaryExpr*>(e);
@@ -1141,7 +1452,7 @@ cc::Type *SemanticAnalyzer::analyzeExpr(cc::Expr *e, bool &isLValue) {
         cc::Type *rt = analyzeExpr(be->rhs, lR);
         if (!lt || !rt) return 0;       // the operand already reported its error
 
-        if (be->op == cc::BIN_Assign) {
+        if (cc::binaryOpIsAssignment(be->op)) {
             // The other half of lvalue-ness: only an object can be assigned to.
             if (!lL) { error(be, "left side of assignment is not an lvalue"); return 0; }
             if (!convertible(be->rhs, rt, lt)) {
@@ -1152,6 +1463,7 @@ cc::Type *SemanticAnalyzer::analyzeExpr(cc::Expr *e, bool &isLValue) {
             isLValue = true;            // in C++ an assignment yields an lvalue
             return lt;
         }
+
 
         if (cc::binaryOpIsComparison(be->op) || cc::binaryOpIsLogical(be->op)) {
             cc::BuiltinKind kl, kr;
@@ -1167,6 +1479,9 @@ cc::Type *SemanticAnalyzer::analyzeExpr(cc::Expr *e, bool &isLValue) {
 
         // Pointer arithmetic: p + n and p - n step by whole objects, so the
         // result is still a pointer.  p - q counts the objects between them.
+        // Arrays decay first, which is what lets a + 1 work at all.
+        lt = decay(lt);
+        rt = decay(rt);
         cc::PointerType *pl = dynamic_cast<cc::PointerType*>(stripReference(lt));
         cc::PointerType *pr = dynamic_cast<cc::PointerType*>(stripReference(rt));
         if (pl || pr) {
