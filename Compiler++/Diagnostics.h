@@ -26,10 +26,15 @@ public:
     // Printed once at the end of a run.
     void printSummary() const;
 
+    // Past this many errors the rest are almost always cascade, and a wall of
+    // them is worse than silence.  Counting continues; printing stops.
+    static const int MaxReported = 20;
+
 private:
     std::string name;
     int errors;
     int warnings;
+    bool capped;
 
     void report(const char *level, int line, int col, const std::string &msg);
 

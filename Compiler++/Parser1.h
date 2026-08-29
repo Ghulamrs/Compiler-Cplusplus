@@ -14,6 +14,7 @@
 #include "AST1.h"
 #include "Parser.h"
 
+#include <set>
 #include <string>
 #include <vector>
 
@@ -35,6 +36,13 @@ private:
     // Needs two tokens of lookahead, which the inherited save()/restore()
     // rewind provides.
     bool looksLikeConstructor(const std::string &className);
+
+    // Every class name seen so far.  Without it `(x)` reads as a cast to a
+    // class named x, and plain C code like `return (x);` stops compiling.
+    // A name is recorded as soon as it is parsed, so a class may mention
+    // itself: `Node *next;`.
+    std::set<std::string> classNames;
+    bool namesAClass(const std::string &n) const;
 
     // extension points taken over from the C layer.
     // C++98 has no `override` keyword -- each signature must match

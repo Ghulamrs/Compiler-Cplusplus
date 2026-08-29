@@ -114,6 +114,14 @@ protected:
     // int a[3][4] is 3 arrays of 4 ints.
     Type *parseArraySuffixes(Type *element);
 
+    // Recursive descent has exactly one failure mode a program can reach from
+    // outside: nest deeply enough and the C++ stack runs out before the parse
+    // does.  A limit turns a crash into a diagnostic.
+    static const int MaxNesting = 256;
+    int nesting;
+    bool nestingReported;
+    bool tooDeep();                 // reports once, then stays quiet
+
     // --- extension points overridden by the C++ layer ---------------------
     virtual Decl *parseDeclaration();
     virtual Stmt *parseStatement();

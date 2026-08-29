@@ -23,6 +23,7 @@ const char *opCodeName(OpCode op) {
     case OP_FuncAddr:     return "funcaddr";
     case OP_Load:         return "load";
     case OP_Store:        return "store";
+    case OP_MemCopy:      return "memcpy";
     case OP_Add:          return "add";
     case OP_Sub:          return "sub";
     case OP_Mul:          return "mul";
@@ -187,6 +188,8 @@ bool Image::write(const std::string &path, std::string &error) const {
         for (std::size_t i = 0; i < fi.localOffset.size(); ++i) putI64(out, fi.localOffset[i]);
         putU(out, static_cast<unsigned long>(fi.localSize.size()), 4);
         for (std::size_t i = 0; i < fi.localSize.size(); ++i) putI64(out, fi.localSize[i]);
+        putU(out, static_cast<unsigned long>(fi.localFloat.size()), 4);
+        for (std::size_t i = 0; i < fi.localFloat.size(); ++i) putU(out, fi.localFloat[i], 1);
 
         putU(out, static_cast<unsigned long>(fi.code.size()), 4);
         for (std::size_t i = 0; i < fi.code.size(); ++i) {
@@ -246,6 +249,9 @@ bool Image::read(const std::string &path, std::string &error) {
         for (unsigned long i = 0; i < n && r.ok; ++i) fi.localOffset.push_back(static_cast<int>(r.getI64()));
         n = r.getU(4);
         for (unsigned long i = 0; i < n && r.ok; ++i) fi.localSize.push_back(static_cast<int>(r.getI64()));
+        n = r.getU(4);
+        for (unsigned long i = 0; i < n && r.ok; ++i)
+            fi.localFloat.push_back(static_cast<unsigned char>(r.getU(1)));
 
         n = r.getU(4);
         for (unsigned long i = 0; i < n && r.ok; ++i) {

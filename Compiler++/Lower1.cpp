@@ -81,10 +81,16 @@ MethodDecl *Lowering::findMethod(ClassDecl *cd, const std::string &member) const
 int Lowering::vtableSlotOf(const std::string &className, MethodDecl *m) const {
     const ClassLayout *cl = layout.forClass(className);
     if (!cl) return -1;
+    const std::string want = mangleSignature(m->params);
     for (std::size_t s = 0; s < cl->vtable.size(); ++s) {
         // The slot holds the FINAL override, a different MethodDecl than the
-        // one lookup found.
-        if (cl->vtable[s]->name == m->name) return static_cast<int>(s);
+        // one lookup found -- but the same NAME AND SIGNATURE.  Two virtuals
+        // may share a name, and matching on the name alone picks whichever
+        // was declared first.
+        if (cl->vtable[s]->name == m->name &&
+            mangleSignature(cl->vtable[s]->params) == want) {
+            return static_cast<int>(s);
+        }
     }
     return -1;
 }
@@ -194,6 +200,12 @@ bool Lowering::lowerLayerValue(cc::Expr *e, IRReg &out) {
         ClassDecl *cd = classOfType(typeOf(ma->base));
         if (!cd) cd = findClass(currentClass);
         const FieldLayout *f = cd ? findField(cd->name, ma->member) : 0;
+        // An array field decays, and an object field is not register-sized:
+        // for both, the value IS the address, with nothing loaded.
+        if (f && (isArrayType(f->type) || isObjectType(f->type))) {
+            out = addr;
+            return true;
+        }
         out = fn->emitLoad(addr, f ? f->size : Layout::IntSize,
                            f && isFloatType(f->type), e->line);
         return true;
@@ -206,6 +218,7 @@ bool Lowering::lowerLayerValue(cc::Expr *e, IRReg &out) {
         const FieldLayout *f = findField(currentClass, id->name);
         if (!f) return false;
         const IRReg addr = fn->emitFieldAddr(loadThis(e->line), f->offset, e->line);
+        if (isArrayType(f->type) || isObjectType(f->type)) { out = addr; return true; }
         out = fn->emitLoad(addr, f->size, isFloatType(f->type), e->line);
         return true;
     }
@@ -306,7 +319,39 @@ void Lowering::lowerVarDecl(cc::VarDecl *vd) {
     const int size = layout.sizeOf(vd->type);
     const int slot = declareLocal(vd->name, size > 0 ? size : Layout::PointerSize, false);
     localTypes[vd->name] = vd->type;
+
+    // P b = a;  copies a.  With no copy constructors in this version, the copy
+    // IS the memberwise one -- and it carries the vptr, which is right for two
+    // objects of the same class.
+    if (vd->init && !vd->hasCtorArgs) {
+        if (!isAddressable(vd->init)) {
+            diag.error(vd->line, vd->col,
+                       "an object can only be copied from another object in this version");
+            return;
+        }
+        const IRReg src = lowerAddress(vd->init);
+        fn->emitMemCopy(fn->emitLocalAddr(slot, vd->line), src, size, vd->line);
+        return;
+    }
     emitConstruct(cd, fn->emitLocalAddr(slot, vd->line), vd->ctorArgs, vd->line);
+}
+
+// Only something with a place in memory can be copied from.
+bool Lowering::isAddressable(cc::Expr *e) const {
+    if (dynamic_cast<cc::IdentExpr*>(e))    return true;
+    if (dynamic_cast<MemberAccessExpr*>(e)) return true;
+    if (cc::UnaryExpr *u = dynamic_cast<cc::UnaryExpr*>(e)) return u->op == cc::UN_Deref;
+    return false;
+}
+
+// A global object is constructed exactly as a local one is; only where its
+// storage lives differs.
+void Lowering::initGlobal(cc::VarDecl *vd, IRReg addr) {
+    if (ClassDecl *cd = classOfMemberType(vd->type)) {
+        emitConstruct(cd, addr, vd->ctorArgs, vd->line);
+        return;
+    }
+    cc::Lowering::initGlobal(vd, addr);
 }
 
 bool Lowering::isReferenceExpr(cc::Expr *e) {
@@ -323,6 +368,15 @@ cc::Type *Lowering::cloneForeignType(cc::Type *t) {
 
 bool Lowering::isReferenceType(cc::Type *t) {
     return dynamic_cast<ReferenceType*>(t) != 0;
+}
+
+bool Lowering::isObjectType(cc::Type *t) {
+    return classOfMemberType(t) != 0;
+}
+
+cc::Type *Lowering::referentType(cc::Type *t) {
+    ReferenceType *rt = dynamic_cast<ReferenceType*>(t);
+    return rt ? rt->base : t;
 }
 
 bool Lowering::isBoolType(cc::Type *t) {
@@ -393,8 +447,13 @@ IRReg Lowering::lowerCall(cc::CallExpr *e, bool wantsResult) {
         // The final override for this exact class.
         const ClassLayout *cl = layout.forClass(cd->name);
         if (cl) {
+            const std::string want = mangleSignature(m->params);
             for (std::size_t s = 0; s < cl->vtable.size(); ++s) {
-                if (cl->vtable[s]->name == m->name) { m = cl->vtable[s]; break; }
+                if (cl->vtable[s]->name == m->name &&
+                    mangleSignature(cl->vtable[s]->params) == want) {
+                    m = cl->vtable[s];
+                    break;
+                }
             }
         }
     }
@@ -505,18 +564,50 @@ void Lowering::emitPrologue(cc::Function *f) {
     for (std::size_t i = 0; i < cd->members.size(); ++i) {
         FieldDecl *fd = dynamic_cast<FieldDecl*>(cd->members[i]);
         if (!fd) continue;
+
+        const FieldLayout *fl = findField(cd->name, fd->name);
+        if (!fl) continue;
+
+        // Whatever the initialiser list says about this member, if anything.
+        const MemberInit *mi = 0;
         for (std::size_t k = 0; k < md->memberInits.size(); ++k) {
-            MemberInit &mi = md->memberInits[k];
-            if (mi.isBase || mi.name != fd->name || mi.args.empty()) continue;
-            const FieldLayout *fl = findField(cd->name, fd->name);
-            if (!fl) break;
-            IRReg value = lowerValue(mi.args[0]);
-            value = convert(value, typeOf(mi.args[0]), fd->type, mi.line);
-            const IRReg addr = fn->emitFieldAddr(loadThis(f->line), fl->offset, mi.line);
-            fn->emitStore(addr, value, fl->size, isFloatType(fd->type), mi.line);
-            break;
+            if (!md->memberInits[k].isBase && md->memberInits[k].name == fd->name) {
+                mi = &md->memberInits[k];
+                break;
+            }
         }
+        const int line = mi ? mi->line : f->line;
+
+        // A member that is itself a class is CONSTRUCTED, not assigned -- and
+        // it is constructed even when the initialiser list never mentions it.
+        if (ClassDecl *member = classOfMemberType(fd->type)) {
+            const IRReg addr = fn->emitFieldAddr(loadThis(f->line), fl->offset, line);
+            if (mi) {
+                emitConstruct(member, addr, mi->args, line);
+            } else {
+                std::vector<cc::Expr*> none;
+                emitConstruct(member, addr, none, line);
+            }
+            continue;
+        }
+
+        // A scalar member is only touched when the list names it; C leaves an
+        // uninitialised variable alone and so does this.
+        if (!mi || mi->args.empty()) continue;
+        IRReg value = lowerValue(mi->args[0]);
+        value = convert(value, typeOf(mi->args[0]), fd->type, line);
+        const IRReg addr = fn->emitFieldAddr(loadThis(f->line), fl->offset, line);
+        fn->emitStore(addr, value, fl->size, isFloatType(fd->type), line);
     }
+}
+
+// A field's class, when the field is an object rather than a pointer or a
+// reference to one -- only an object is constructed with its container.
+ClassDecl *Lowering::classOfMemberType(cc::Type *t) const {
+    if (dynamic_cast<cc::PointerType*>(t)) return 0;
+    if (dynamic_cast<ReferenceType*>(t))   return 0;
+    ClassType *ct = dynamic_cast<ClassType*>(t);
+    return ct ? findClass(ct->className) : 0;
 }
 
 // Members backwards, then the base.  The body has already run, which makes
@@ -525,7 +616,22 @@ void Lowering::emitEpilogue(cc::Function *f) {
     MethodDecl *md = dynamic_cast<MethodDecl*>(f);
     if (!md || !md->isDestructor) return;
     ClassDecl *cd = findClass(md->ownerClass);
-    if (!cd || !cd->base) return;
+    if (!cd) return;
+
+    // Members in reverse declaration order, before the base -- the exact
+    // reverse of the order emitPrologue built them in.
+    for (std::size_t i = cd->members.size(); i > 0; --i) {
+        FieldDecl *fd = dynamic_cast<FieldDecl*>(cd->members[i - 1]);
+        if (!fd) continue;
+        ClassDecl *member = classOfMemberType(fd->type);
+        if (!member || !classHasDestructor(member)) continue;
+        const FieldLayout *fl = findField(cd->name, fd->name);
+        if (!fl) continue;
+        emitDestruct(member, fn->emitFieldAddr(loadThis(f->line), fl->offset, f->line),
+                     f->line, true);
+    }
+
+    if (!cd->base) return;
     if (!classHasDestructor(cd->base)) return;
 
     ClassDecl *owner = cd->base;
@@ -550,6 +656,10 @@ void Lowering::emitScopeExit(cc::CompoundStmt *block) {
 }
 
 // A return leaves every open block at once, innermost first.
+void Lowering::emitScopeExitsDownTo(std::size_t depth) {
+    for (std::size_t i = openBlocks.size(); i > depth; --i) emitScopeExit(openBlocks[i - 1]);
+}
+
 void Lowering::emitAllOpenScopeExits() {
     for (std::size_t i = openBlocks.size(); i > 0; --i) emitScopeExit(openBlocks[i - 1]);
 }

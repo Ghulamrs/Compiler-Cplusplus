@@ -35,6 +35,10 @@ public:
     // Lowers a whole translation unit.
     void lowerUnit(const std::vector<Decl*> &units);
 
+    // The synthetic function that runs every global's initialiser.  main calls
+    // it first; without it `int g = 5;` left g at zero.
+    static const char *GlobalInitName;
+
 protected:
     IRModule &mod;
     const Layout &layout;
@@ -47,6 +51,11 @@ protected:
     // Labels to jump to for `break` and `continue`, innermost last.
     std::vector<int> breakTargets;
     std::vector<int> continueTargets;
+    // How many blocks were open when each loop was entered.  A break or a
+    // continue leaves every block opened since, and leaving a block runs its
+    // destructors -- exactly as a return does.
+    std::vector<std::size_t> breakScopeDepth;
+    std::vector<std::size_t> continueScopeDepth;
     // Case labels of the switch being lowered, filled on a first pass so the
     // comparison chain can be emitted before the body.
     std::map<const CaseStmt*, int> caseLabels;
@@ -74,6 +83,8 @@ protected:
     // Nothing in the C layer has a destructor, so these do nothing here.
     virtual void emitScopeExit(CompoundStmt *block);
     virtual void emitAllOpenScopeExits();
+    // Scope exits for the blocks opened since `depth`, innermost first.
+    virtual void emitScopeExitsDownTo(std::size_t depth);
 
     // --- expressions --------------------------------------------------
     IRReg lowerValue(Expr *e);
@@ -112,6 +123,9 @@ protected:
     // The step for ++ on a pointer is the pointee's size, not one.
     IRReg stepFor(Type *t, int line);
     IRReg lowerShortCircuit(BinaryExpr *e);
+    // Collapse any scalar to 0 or 1.  A logical operand is a truth value, not
+    // the operand that happened to decide the answer.
+    IRReg truth(IRReg value, Type *t, int line);
     virtual IRReg lowerCall(CallExpr *e, bool wantsResult);
     std::vector<IRReg> lowerArgs(CallExpr *e, Function *target, std::size_t skip);
 
@@ -127,12 +141,23 @@ protected:
     virtual Type *typeOf(Expr *e);
     void pushScope();
     void popScope();
-    int declareLocal(const std::string &name, int size, bool isParam);
+    int declareLocal(const std::string &name, int size, bool isParam, bool isFloat = false);
+    void emitGlobalInit(const std::vector<Decl*> &units);
+    // One global's initialiser, given its address.  Virtual because a global
+    // object is CONSTRUCTED, and only the C++ layer knows that.
+    virtual void initGlobal(VarDecl *vd, IRReg addr);
+    // True when a value of this type is copied whole rather than loaded into a
+    // register.  Only the C++ layer has such a type.
+    virtual bool isObjectType(Type *t);
     int findSlot(const std::string &name) const;
     virtual bool isReferenceExpr(Expr *e);  // its slot holds an address
     // A reference binds to an object, so it is passed and stored as that
     // object's ADDRESS.  C has no references, so this is false here.
     virtual bool isReferenceType(Type *t);
+    // What a reference refers to.  A store through an int& is four bytes wide,
+    // not eight -- the declared type decides, and T& is not the declared type
+    // of the thing in memory.  Identity in the C layer, which has no T&.
+    virtual Type *referentType(Type *t);
     std::map<std::string, Type*> localTypes;
     std::map<std::string, Type*> globalTypes;
     // Declared functions by name, bodiless ones included -- lowering needs

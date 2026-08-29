@@ -96,6 +96,7 @@ ClassDecl *Parser::parseClass() {
     }
     const std::string cname = cur.text;
     advance();
+    classNames.insert(cname);                   // before the body, so Node *next; works
 
     ClassDecl *cd = new ClassDecl(cname);
     cd->line = line;
@@ -250,12 +251,18 @@ Decl *Parser::parseMemberDecl(const std::string &className, Access access) {
     if (sawVirtual) {
         diag.error(line, col, "'virtual' can only be applied to a member function");
     }
+    // In C the array part follows the NAME, and a field is no different.
+    t = parseArraySuffixes(t);
     FieldDecl *fd = new FieldDecl(t, name, access);
     fd->ownerClass = className;
     fd->line = line;
     fd->col = col;
     expect(TOK_SEMI, ("after field " + name).c_str());
     return fd;
+}
+
+bool Parser::namesAClass(const std::string &n) const {
+    return classNames.find(n) != classNames.end();
 }
 
 // C types plus class names and references; the builtin and pointer forms come
@@ -273,8 +280,25 @@ cc::Type *Parser::parseType() {
 
     cc::Type *t = cc::Parser::parseType();      // int, char, void, and T*
 
-    // a qualified / class name like A::B -- new in C++
+    // a qualified / class name like A::B -- new in C++.  An identifier is a
+    // type only when it names a class; otherwise it is somebody's variable,
+    // and `(x)` is a parenthesised expression rather than a cast.
+    bool isTypeName = false;
     if (!t && cur.kind == TOK_IDENTIFIER) {
+        isTypeName = namesAClass(cur.text);
+        if (!isTypeName) {
+            // Two names in a row is a declaration even when the first is not a
+            // class we have seen: `Widget w;` deserves "unknown type", not a
+            // cascade of expression errors.
+            const State probe = save();
+            delete parseQualifiedName();
+            while (cur.kind == TOK_STAR) advance();
+            if (cur.kind == TOK_AMP) advance();
+            isTypeName = (cur.kind == TOK_IDENTIFIER);
+            restore(probe);
+        }
+    }
+    if (isTypeName) {
         const int line = cur.line, col = cur.col;
         QualifiedName *qn = parseQualifiedName();
         if (qn && !qn->parts.empty()) {

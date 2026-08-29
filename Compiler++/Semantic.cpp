@@ -99,6 +99,22 @@ static void integerRange(cc::BuiltinKind k, double &lo, double &hi) {
 }
 
 bool SemanticAnalyzer::literalFitsIn(cc::Expr *e, cc::BuiltinKind to) {
+    // -5 is a literal too: the minus is a unary operator in the grammar, which
+    // is no reason to warn that char cannot hold it.
+    if (cc::UnaryExpr *u = dynamic_cast<cc::UnaryExpr*>(e)) {
+        if (u->op == cc::UN_Neg) {
+            if (cc::NumberExpr *nn = dynamic_cast<cc::NumberExpr*>(u->operand)) {
+                if (cc::builtinIsFloating(to)) return true;
+                double lo, hi;
+                integerRange(to, lo, hi);
+                const double v = -static_cast<double>(nn->value);
+                return v >= lo && v <= hi;
+            }
+            if (dynamic_cast<cc::FloatExpr*>(u->operand)) {
+                return literalFitsIn(u->operand, to);
+            }
+        }
+    }
     if (cc::NumberExpr *n = dynamic_cast<cc::NumberExpr*>(e)) {
         if (cc::builtinIsFloating(to)) return true;
         double lo, hi;
@@ -441,14 +457,30 @@ void SemanticAnalyzer::resolveOverrides(cxx::ClassDecl *cd) {
     for (std::size_t i = 0; i < cd->members.size(); ++i) {
         cxx::MethodDecl *md = dynamic_cast<cxx::MethodDecl*>(cd->members[i]);
         if (!md || md->isConstructor || md->isDestructor) continue;
-        cc::Decl *found = findMember(cd->base, md->name);
-        cxx::MethodDecl *bm = dynamic_cast<cxx::MethodDecl*>(found);
-        if (!bm) continue;
+        // A base may declare several virtuals of one name.  The one being
+        // overridden is the one with the SAME SIGNATURE; taking the first by
+        // name gave f(int,int) a vtable slot of its own and sent every call
+        // through f(int).
+        cxx::MethodDecl *bm = 0;
+        cxx::MethodDecl *nameOnly = 0;
+        for (cxx::ClassDecl *b = cd->base; b && !bm; b = b->base) {
+            for (std::size_t k = 0; k < b->members.size(); ++k) {
+                cxx::MethodDecl *cand = dynamic_cast<cxx::MethodDecl*>(b->members[k]);
+                if (!cand || cand->isConstructor || cand->isDestructor) continue;
+                if (cand->name != md->name) continue;
+                if (sameSignature(md, cand)) { bm = cand; break; }
+                if (!nameOnly) nameOnly = cand;
+            }
+        }
 
-        if (!sameSignature(md, bm)) {
-            diag.warning(md->line, md->col,
-                         "'" + md->name + "' hides '" + bm->ownerClass + "::" + bm->name
-                         + "' rather than overriding it");
+        if (!bm) {
+            // Same name, no signature matches: hiding, which is legal and
+            // almost always a mistake.
+            if (nameOnly) {
+                diag.warning(md->line, md->col,
+                             "'" + md->name + "' hides '" + nameOnly->ownerClass
+                             + "::" + nameOnly->name + "' rather than overriding it");
+            }
             continue;
         }
         if (!bm->isVirtual) continue;       // hiding a non-virtual is not an override
@@ -1228,7 +1260,14 @@ void SemanticAnalyzer::checkCallArgs(cc::CallExpr *call, cc::Function *fn) {
 
 // --- Expressions: one walk over a tree that mixes cc:: and cxx:: nodes ---
 
+// Records what the analysis concluded, so lowering never has to guess.
 cc::Type *SemanticAnalyzer::analyzeExpr(cc::Expr *e, bool &isLValue) {
+    cc::Type *t = analyzeExprImpl(e, isLValue);
+    if (e) e->resolvedType = t;
+    return t;
+}
+
+cc::Type *SemanticAnalyzer::analyzeExprImpl(cc::Expr *e, bool &isLValue) {
     isLValue = false;
     if (!e) return 0;
 
@@ -1439,6 +1478,11 @@ cc::Type *SemanticAnalyzer::analyzeExpr(cc::Expr *e, bool &isLValue) {
             return makeBuiltin(promote(k));
         }
         case cc::UN_Not:
+            // Anything with a zero can be tested; an object has none.
+            if (dynamic_cast<cxx::ClassType*>(stripReference(t))) {
+                error(ue, "'!' needs a scalar, got " + describe(t));
+                return 0;
+            }
             return makeBool();
         case cc::UN_Deref: {
             cc::PointerType *pt = dynamic_cast<cc::PointerType*>(decay(t));

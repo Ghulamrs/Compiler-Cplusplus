@@ -41,6 +41,7 @@ enum OpCode {
     // --- memory (imm = width in bytes; `b` = 1 when sign-extending) ---
     OP_Load,
     OP_Store,
+    OP_MemCopy,     // imm = byte count; pops src then dst
 
     // --- integer arithmetic ---
     OP_Add, OP_Sub, OP_Mul, OP_Div, OP_Mod, OP_UDiv, OP_UMod,
@@ -99,6 +100,9 @@ struct FuncImage {
     int registerCount;
     std::vector<int> localOffset;   // slot -> byte offset within the frame
     std::vector<int> localSize;
+    // Parallel to localSize: 1 when the slot holds a float or double, so the
+    // VM writes an incoming argument with the right representation.
+    std::vector<unsigned char> localFloat;
     std::vector<Instr> code;
     FuncImage() : paramCount(0), frameSize(0), registerCount(0) {}
 };
@@ -122,7 +126,7 @@ struct Image {
     bool read(const std::string &path, std::string &error);
 
     static const unsigned long Magic   = 0x31425843UL;  // "CXB1"
-    static const unsigned long Version = 1;
+    static const unsigned long Version = 2;   // v2 adds localFloat
 };
 
 // Functions the VM supplies.  A program gets them by DECLARING one without a

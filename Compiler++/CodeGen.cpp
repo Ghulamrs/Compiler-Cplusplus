@@ -103,6 +103,7 @@ void CodeGen::generateFunction(const IRFunction &fn, FuncImage &out) {
         if (align > 1 && offset % align) offset += align - (offset % align);
         out.localOffset.push_back(offset);
         out.localSize.push_back(fn.locals[i].size);
+        out.localFloat.push_back(fn.locals[i].isFloat ? 1 : 0);
         offset += fn.locals[i].size > 0 ? fn.locals[i].size : 1;
     }
     if (offset % 8) offset += 8 - (offset % 8);
@@ -170,6 +171,12 @@ void CodeGen::generateFunction(const IRFunction &fn, FuncImage &out) {
             out.code.push_back(make(OP_LoadReg, in.b, 0, line));
             out.code.push_back(make(OP_Store, in.imm, in.isFloat ? 2 : 0, line));
             continue;                            // no destination register
+
+        case IR_MemCopy:
+            out.code.push_back(make(OP_LoadReg, in.a, 0, line));   // dst
+            out.code.push_back(make(OP_LoadReg, in.b, 0, line));   // src
+            out.code.push_back(make(OP_MemCopy, in.imm, 0, line));
+            continue;
 
         case IR_Call:
         case IR_CallIndirect: {

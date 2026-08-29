@@ -7,7 +7,7 @@
 #include <cstddef>
 #include <iostream>
 
-Layout::Layout(Diagnostics &d) : diag(d) {}
+Layout::Layout(Diagnostics &d) : diag(d), classIndex(0) {}
 
 int Layout::roundUp(int value, int alignment) {
     if (alignment <= 1) return value;
@@ -56,19 +56,48 @@ int Layout::alignOf(cc::Type *t) const {
 }
 
 void Layout::computeAll(const std::map<std::string, cxx::ClassDecl*> &classes) {
+    classIndex = &classes;
     std::map<std::string, cxx::ClassDecl*>::const_iterator it;
     for (it = classes.begin(); it != classes.end(); ++it) {
         computeFor(it->second);
     }
+    classIndex = 0;
+}
+
+// A field's class, if it has one.  An array of objects counts: its element
+// needs a size before the array does.
+cxx::ClassDecl *Layout::classDeclOf(cc::Type *t) const {
+    while (cc::ArrayType *at = dynamic_cast<cc::ArrayType*>(t)) t = at->element;
+    cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(t);
+    if (!ct || !classIndex) return 0;
+    std::map<std::string, cxx::ClassDecl*>::const_iterator it = classIndex->find(ct->className);
+    return (it == classIndex->end()) ? 0 : it->second;
 }
 
 void Layout::computeFor(cxx::ClassDecl *cd) {
     if (!cd) return;
     if (layouts.find(cd->name) != layouts.end()) return;    // already done
 
+    // A class cannot contain itself, directly or through a chain of members --
+    // that has no finite size.  Caught here because this is where the chain is
+    // walked.
+    if (inProgress.find(cd->name) != inProgress.end()) {
+        diag.error(cd->line, cd->col,
+                   "class '" + cd->name + "' cannot contain itself");
+        return;
+    }
+    inProgress.insert(cd->name);
+
     // A base must be laid out first: the derived layout starts as a copy of it.
     // The semantic pass has already broken any cycle, so this recursion ends.
     if (cd->base) computeFor(cd->base);
+
+    // So must any class a field is made of -- otherwise its size depends on
+    // whether its name happened to sort before this one.
+    for (std::size_t i = 0; i < cd->members.size(); ++i) {
+        cxx::FieldDecl *fd = dynamic_cast<cxx::FieldDecl*>(cd->members[i]);
+        if (fd) computeFor(classDeclOf(fd->type));
+    }
     const ClassLayout *baseLayout = cd->base ? forClass(cd->base->name) : 0;
 
     ClassLayout cl;
@@ -174,6 +203,7 @@ void Layout::computeFor(cxx::ClassDecl *cd) {
     }
 
     layouts[cd->name] = cl;
+    inProgress.erase(cd->name);
 }
 
 void Layout::print() const {

@@ -56,6 +56,7 @@ const char *irOpName(IROp op) {
     case IR_FuncAddr:     return "funcaddr";
     case IR_Load:         return "load";
     case IR_Store:        return "store";
+    case IR_MemCopy:      return "memcpy";
     case IR_Call:         return "call";
     case IR_CallIndirect: return "call.ind";
     case IR_VCallTarget:  return "vtable";
@@ -142,9 +143,9 @@ std::string mangleVTable(const std::string &className) {
 
 // --- the builder ------------------------------------------------------
 
-int IRFunction::addLocal(const std::string &n, int size, bool isParam) {
+int IRFunction::addLocal(const std::string &n, int size, bool isParam, bool isFloat) {
     const int slot = static_cast<int>(locals.size());
-    locals.push_back(IRLocal(n, slot, size, isParam));
+    locals.push_back(IRLocal(n, slot, size, isParam, isFloat));
     return slot;
 }
 
@@ -266,6 +267,15 @@ void IRFunction::emitStore(IRReg addr, IRReg value, int size, bool isFloat, int 
     i.b = value;
     i.imm = size;
     i.isFloat = isFloat;
+    i.line = line;
+    push(i);
+}
+
+void IRFunction::emitMemCopy(IRReg dst, IRReg src, int size, int line) {
+    IRInstr i(IR_MemCopy);
+    i.a = dst;
+    i.b = src;
+    i.imm = size;
     i.line = line;
     push(i);
 }
@@ -425,6 +435,10 @@ void IRModule::printInstr(const IRInstr &i) {
     case IR_Store:
         std::cout << " [" << regName(i.a) << "] <- " << regName(i.b)
                   << " :" << i.imm << (i.isFloat ? "f" : "");
+        break;
+    case IR_MemCopy:
+        std::cout << " [" << regName(i.a) << "] <- [" << regName(i.b)
+                  << "] :" << i.imm;
         break;
     case IR_VCallTarget:
         std::cout << " [" << regName(i.a) << "] slot " << i.imm;

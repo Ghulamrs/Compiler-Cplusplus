@@ -36,8 +36,8 @@ void Lowering::popScope() {
     }
 }
 
-int Lowering::declareLocal(const std::string &name, int size, bool isParam) {
-    const int slot = fn->addLocal(name, size, isParam);
+int Lowering::declareLocal(const std::string &name, int size, bool isParam, bool isFloat) {
+    const int slot = fn->addLocal(name, size, isParam, isFloat);
     slots[name] = slot;
     scopeNames.push_back(name);
     return slot;
@@ -170,23 +170,39 @@ IRReg Lowering::convert(IRReg value, Type *from, Type *to, int line) {
 
 Type *Lowering::typeOf(Expr *e) {
     if (!e) return 0;
-    if (NumberExpr *n = dynamic_cast<NumberExpr*>(e)) return literalType(n->kind);
-    if (FloatExpr *f = dynamic_cast<FloatExpr*>(e))   return literalType(f->kind);
+    // A name keeps its DECLARED type.  Semantic reports what an expression
+    // sees -- an array decayed to a pointer, a reference already stripped --
+    // but lowering has to know the storage before it can address it.
     if (IdentExpr *id = dynamic_cast<IdentExpr*>(e)) {
         std::map<std::string, Type*>::iterator it = localTypes.find(id->name);
         if (it != localTypes.end()) return it->second;
         it = globalTypes.find(id->name);
         if (it != globalTypes.end()) return it->second;
-        return 0;
+        return e->resolvedType;
     }
+    // *p likewise: Semantic decays the inner array of g[1][2] to a pointer,
+    // and lowering would then load an address out of the array's own bytes.
+    if (UnaryExpr *ud = dynamic_cast<UnaryExpr*>(e)) {
+        if (ud->op == UN_Deref) {
+            Type *base = decayType(typeOf(ud->operand));
+            if (PointerType *pt = dynamic_cast<PointerType*>(base)) return pt->base;
+            return e->resolvedType;
+        }
+    }
+    // Everywhere else Semantic's answer is the complete one; what follows is
+    // the fallback for a node the analysis never reached.
+    if (e->resolvedType) return e->resolvedType;
+    if (NumberExpr *n = dynamic_cast<NumberExpr*>(e)) return literalType(n->kind);
+    if (FloatExpr *f = dynamic_cast<FloatExpr*>(e))   return literalType(f->kind);
     if (UnaryExpr *u = dynamic_cast<UnaryExpr*>(e)) {
-        if (u->op == UN_Neg) return typeOf(u->operand);
+        // ++x and x-- have the type of what they step, which is what keeps a
+        // double out of the integer opcodes.
+        if (u->op == UN_Neg || unaryOpIsIncDec(u->op)) return typeOf(u->operand);
         if (u->op == UN_Deref) {
             Type *base = decayType(typeOf(u->operand));
             if (PointerType *pt = dynamic_cast<PointerType*>(base)) return pt->base;
         }
-        if (u->op == UN_AddrOf) return 0;
-        return 0;
+        return 0;                                   // &x, !x
     }
     if (CastExpr *c = dynamic_cast<CastExpr*>(e)) return c->type;
     // A call has the type its function returns.  Without this a double-valued
@@ -198,9 +214,6 @@ Type *Lowering::typeOf(Expr *e) {
             if (it != functions.end()) return it->second->retType;
         }
         return 0;
-    }
-    if (UnaryExpr *u2 = dynamic_cast<UnaryExpr*>(e)) {
-        if (unaryOpIsIncDec(u2->op)) return typeOf(u2->operand);
     }
     if (BinaryExpr *b = dynamic_cast<BinaryExpr*>(e)) {
         if (binaryOpIsAssignment(b->op)) return typeOf(b->lhs);
@@ -234,6 +247,14 @@ bool Lowering::isReferenceType(Type *) {
     return false;
 }
 
+Type *Lowering::referentType(Type *t) {
+    return t;                   // C has no references
+}
+
+bool Lowering::isObjectType(Type *) {
+    return false;               // C has no class types
+}
+
 // --- Declarations ---
 
 void Lowering::lowerUnit(const std::vector<Decl*> &units) {
@@ -253,6 +274,41 @@ void Lowering::lowerUnit(const std::vector<Decl*> &units) {
         if (f) functions[f->name] = f;
     }
     for (std::size_t i = 0; i < units.size(); ++i) lowerDecl(units[i]);
+    emitGlobalInit(units);
+}
+
+const char *Lowering::GlobalInitName = "__global_init";
+
+// Everything a global needs before main runs: scalar initialisers, and (in the
+// layer above) constructors for global objects.  One function, called once.
+void Lowering::emitGlobalInit(const std::vector<Decl*> &units) {
+    IRFunction *irf = new IRFunction(GlobalInitName, GlobalInitName);
+    mod.functions.push_back(irf);
+
+    IRFunction *savedFn = fn;
+    Type *savedReturn = currentReturnType;
+    fn = irf;
+    currentReturnType = 0;
+
+    int line = 0;
+    for (std::size_t i = 0; i < units.size(); ++i) {
+        VarDecl *vd = dynamic_cast<VarDecl*>(units[i]);
+        if (!vd) continue;
+        line = vd->line;
+        initGlobal(vd, fn->emitGlobalAddr(vd->name, vd->line));
+    }
+    fn->emitReturn(IR_NoReg, line);
+
+    fn = savedFn;
+    currentReturnType = savedReturn;
+}
+
+void Lowering::initGlobal(VarDecl *vd, IRReg addr) {
+    if (!vd->init) return;
+    Type *t = referentType(vd->type);
+    IRReg v = lowerValue(vd->init);
+    v = convert(v, referentType(typeOf(vd->init)), t, vd->line);
+    fn->emitStore(addr, v, sizeOfType(t), isFloatType(t), vd->line);
 }
 
 // A native keeps its plain name so the VM can recognise it; everything else
@@ -298,11 +354,18 @@ void Lowering::lowerFunction(Function *f, const std::string &mangled,
     for (std::size_t i = 0; i < f->params.size(); ++i) {
         VarDecl *p = f->params[i];
         const std::string pname = p->name.empty() ? "_" : p->name;
-        declareLocal(pname, sizeOfType(p->type), true);
+        declareLocal(pname, sizeOfType(p->type), true, isFloatType(referentType(p->type)));
         localTypes[pname] = p->type;
         ++irf->paramCount;
     }
     irf->returnsValue = (f->retType != 0);
+
+    // Globals are initialised before the first statement of main, which is
+    // where "before the program runs" actually means something.
+    if (mangled == "main") {
+        std::vector<IRReg> none;
+        irf->emitCall(GlobalInitName, none, false, f->line);
+    }
 
     emitPrologue(f);                        // virtual: a constructor's preamble
     if (f->body) lowerBlock(f->body);
@@ -323,6 +386,7 @@ void Lowering::emitPrologue(Function *) {}
 void Lowering::emitEpilogue(Function *) {}
 void Lowering::emitScopeExit(CompoundStmt *) {}
 void Lowering::emitAllOpenScopeExits() {}
+void Lowering::emitScopeExitsDownTo(std::size_t) {}
 
 // --- Statements ---
 
@@ -374,11 +438,17 @@ void Lowering::lowerStmt(Stmt *s) {
     if (ForStmt *fs = dynamic_cast<ForStmt*>(s))  { lowerFor(fs); return; }
 
     if (dynamic_cast<BreakStmt*>(s)) {
-        if (!breakTargets.empty()) fn->emitJump(breakTargets.back(), s->line);
+        if (!breakTargets.empty()) {
+            emitScopeExitsDownTo(breakScopeDepth.back());
+            fn->emitJump(breakTargets.back(), s->line);
+        }
         return;
     }
     if (dynamic_cast<ContinueStmt*>(s)) {
-        if (!continueTargets.empty()) fn->emitJump(continueTargets.back(), s->line);
+        if (!continueTargets.empty()) {
+            emitScopeExitsDownTo(continueScopeDepth.back());
+            fn->emitJump(continueTargets.back(), s->line);
+        }
         return;
     }
 }
@@ -386,7 +456,7 @@ void Lowering::lowerStmt(Stmt *s) {
 void Lowering::lowerVarDecl(VarDecl *vd) {
     if (!vd) return;
     const int size = sizeOfType(vd->type);
-    const int slot = declareLocal(vd->name, size, false);
+    const int slot = declareLocal(vd->name, size, false, isFloatType(referentType(vd->type)));
     localTypes[vd->name] = vd->type;
     if (vd->init) {
         // A reference stores the ADDRESS of what it binds to -- the whole of
@@ -430,10 +500,14 @@ void Lowering::lowerDoWhile(DoWhileStmt *s) {
 
     fn->emitLabel(top);
     breakTargets.push_back(done);
-    continueTargets.push_back(test);        // `continue` goes to the test
+    breakScopeDepth.push_back(openBlocks.size());
+    continueTargets.push_back(test);                        // `continue` goes to the test
+    continueScopeDepth.push_back(openBlocks.size());
     lowerStmt(s->body);
     continueTargets.pop_back();
+    continueScopeDepth.pop_back();
     breakTargets.pop_back();
+    breakScopeDepth.pop_back();
 
     fn->emitLabel(test);
     const IRReg cond = lowerValue(s->cond);
@@ -473,8 +547,10 @@ void Lowering::lowerSwitch(SwitchStmt *s) {
     fn->emitJump(defaultLabel, s->line);
 
     breakTargets.push_back(done);
+    breakScopeDepth.push_back(openBlocks.size());
     lowerStmt(s->body);
     breakTargets.pop_back();
+    breakScopeDepth.pop_back();
     fn->emitLabel(done);
 
     caseLabels.swap(saved);
@@ -489,10 +565,14 @@ void Lowering::lowerWhile(WhileStmt *s) {
     fn->emitBranchZero(cond, done, s->line);
 
     breakTargets.push_back(done);
+    breakScopeDepth.push_back(openBlocks.size());
     continueTargets.push_back(top);
+    continueScopeDepth.push_back(openBlocks.size());
     lowerStmt(s->body);
     continueTargets.pop_back();
+    continueScopeDepth.pop_back();
     breakTargets.pop_back();
+    breakScopeDepth.pop_back();
 
     fn->emitJump(top, s->line);
     fn->emitLabel(done);
@@ -514,10 +594,14 @@ void Lowering::lowerFor(ForStmt *s) {
     }
 
     breakTargets.push_back(done);
-    continueTargets.push_back(step);        // continue runs the step first
+    breakScopeDepth.push_back(openBlocks.size());
+    continueTargets.push_back(step);                        // continue runs the step first
+    continueScopeDepth.push_back(openBlocks.size());
     lowerStmt(s->body);
     continueTargets.pop_back();
+    continueScopeDepth.pop_back();
     breakTargets.pop_back();
+    breakScopeDepth.pop_back();
 
     fn->emitLabel(step);
     if (s->step) lowerValue(s->step);
@@ -577,7 +661,7 @@ IRReg Lowering::lowerValue(Expr *e) {
 
     if (IdentExpr *id = dynamic_cast<IdentExpr*>(e)) {
         const IRReg addr = lowerAddress(e);
-        Type *t = typeOf(e);
+        Type *t = referentType(typeOf(e));
         (void)id;
         // An array decays: its value IS its address, with nothing loaded.
         if (isArrayType(t)) return addr;
@@ -607,7 +691,7 @@ IRReg Lowering::stepFor(Type *t, int line) {
 // The target's address is taken ONCE and reused for the load and the store.
 // Prefix yields the new value, postfix the old one; nothing else differs.
 IRReg Lowering::lowerIncDec(UnaryExpr *e) {
-    Type *t = typeOf(e->operand);
+    Type *t = referentType(typeOf(e->operand));
     const int size = t ? sizeOfType(t) : Layout::IntSize;
     const bool flt = isFloatType(t);
 
@@ -632,10 +716,12 @@ IRReg Lowering::lowerUnary(UnaryExpr *e) {
     switch (e->op) {
     case UN_Neg: {
         BuiltinKind k;
-        const bool flt = arithKind(typeOf(e->operand), k) && builtinIsFloating(k);
+        const bool flt = arithKind(referentType(typeOf(e->operand)), k) && builtinIsFloating(k);
         return fn->emitUnary(flt ? IR_FNeg : IR_Neg, lowerValue(e->operand), e->line);
     }
-    case UN_Not:    return fn->emitUnary(IR_LogicalNot, lowerValue(e->operand), e->line);
+    case UN_Not:    return fn->emitUnary(IR_LogicalNot,
+                        truth(lowerValue(e->operand), referentType(typeOf(e->operand)), e->line),
+                        e->line);
     case UN_AddrOf: return lowerAddress(e->operand);        // &x IS the address
     case UN_Deref: {
         const IRReg addr = lowerValue(e->operand);
@@ -659,8 +745,8 @@ IRReg Lowering::lowerBinary(BinaryExpr *e) {
     if (binaryOpIsAssignment(e->op)) return lowerAssign(e);
     if (e->op == BIN_LAnd || e->op == BIN_LOr) return lowerShortCircuit(e);
 
-    Type *lt = typeOf(e->lhs);
-    Type *rt = typeOf(e->rhs);
+    Type *lt = referentType(typeOf(e->lhs));
+    Type *rt = referentType(typeOf(e->rhs));
     IRReg a = lowerValue(e->lhs);
     IRReg b = lowerValue(e->rhs);
 
@@ -719,15 +805,23 @@ IRReg Lowering::lowerBinary(BinaryExpr *e) {
 }
 
 IRReg Lowering::lowerAssign(BinaryExpr *e) {
-    Type *t = typeOf(e->lhs);
+    Type *t = referentType(typeOf(e->lhs));
     const int size = t ? sizeOfType(t) : Layout::IntSize;
     const bool flt = isFloatType(t);
 
     if (e->op == BIN_Assign) {
+        // An object is copied byte for byte: it does not fit in a register,
+        // and load-then-store would shift its bytes off the end of one.
+        if (isObjectType(t)) {
+            const IRReg src = lowerAddress(e->rhs);
+            const IRReg dst = lowerAddress(e->lhs);
+            fn->emitMemCopy(dst, src, size, e->line);
+            return dst;
+        }
         // Right side first: the order the language leaves open, and the one
         // that keeps the address live for the shortest time.
         IRReg value = lowerValue(e->rhs);
-        value = convert(value, typeOf(e->rhs), t, e->line);
+        value = convert(value, referentType(typeOf(e->rhs)), t, e->line);
         const IRReg addr = lowerAddress(e->lhs);
         fn->emitStore(addr, value, size, flt, e->line);
         return value;
@@ -738,7 +832,7 @@ IRReg Lowering::lowerAssign(BinaryExpr *e) {
     const IRReg addr = lowerAddress(e->lhs);
     const IRReg oldValue = fn->emitLoad(addr, size, flt, e->line);
     IRReg rhs = lowerValue(e->rhs);
-    rhs = convert(rhs, typeOf(e->rhs), t, e->line);
+    rhs = convert(rhs, referentType(typeOf(e->rhs)), t, e->line);
 
     const BinaryOp under = binaryOpUnderlying(e->op);
     IROp op = IR_Add;
@@ -765,20 +859,30 @@ IRReg Lowering::lowerAssign(BinaryExpr *e) {
     return result;
 }
 
+// Comparing against zero yields 0 or 1 and, for a double, collapses eight
+// bytes to four -- both of which a logical operand needs.
+IRReg Lowering::truth(IRReg value, Type *t, int line) {
+    if (isFloatType(t)) {
+        return fn->emitBinary(IR_FCmpNE, value, fn->emitFConst(0.0, line), line);
+    }
+    return fn->emitBinary(IR_CmpNE, value, fn->emitConst(0, line), line);
+}
+
 // The right side must not run when the left already decides -- a control-flow
-// fact, so it lowers to branches rather than an operator.
+// fact, so it lowers to branches rather than an operator.  The stored value is
+// the truth of each side: `2 && 4` is 1, not 4.
 IRReg Lowering::lowerShortCircuit(BinaryExpr *e) {
     const int slot = fn->addLocal("__sc", Layout::IntSize, false);
     const int done = fn->newLabel();
 
-    const IRReg left = lowerValue(e->lhs);
+    const IRReg left = truth(lowerValue(e->lhs), referentType(typeOf(e->lhs)), e->line);
     IRReg addr = fn->emitLocalAddr(slot, e->line);
     fn->emitStore(addr, left, Layout::IntSize, false, e->line);
 
     if (e->op == BIN_LAnd) fn->emitBranchZero(left, done, e->line);
     else                   fn->emitBranchNZ(left, done, e->line);
 
-    const IRReg right = lowerValue(e->rhs);
+    const IRReg right = truth(lowerValue(e->rhs), referentType(typeOf(e->rhs)), e->line);
     addr = fn->emitLocalAddr(slot, e->line);
     fn->emitStore(addr, right, Layout::IntSize, false, e->line);
 

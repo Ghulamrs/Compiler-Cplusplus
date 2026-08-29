@@ -142,9 +142,15 @@ void VM::release(long addr) {
 // --- natives ---
 
 void VM::callNative(NativeId id, int argc) {
+    // Every argument is popped, not just the one that gets used: leaving the
+    // rest behind would desync the operand stack for everything after.  The
+    // first is the one the natives take.
     Value a;
     a.i = 0;
-    if (argc > 0) a = pop();
+    for (int k = argc; k > 0; --k) {
+        const Value v = pop();
+        if (k == 1) a = v;
+    }
     switch (id) {
     case NAT_PrintInt:    std::cout << a.i; break;
     case NAT_PrintChar:   std::cout << static_cast<char>(a.i); break;
@@ -171,6 +177,19 @@ long VM::run(const Image &image, bool &ok) {
     steps = 0;
 
     if (image.entry < 0) { trap("no entry point"); return 0; }
+    // A .cxb may have come from anywhere, so nothing in it is trusted: an
+    // out-of-range entry, or a function with no register base, would index
+    // straight past the tables it arrived with.
+    if (image.entry >= static_cast<int>(image.functions.size())) {
+        trap("entry point is not a function in this image");
+        return 0;
+    }
+    for (std::size_t i = 0; i < image.functions.size(); ++i) {
+        if (image.functions[i].localOffset.empty()) {
+            trap("function '" + image.functions[i].name + "' has no frame layout");
+            return 0;
+        }
+    }
 
     mem.assign(MemorySize, 0);
     std::copy(image.staticData.begin(), image.staticData.end(), mem.begin());
@@ -239,6 +258,20 @@ long VM::run(const Image &image, bool &ok) {
             const long addr = pop().i;
             if (in.b & 2) writeFloat(addr, static_cast<int>(in.imm), v.d);
             else          writeInt(addr, static_cast<int>(in.imm), v.i);
+            break;
+        }
+
+        case OP_MemCopy: {
+            const long src = pop().i;
+            const long dst = pop().i;
+            const long n   = in.imm;
+            if (src <= 0 || dst <= 0 || n < 0 ||
+                src + n > static_cast<long>(mem.size()) ||
+                dst + n > static_cast<long>(mem.size())) {
+                trap("object copy at an invalid address");
+                break;
+            }
+            if (src != dst) std::memmove(&mem[dst], &mem[src], static_cast<std::size_t>(n));
             break;
         }
 
@@ -363,7 +396,12 @@ long VM::run(const Image &image, bool &ok) {
             // Arguments land in the first local slots, which is exactly where
             // the parameters were declared.
             for (int k = 0; k < argc && k < static_cast<int>(callee.localSize.size()); ++k) {
-                writeInt(nf.base + callee.localOffset[k], callee.localSize[k], args[k].i);
+                // A float parameter is narrowed here; the operand stack always
+                // carries a double, and the slot may be four bytes wide.
+                const bool flt = k < static_cast<int>(callee.localFloat.size())
+                                 && callee.localFloat[k] != 0;
+                if (flt) writeFloat(nf.base + callee.localOffset[k], callee.localSize[k], args[k].d);
+                else     writeInt(nf.base + callee.localOffset[k], callee.localSize[k], args[k].i);
             }
             frames.push_back(nf);
             break;

@@ -161,7 +161,16 @@ enum UnaryOp {
 bool unaryOpIsIncDec(UnaryOp op);
 const char *unaryOpText(UnaryOp op);
 
-struct Expr : public ASTNode {};
+struct Type;
+
+// Every expression carries the type the semantic pass computed for it.
+// Lowering used to work this out again from scratch, with a weaker algorithm,
+// and the two disagreed -- which is how a float multiply came to be emitted as
+// an integer one.  Semantic decides; lowering reads.  Owned by the analyzer.
+struct Expr : public ASTNode {
+    Type *resolvedType;
+    Expr() : resolvedType(0) {}
+};
 
 // An integer or character literal.  Both are integer values; only their type
 // differs, which is why one node carries them.

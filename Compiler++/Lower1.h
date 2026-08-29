@@ -68,12 +68,17 @@ private:
     virtual IRReg lowerCall(cc::CallExpr *e, bool wantsResult);
     virtual bool isReferenceExpr(cc::Expr *e);
     virtual bool isReferenceType(cc::Type *t);
+    virtual cc::Type *referentType(cc::Type *t);
+    virtual void initGlobal(cc::VarDecl *vd, IRReg addr);
+    virtual bool isObjectType(cc::Type *t);
+    bool isAddressable(cc::Expr *e) const;
     virtual bool isBoolType(cc::Type *t);
     virtual void lowerDecl(cc::Decl *d);
     virtual void emitPrologue(cc::Function *f);
     virtual void emitEpilogue(cc::Function *f);
     virtual void emitScopeExit(cc::CompoundStmt *block);
     virtual void emitAllOpenScopeExits();
+    virtual void emitScopeExitsDownTo(std::size_t depth);
     virtual void lowerVarDecl(cc::VarDecl *vd);     // constructs class locals
     virtual cc::Type *typeOf(cc::Expr *e);          // the C++ forms
     virtual cc::Type *cloneForeignType(cc::Type *t);
@@ -85,6 +90,8 @@ private:
                       bool concreteType = false);
     void emitVPtrStore(ClassDecl *cd, IRReg objectAddr, int line);
     bool classHasDestructor(ClassDecl *cd) const;
+    // A field that IS an object, as opposed to a pointer or reference to one.
+    ClassDecl *classOfMemberType(cc::Type *t) const;
 };
 
 } // namespace cxx

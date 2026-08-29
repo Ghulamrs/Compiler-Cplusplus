@@ -19,6 +19,7 @@
 #define LAYOUT_H
 
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -86,8 +87,18 @@ private:
     Diagnostics &diag;
     std::map<std::string, ClassLayout> layouts;
 
-    // Depth-first, so a base is always laid out before anything derived from it.
+    // Needed during the recursion: a class-typed FIELD has to be laid out
+    // before its container, and the map is the only way from a name to a
+    // declaration.  Without it the answer depended on the alphabetical order
+    // computeAll happened to walk.
+    const std::map<std::string, cxx::ClassDecl*> *classIndex;
+    std::set<std::string> inProgress;           // catches A-contains-B-contains-A
+
+    // Depth-first, so a base -- and any class-typed member -- is always laid
+    // out before the class that needs its size.
     void computeFor(cxx::ClassDecl *cd);
+    // The class a field's type names, or 0 when the field is not a class.
+    cxx::ClassDecl *classDeclOf(cc::Type *t) const;
     static int roundUp(int value, int alignment);
 
     Layout(const Layout &);

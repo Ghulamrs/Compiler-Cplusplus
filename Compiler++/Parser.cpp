@@ -10,7 +10,7 @@
 namespace cc {
 
 Parser::Parser(const std::string &s, Diagnostics &d)
-    : lexer(createLexer(s)), diag(d), suppressSync(false) {
+    : lexer(createLexer(s)), diag(d), suppressSync(false), nesting(0), nestingReported(false) {
     advance();
 }
 
@@ -276,7 +276,9 @@ CompoundStmt *Parser::parseBlock() {
     CompoundStmt *block = new CompoundStmt();
     block->line = cur.line;
     block->col = cur.col;
+    if (tooDeep()) return block;
     if (!expect(TOK_LBRACE, "to open a block")) return block;
+    ++nesting;
     while (cur.kind != TOK_RBRACE && cur.kind != TOK_EOF) {
         const std::size_t posBefore = lexer->tell().offset;
         suppressSync = false;
@@ -287,6 +289,7 @@ CompoundStmt *Parser::parseBlock() {
         if (lexer->tell().offset == posBefore && cur.kind != TOK_EOF) advance();
     }
     expect(TOK_RBRACE, "to close a block");
+    --nesting;
     return block;
 }
 
@@ -324,9 +327,21 @@ Stmt *Parser::parseStatement() {
     case TOK_CASE: {
         advance();
         Expr *v = parseExpression();
-        NumberExpr *n = dynamic_cast<NumberExpr*>(v);
-        if (!n) errorAtCurrent("a case label needs a constant integer");
-        s = new CaseStmt(n ? n->value : 0, false);
+        // A label is a constant, and -1 is as constant as 1.
+        long value = 0;
+        bool constant = false;
+        if (NumberExpr *n = dynamic_cast<NumberExpr*>(v)) {
+            value = n->value;
+            constant = true;
+        } else if (UnaryExpr *u = dynamic_cast<UnaryExpr*>(v)) {
+            NumberExpr *inner = dynamic_cast<NumberExpr*>(u->operand);
+            if (inner && u->op == UN_Neg) {
+                value = -inner->value;
+                constant = true;
+            }
+        }
+        if (!constant) errorAtCurrent("a case label needs a constant integer");
+        s = new CaseStmt(value, false);
         delete v;
         expect(TOK_COLON, "after a case label");
         break;
@@ -395,7 +410,21 @@ Stmt *Parser::parseFor() {
     Expr *step = 0;
     if (cur.kind != TOK_RPAREN) step = parseExpression();
     expect(TOK_RPAREN, "after for clauses");
-    return new ForStmt(init, cond, step, parseStatement());
+    Stmt *body = parseStatement();
+
+    // `for (T t; ...)` is `{ T t; for (; ...) ... }`.  Rewriting it here gives
+    // the init declaration an ordinary block to live in, so it is destroyed on
+    // every path out -- the loop ending, a break, or a return -- without any
+    // rule in lowering having to know about for-init.
+    if (dynamic_cast<DeclStmt*>(init)) {
+        CompoundStmt *wrap = new CompoundStmt();
+        wrap->line = init->line;
+        wrap->col = init->col;
+        wrap->body.push_back(init);
+        wrap->body.push_back(new ForStmt(0, cond, step, body));
+        return wrap;
+    }
+    return new ForStmt(init, cond, step, body);
 }
 
 Stmt *Parser::parseDoWhile() {
@@ -540,8 +569,21 @@ resolve:
 // Each level parses the one below and loops on its own operators, so reading
 // top to bottom is reading the precedence table.
 
+bool Parser::tooDeep() {
+    if (nesting < MaxNesting) return false;
+    if (!nestingReported) {
+        errorAtCurrent("nested too deeply");
+        nestingReported = true;
+    }
+    return true;
+}
+
 Expr *Parser::parseExpression() {
-    return parseAssign();
+    if (tooDeep()) return 0;
+    ++nesting;
+    Expr *e = parseAssign();
+    --nesting;
+    return e;
 }
 
 // Loosest, and groups RIGHT: a = b = c is a = (b = c).  Whether the left side

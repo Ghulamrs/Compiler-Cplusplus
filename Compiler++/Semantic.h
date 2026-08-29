@@ -84,7 +84,10 @@ private:
     void analyzeSwitch(cc::SwitchStmt *s);
     void analyzeBlock(cc::CompoundStmt *block);
     void analyzeVarDecl(cc::VarDecl *vd, bool declareIt);
+    // analyzeExpr is a thin wrapper that records the result on the node;
+    // analyzeExprImpl is the analysis itself.
     cc::Type *analyzeExpr(cc::Expr *e, bool &isLValue);
+    cc::Type *analyzeExprImpl(cc::Expr *e, bool &isLValue);
 
     // member lookup
     cxx::ClassDecl *findClass(const std::string &name);

@@ -257,6 +257,27 @@ Token Lexer::nextToken() {
     // lexes as three tokens.
     if (std::isdigit(static_cast<unsigned char>(c))) {
         std::string num;
+
+        // 0x... and 0... are integers in a different base.  Without this they
+        // lexed as `0` followed by an identifier, and the errors that followed
+        // never mentioned the number.
+        if (peek() == '0' && (peekAt(1) == 'x' || peekAt(1) == 'X')) {
+            num += get();                                   // '0'
+            num += get();                                   // 'x'
+            while (std::isxdigit(static_cast<unsigned char>(peek()))) num += get();
+            Token hex = makeToken(TOK_NUMBER, startLine, startCol);
+            hex.text = num;
+            hex.numberValue = std::strtol(num.c_str(), 0, 16);
+            return hex;
+        }
+        if (peek() == '0' && peekAt(1) >= '0' && peekAt(1) <= '7') {
+            while (peek() >= '0' && peek() <= '7') num += get();
+            Token oct = makeToken(TOK_NUMBER, startLine, startCol);
+            oct.text = num;
+            oct.numberValue = std::strtol(num.c_str(), 0, 8);
+            return oct;
+        }
+
         while (std::isdigit(static_cast<unsigned char>(peek()))) num += get();
 
         bool isFloat = false;

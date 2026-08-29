@@ -7,7 +7,7 @@
 #include <iostream>
 
 Diagnostics::Diagnostics(const std::string &sourceName)
-    : name(sourceName), errors(0), warnings(0) {}
+    : name(sourceName), errors(0), warnings(0), capped(false) {}
 
 void Diagnostics::report(const char *level, int line, int col, const std::string &msg) {
     std::cout.flush();          // keep diagnostics in step with any AST dump
@@ -18,11 +18,19 @@ void Diagnostics::report(const char *level, int line, int col, const std::string
 
 void Diagnostics::error(int line, int col, const std::string &msg) {
     ++errors;
+    if (errors > MaxReported) {
+        if (!capped) {
+            capped = true;
+            std::cerr << name << ": error: too many errors; stopping here" << std::endl;
+        }
+        return;
+    }
     report("error", line, col, msg);
 }
 
 void Diagnostics::warning(int line, int col, const std::string &msg) {
     ++warnings;
+    if (capped || warnings > MaxReported) return;
     report("warning", line, col, msg);
 }
 

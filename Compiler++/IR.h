@@ -67,6 +67,9 @@ enum IROp {
     // --- memory -------------------------------------------------------
     IR_Load,         // dest = *a             (imm = size in bytes)
     IR_Store,        // *a = b                (imm = size in bytes)
+    // An object is copied whole.  A class does not fit in a register, so
+    // load-then-store would shift its bytes off the end of one.
+    IR_MemCopy,      // *a = *b               (imm = size in bytes)
 
     // --- calls --------------------------------------------------------
     IR_Call,         // dest = sym(args...)
@@ -117,8 +120,11 @@ struct IRLocal {
     int slot;
     int size;
     bool isParam;
-    IRLocal(const std::string &n, int s, int sz, bool p)
-        : name(n), slot(s), size(sz), isParam(p) {}
+    // A 4-byte float slot has to be written as a float, not as four bytes of
+    // an integer -- otherwise a float parameter arrives as noise.
+    bool isFloat;
+    IRLocal(const std::string &n, int s, int sz, bool p, bool f = false)
+        : name(n), slot(s), size(sz), isParam(p), isFloat(f) {}
 };
 
 struct IRFunction {
@@ -135,7 +141,7 @@ struct IRFunction {
 
     IRReg newReg() { return nextReg++; }
     int newLabel() { return nextLabel++; }
-    int addLocal(const std::string &n, int size, bool isParam);
+    int addLocal(const std::string &n, int size, bool isParam, bool isFloat = false);
 
     // Every emit returns its destination register, so expressions compose.
     IRReg emitConst(long value, int line);
@@ -150,6 +156,7 @@ struct IRFunction {
     IRReg emitFuncAddr(const std::string &sym, int line);
     IRReg emitLoad(IRReg addr, int size, bool isFloat, int line);
     void  emitStore(IRReg addr, IRReg value, int size, bool isFloat, int line);
+    void  emitMemCopy(IRReg dst, IRReg src, int size, int line);
     IRReg emitCall(const std::string &sym, const std::vector<IRReg> &args,
                    bool wantsResult, int line);
     IRReg emitCallIndirect(IRReg target, const std::vector<IRReg> &args,
