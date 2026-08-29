@@ -60,19 +60,28 @@ int Lowering::sizeOfType(Type *t) const {
 Type *Lowering::decayType(Type *t) {
     ArrayType *at = dynamic_cast<ArrayType*>(t);
     if (!at) return t;
-    Type *p = new PointerType(cloneTypeShallow(at->element));
+    Type *element = cloneTypeShallow(at->element);
+    if (!element) return t;             // nothing safe to point at
+    Type *p = new PointerType(element);
     ownedDecays.push_back(p);
     return p;
 }
 
-// A deep copy, so a formed pointer owns its pointee rather than borrowing a
-// subtree the AST will delete.
+// A copy the CALLER owns.  ~PointerType deletes its base, so a formed pointer
+// must never be handed a node anything else owns -- an array of objects gave
+// its ClassType two owners and freed it twice.
 Type *Lowering::cloneTypeShallow(Type *t) {
     if (!t) return 0;
     if (BuiltinType *bt = dynamic_cast<BuiltinType*>(t)) return new BuiltinType(bt->kind);
-    if (PointerType *pt = dynamic_cast<PointerType*>(t)) return new PointerType(cloneTypeShallow(pt->base));
-    if (ArrayType *at = dynamic_cast<ArrayType*>(t)) return new ArrayType(cloneTypeShallow(at->element), at->count);
-    return cloneForeignType(t);
+    if (PointerType *pt = dynamic_cast<PointerType*>(t)) {
+        Type *base = cloneTypeShallow(pt->base);
+        return base ? new PointerType(base) : 0;
+    }
+    if (ArrayType *at = dynamic_cast<ArrayType*>(t)) {
+        Type *element = cloneTypeShallow(at->element);
+        return element ? new ArrayType(element, at->count) : 0;
+    }
+    return cloneForeignType(t);         // virtual: class and reference types
 }
 
 Type *Lowering::literalType(BuiltinKind k) {

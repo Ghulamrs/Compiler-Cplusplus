@@ -109,7 +109,9 @@ protected:
     Type *decayType(Type *t);
     Type *cloneTypeShallow(Type *t);
     // The C++ layer's types are unknown here, so copying one is its job.
-    virtual Type *cloneForeignType(Type *t) { return t; }
+    // A NEW node the caller owns, or 0.  The C layer has no type it cannot
+    // already copy, so it never has one to offer.
+    virtual Type *cloneForeignType(Type *) { return 0; }
     std::vector<Type*> ownedDecays;
     Type *commonType(BuiltinKind k);
     // Builtin types this pass forms, one per kind, owned here.

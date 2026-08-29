@@ -309,6 +309,21 @@ cc::Type *Lowering::typeOf(cc::Expr *e) {
 // Declaring one CONSTRUCTS it; the block already knows to destroy it.
 void Lowering::lowerVarDecl(cc::VarDecl *vd) {
     if (!vd) return;
+
+    // P ps[3];  is three objects, each constructed.
+    long count = 0;
+    if (ClassDecl *elem = elementClassOf(vd->type, count)) {
+        const int total = layout.sizeOf(vd->type);
+        const int slot = declareLocal(vd->name, total > 0 ? total : Layout::PointerSize, false);
+        localTypes[vd->name] = vd->type;
+        const ClassLayout *cl = layout.forClass(elem->name);
+        if (cl && count > 0) {
+            emitArrayConstruct(elem, fn->emitLocalAddr(slot, vd->line), count,
+                               cl->size, vd->line);
+        }
+        return;
+    }
+
     ClassDecl *cd = 0;
     if (!dynamic_cast<ReferenceType*>(vd->type)) {
         ClassType *ct = dynamic_cast<ClassType*>(vd->type);
@@ -320,10 +335,16 @@ void Lowering::lowerVarDecl(cc::VarDecl *vd) {
     const int slot = declareLocal(vd->name, size > 0 ? size : Layout::PointerSize, false);
     localTypes[vd->name] = vd->type;
 
-    // P b = a;  copies a.  With no copy constructors in this version, the copy
-    // IS the memberwise one -- and it carries the vptr, which is right for two
-    // objects of the same class.
+    // P b = a;  copies a.  A declared copy constructor is the copy if there is
+    // one; otherwise the copy is memberwise, which carries the vptr and is
+    // right for two objects of one class.
     if (vd->init && !vd->hasCtorArgs) {
+        if (copyConstructorOf(cd)) {
+            std::vector<cc::Expr*> one;
+            one.push_back(vd->init);
+            emitConstruct(cd, fn->emitLocalAddr(slot, vd->line), one, vd->line);
+            return;
+        }
         if (!isAddressable(vd->init)) {
             diag.error(vd->line, vd->col,
                        "an object can only be copied from another object in this version");
@@ -334,6 +355,54 @@ void Lowering::lowerVarDecl(cc::VarDecl *vd) {
         return;
     }
     emitConstruct(cd, fn->emitLocalAddr(slot, vd->line), vd->ctorArgs, vd->line);
+}
+
+// A constructor taking one argument of this same class -- by reference, since
+// taking it by value would need the very copy being defined.
+MethodDecl *Lowering::copyConstructorOf(ClassDecl *cd) const {
+    if (!cd) return 0;
+    for (std::size_t i = 0; i < cd->ctors.size(); ++i) {
+        MethodDecl *c = cd->ctors[i];
+        if (c->params.size() != 1) continue;
+        cc::Type *p = c->params[0]->type;
+        ReferenceType *rt = dynamic_cast<ReferenceType*>(p);
+        if (!rt) continue;
+        ClassType *ct = dynamic_cast<ClassType*>(rt->base);
+        if (ct && ct->className == cd->name) return c;
+    }
+    return 0;
+}
+
+ClassDecl *Lowering::elementClassOf(cc::Type *t, long &count) const {
+    count = 1;
+    cc::ArrayType *at = dynamic_cast<cc::ArrayType*>(t);
+    if (!at) return 0;
+    while (at) {
+        count *= at->count;
+        t = at->element;
+        at = dynamic_cast<cc::ArrayType*>(t);
+    }
+    ClassType *ct = dynamic_cast<ClassType*>(t);
+    return ct ? findClass(ct->className) : 0;
+}
+
+// Element 0 first, exactly as a single object is built before the next one.
+void Lowering::emitArrayConstruct(ClassDecl *cd, IRReg base, long count,
+                                  int elemSize, int line) {
+    std::vector<cc::Expr*> none;
+    for (long i = 0; i < count; ++i) {
+        emitConstruct(cd, fn->emitFieldAddr(base, static_cast<int>(i) * elemSize, line),
+                      none, line);
+    }
+}
+
+// Reverse, for the same reason members are destroyed in reverse.
+void Lowering::emitArrayDestruct(ClassDecl *cd, IRReg base, long count,
+                                 int elemSize, int line) {
+    for (long i = count; i > 0; --i) {
+        emitDestruct(cd, fn->emitFieldAddr(base, static_cast<int>(i - 1) * elemSize, line),
+                     line, true);
+    }
 }
 
 // Only something with a place in memory can be copied from.
@@ -359,11 +428,10 @@ bool Lowering::isReferenceExpr(cc::Expr *e) {
     return t && dynamic_cast<ReferenceType*>(t) != 0;
 }
 
-// The C layer cannot copy a class or reference type; this layer can.
+// The C layer cannot copy a class or reference type; this layer can.  The
+// copy is the caller's -- whoever asked is about to own it.
 cc::Type *Lowering::cloneForeignType(cc::Type *t) {
-    cc::Type *c = cloneType(t);
-    if (c) ownedTypes.push_back(c);
-    return c ? c : t;
+    return cloneType(t);
 }
 
 bool Lowering::isReferenceType(cc::Type *t) {
@@ -486,9 +554,15 @@ void Lowering::emitConstruct(ClassDecl *cd, IRReg objectAddr,
     std::vector<IRReg> callArgs;
     callArgs.push_back(objectAddr);
     for (std::size_t i = 0; i < args.size(); ++i) {
-        IRReg v = lowerValue(args[i]);
-        if (ctor && i < ctor->params.size()) {
-            v = convert(v, typeOf(args[i]), ctor->params[i]->type, line);
+        cc::Type *want = (ctor && i < ctor->params.size()) ? ctor->params[i]->type : 0;
+        IRReg v;
+        // Same rule a call obeys: a reference parameter receives the object's
+        // ADDRESS.  A constructor is a call, and used to be the exception.
+        if (want && isReferenceType(want)) {
+            v = lowerAddress(args[i]);
+        } else {
+            v = lowerValue(args[i]);
+            if (want) v = convert(v, typeOf(args[i]), want, line);
         }
         callArgs.push_back(v);
     }
@@ -647,10 +721,21 @@ void Lowering::emitEpilogue(cc::Function *f) {
 void Lowering::emitScopeExit(cc::CompoundStmt *block) {
     for (std::size_t i = 0; i < block->destroyAtExit.size(); ++i) {
         cc::VarDecl *vd = block->destroyAtExit[i];
-        ClassDecl *cd = classOfType(vd->type);
-        if (!cd) continue;
         const int slot = findSlot(vd->name);
         if (slot < 0) continue;
+
+        long count = 0;
+        if (ClassDecl *elem = elementClassOf(vd->type, count)) {
+            const ClassLayout *cl = layout.forClass(elem->name);
+            if (cl && count > 0) {
+                emitArrayDestruct(elem, fn->emitLocalAddr(slot, vd->line), count,
+                                  cl->size, vd->line);
+            }
+            continue;
+        }
+
+        ClassDecl *cd = classOfType(vd->type);
+        if (!cd) continue;
         emitDestruct(cd, fn->emitLocalAddr(slot, vd->line), vd->line, true);
     }
 }

@@ -57,6 +57,8 @@ const char *tokenName(TokenKind k) {
     case TOK_COLON:      return "':'";
     case TOK_COLONCOLON: return "'::'";
     case TOK_DOT:        return "'.'";
+    case TOK_ELLIPSIS:   return "'...'";
+    case TOK_HASH:       return "'#'";
     case TOK_ARROW:      return "'->'";
     case TOK_TILDE:      return "'~'";
     case TOK_PLUS:       return "'+'";
@@ -366,7 +368,12 @@ Token Lexer::nextToken() {
         if (peek() == '=') { get(); kind = TOK_PERCENTEQ; }
         else kind = TOK_PERCENT;
         break;
-    case '.': kind = TOK_DOT; break;
+    case '.':
+        // '...' is one token, so a variadic parameter list can be named.
+        if (peek() == '.' && peekAt(1) == '.') { get(); get(); kind = TOK_ELLIPSIS; }
+        else kind = TOK_DOT;
+        break;
+    case '#': kind = TOK_HASH; break;
     case '-':
         if (peek() == '>')      { get(); kind = TOK_ARROW; }
         else if (peek() == '-') { get(); kind = TOK_MINUSMINUS; }

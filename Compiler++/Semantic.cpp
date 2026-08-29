@@ -524,6 +524,8 @@ bool SemanticAnalyzer::hasDestructor(cc::Type *t) {
     if (!t) return false;
     if (dynamic_cast<cc::PointerType*>(t)) return false;
     if (dynamic_cast<cxx::ReferenceType*>(t)) return false;   // a reference owns nothing
+    // An array of objects owns every one of them.
+    while (cc::ArrayType *at = dynamic_cast<cc::ArrayType*>(t)) t = at->element;
     cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(t);
     if (!ct) return false;
     for (cxx::ClassDecl *c = findClass(ct->className); c; c = c->base) {

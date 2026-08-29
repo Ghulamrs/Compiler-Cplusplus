@@ -52,6 +52,16 @@ bool Parser::skipReservedConstruct() {
     return true;
 }
 
+// One token past a '(' -- enough to tell a function pointer's declarator from
+// an ordinary parenthesised expression.
+bool Parser::peekIsStar() {
+    const State st = save();
+    advance();                          // consume '('
+    const bool star = (cur.kind == TOK_STAR);
+    restore(st);
+    return star;
+}
+
 void Parser::skipParenGroup() {
     if (cur.kind != TOK_LPAREN) return;
     int depth = 0;
@@ -176,10 +186,26 @@ Function *Parser::parseSingleFunction() {
 
 Decl *Parser::parseDeclaration() {
     if (skipReservedConstruct()) return 0;
+    if (cur.kind == TOK_HASH) {
+        errorAtCurrent("there is no preprocessor in this version");
+        // The whole line goes, so one directive earns one message.
+        const int line = cur.line;
+        while (cur.kind != TOK_EOF && cur.line == line) advance();
+        suppressSync = true;
+        return 0;
+    }
     Type *t = parseType();              // virtual
     if (!t) {
         errorAtCurrent(std::string("expected a declaration, found ") + tokenName(cur.kind));
         advance();                      // guarantee progress
+        return 0;
+    }
+    // int (*p)(int) -- a type, then a parenthesised '*'.  Nothing else in this
+    // grammar looks like that, so it can be named instead of misread.
+    if (cur.kind == TOK_LPAREN && peekIsStar()) {
+        errorAtCurrent("function pointers are not supported in this version");
+        delete t;
+        skipConstruct();
         return 0;
     }
     if (cur.kind != TOK_IDENTIFIER) {
@@ -209,11 +235,23 @@ void Parser::parseFunctionParamsAndBody(Function *fn) {
     if (!expect(TOK_LPAREN, "in function declaration")) return;
 
     while (cur.kind != TOK_RPAREN && cur.kind != TOK_EOF) {
+        if (cur.kind == TOK_ELLIPSIS) {
+            errorAtCurrent("variadic functions are not supported in this version");
+            while (cur.kind != TOK_RPAREN && cur.kind != TOK_EOF) advance();
+            break;
+        }
         Type *pt = parseType();                     // virtual
         if (!pt) { errorAtCurrent("expected a parameter type"); break; }
         std::string pname;
         int pline = cur.line, pcol = cur.col;
         if (cur.kind == TOK_IDENTIFIER) { pname = cur.text; advance(); }
+        // Each is rejected by name: a bare "expected ')'" says nothing about
+        // which feature the program was reaching for.
+        if (cur.kind == TOK_ASSIGN) {
+            errorAtCurrent("default arguments are not supported in this version");
+            while (cur.kind != TOK_COMMA && cur.kind != TOK_RPAREN &&
+                   cur.kind != TOK_EOF) advance();
+        }
         VarDecl *param = new VarDecl(pt, pname, 0);
         param->line = pline;
         param->col = pcol;
@@ -366,6 +404,14 @@ Stmt *Parser::parseStatement() {
                 advance();
                 s = new DeclStmt(parseVarDeclTail(t, name, nameLine, nameCol));
                 break;
+            }
+            // int (*p)(int); -- a type, then a parenthesised '*'.
+            if (cur.kind == TOK_LPAREN && peekIsStar()) {
+                errorAtCurrent("function pointers are not supported in this version");
+                delete t;
+                skipConstruct();
+                suppressSync = true;
+                return 0;
             }
             delete t;                               // a type, but not a declaration
         }

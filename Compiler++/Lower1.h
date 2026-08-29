@@ -72,6 +72,14 @@ private:
     virtual void initGlobal(cc::VarDecl *vd, IRReg addr);
     virtual bool isObjectType(cc::Type *t);
     bool isAddressable(cc::Expr *e) const;
+    // An array of objects: its element class, and how many there are across
+    // every dimension.  0 when the type is not one.
+    ClassDecl *elementClassOf(cc::Type *t, long &count) const;
+    // The class's own copy constructor, if it declared one.
+    MethodDecl *copyConstructorOf(ClassDecl *cd) const;
+    // Construct or destroy `count` objects laid end to end from `base`.
+    void emitArrayConstruct(ClassDecl *cd, IRReg base, long count, int elemSize, int line);
+    void emitArrayDestruct(ClassDecl *cd, IRReg base, long count, int elemSize, int line);
     virtual bool isBoolType(cc::Type *t);
     virtual void lowerDecl(cc::Decl *d);
     virtual void emitPrologue(cc::Function *f);

@@ -221,6 +221,13 @@ Decl *Parser::parseMemberDecl(const std::string &className, Access access) {
         return md;
     }
 
+    if (cur.kind == TOK_CLASS || cur.kind == TOK_STRUCT) {
+        errorAtCurrent("nested classes are not supported in this version");
+        skipConstruct();
+        suppressSync = true;            // the skip IS the recovery
+        return 0;
+    }
+
     cc::Type *t = parseType();                  // virtual: knows C++ types
     if (!t) {
         errorAtCurrent(std::string("expected a member declaration, found ")
@@ -229,8 +236,16 @@ Decl *Parser::parseMemberDecl(const std::string &className, Access access) {
         return 0;
     }
     if (cur.kind != TOK_IDENTIFIER) {
-        errorAtCurrent("expected a member name");
+        // `operator+` reaches here as a type followed by the keyword: name the
+        // feature rather than complain about a missing identifier.
+        if (cur.text == "operator") {
+            errorAtCurrent("operator overloading is not supported in this version");
+        } else {
+            errorAtCurrent("expected a member name");
+        }
         delete t;
+        skipConstruct();
+        suppressSync = true;            // the skip IS the recovery
         return 0;
     }
     const int line = cur.line, col = cur.col;

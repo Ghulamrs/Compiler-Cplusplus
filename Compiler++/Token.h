@@ -66,6 +66,9 @@ enum TokenKind {
     TOK_DOT,        // .
     TOK_ARROW,      // ->
     TOK_TILDE,      // ~   (destructor names)
+    // Recognised only so the parser can name the feature they belong to.
+    TOK_ELLIPSIS,   // ...  variadic parameters
+    TOK_HASH,       // #    a preprocessor directive
 
     // --- operators ---
     TOK_PLUS,

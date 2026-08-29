@@ -54,6 +54,7 @@ protected:
     void skipConstruct();
     // Steps over a balanced ( ... ), for a reserved word used as an operator.
     void skipParenGroup();
+    bool peekIsStar();
     // Set by skipReservedConstruct so the caller does not resynchronise on top
     // of a skip that already landed cleanly.
     bool suppressSync;
