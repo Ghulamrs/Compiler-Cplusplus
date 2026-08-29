@@ -382,7 +382,7 @@ cc::Function *SemanticAnalyzer::findOperator(cc::Expr *lhs, cc::Type *lt,
     if (!isClassType(lt) && !isClassType(rt)) return 0;
 
     // A member is preferred, and only exists when the object is on the left.
-    if (cxx::MethodDecl *m = findMemberOperator(lt, op, at)) return m;
+    if (cxx::MethodDecl *m = findMemberOperator(lt, op, rhs, rt, at)) return m;
 
     // operator= must be a member; C++ says so, and a non-member one could not
     // be generated for a class that never mentioned it.
@@ -418,36 +418,46 @@ cc::Function *SemanticAnalyzer::findFreeOperator(cc::Expr *lhs, cc::Type *lt,
     return exact ? exact : viable;
 }
 
+// An operator may be overloaded like any other member -- operator+(V) beside
+// operator+(int) -- so the RIGHT operand chooses which.  Taking the first by
+// name would reject `v + 5` for having the wrong argument type.
 cxx::MethodDecl *SemanticAnalyzer::findMemberOperator(cc::Type *lt, cc::BinaryOp op,
+                                                      cc::Expr *rhs, cc::Type *rt,
                                                       cc::ASTNode *at) {
     cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(stripReference(lt));
     if (!ct) return 0;
     cxx::ClassDecl *cd = findClass(ct->className);
     if (!cd) return 0;
-    const std::string name = std::string("operator") + cc::binaryOpText(op);
-    cxx::ClassDecl *owner = 0;
-    cc::Decl *found = findMember(cd, name, &owner);
-    cxx::MethodDecl *md = dynamic_cast<cxx::MethodDecl*>(found);
-    if (!md) return 0;
-    if (!memberIsAccessible(md, owner)) {
-        error(at, "'" + md->name + "' is " + cxx::accessText(memberAccess(md))
-                  + " in class '" + owner->name + "'");
-    }
-    return md;
-}
 
-// An operator member takes exactly one argument, and it is the right operand.
-bool SemanticAnalyzer::checkOperatorOperand(cxx::MethodDecl *op, cc::Expr *rhs,
-                                            cc::Type *rt, cc::ASTNode *at) {
-    if (op->params.size() != 1) {
-        error(at, "'" + op->name + "' must take exactly one argument");
-        return false;
+    const std::string name = std::string("operator") + cc::binaryOpText(op);
+    const std::vector<cc::Function*> cands = findMethods(cd, name);
+    if (cands.empty()) return 0;
+
+    cxx::MethodDecl *exact = 0;
+    cxx::MethodDecl *viable = 0;
+    for (std::size_t i = 0; i < cands.size(); ++i) {
+        cxx::MethodDecl *m = dynamic_cast<cxx::MethodDecl*>(cands[i]);
+        if (!m || m->params.size() != 1) continue;
+        cc::Type *want = m->params[0]->type;
+        if (rt && sameType(rt, stripReference(want))) { if (!exact) exact = m; continue; }
+        if (convertible(rhs, rt, want))               { if (!viable) viable = m; }
     }
-    if (!convertible(rhs, rt, op->params[0]->type)) {
-        error(at, "cannot pass " + describe(rt) + " to " + op->name);
-        return false;
+
+    cxx::MethodDecl *chosen = exact ? exact : viable;
+    if (!chosen) {
+        // A member of that name exists but none of them takes this operand.
+        // Say so here rather than letting the builtin rules blame the types.
+        cxx::MethodDecl *any = dynamic_cast<cxx::MethodDecl*>(cands[0]);
+        if (any) error(at, "no '" + name + "' takes " + describe(rt));
+        return 0;
     }
-    return true;
+
+    cxx::ClassDecl *owner = findClass(chosen->ownerClass);
+    if (!memberIsAccessible(chosen, owner)) {
+        error(at, "'" + chosen->name + "' is " + cxx::accessText(memberAccess(chosen))
+                  + " in class '" + (owner ? owner->name : ct->className) + "'");
+    }
+    return chosen;
 }
 
 cc::Decl *SemanticAnalyzer::findMember(cxx::ClassDecl *cd, const std::string &member,
@@ -1629,8 +1639,6 @@ cc::Type *SemanticAnalyzer::analyzeExprImpl(cc::Expr *e, bool &isLValue) {
         // a member named for the operator.  Found, this is a call, and every
         // rule below belongs to the builtin operators it is not.
         if (cc::Function *op = findOperator(be->lhs, lt, be->rhs, rt, be->op, be)) {
-            cxx::MethodDecl *asMember = dynamic_cast<cxx::MethodDecl*>(op);
-            if (asMember && !checkOperatorOperand(asMember, be->rhs, rt, be)) return 0;
             be->resolvedOperator = op;
             isLValue = false;
             return op->retType;
@@ -1639,6 +1647,16 @@ cc::Type *SemanticAnalyzer::analyzeExprImpl(cc::Expr *e, bool &isLValue) {
         if (cc::binaryOpIsAssignment(be->op)) {
             // The other half of lvalue-ness: only an object can be assigned to.
             if (!lL) { error(be, "left side of assignment is not an lvalue"); return 0; }
+
+            // A compound assignment on an object needs an operator of its own.
+            // Without one there is nothing sensible to do -- and doing the
+            // arithmetic on the object's bytes, which is what fell out before,
+            // is not an approximation of one.
+            if (be->op != cc::BIN_Assign && (isClassType(lt) || isClassType(rt))) {
+                error(be, "no 'operator" + std::string(cc::binaryOpText(be->op))
+                          + "' for " + describe(lt));
+                return 0;
+            }
             if (!convertible(be->rhs, rt, lt)) {
                 error(be, "cannot assign " + describe(rt) + " to " + describe(lt));
                 return 0;

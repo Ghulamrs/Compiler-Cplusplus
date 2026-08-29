@@ -683,6 +683,18 @@ IRReg Lowering::lowerAddress(Expr *e) {
         if (u->op == UN_Deref) return lowerValue(u->operand);   // *p: p's value
     }
 
+    // A call, or an overloaded operator, whose result is an object: it has no
+    // name, but it does have a place -- the slot the caller supplied for it.
+    // That is what makes  (a + b).x  addressable.
+    if (CallExpr *c = dynamic_cast<CallExpr*>(e)) {
+        if (c->resolved && isObjectType(c->resolved->retType)) return lowerValue(e);
+    }
+    if (BinaryExpr *bo = dynamic_cast<BinaryExpr*>(e)) {
+        if (bo->resolvedOperator && isObjectType(bo->resolvedOperator->retType)) {
+            return lowerValue(e);
+        }
+    }
+
     if (BinaryExpr *b = dynamic_cast<BinaryExpr*>(e)) {
         // An assignment is an lvalue; its address is the left side's.
         if (binaryOpIsAssignment(b->op)) { lowerAssign(b); return lowerAddress(b->lhs); }

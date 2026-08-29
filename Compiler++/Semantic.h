@@ -104,12 +104,11 @@ private:
     cc::Function *findOperator(cc::Expr *lhs, cc::Type *lt,
                                cc::Expr *rhs, cc::Type *rt,
                                cc::BinaryOp op, cc::ASTNode *at);
-    cxx::MethodDecl *findMemberOperator(cc::Type *lt, cc::BinaryOp op, cc::ASTNode *at);
+    cxx::MethodDecl *findMemberOperator(cc::Type *lt, cc::BinaryOp op,
+                                        cc::Expr *rhs, cc::Type *rt, cc::ASTNode *at);
     cc::Function *findFreeOperator(cc::Expr *lhs, cc::Type *lt,
                                    cc::Expr *rhs, cc::Type *rt,
                                    const std::string &name);
-    bool checkOperatorOperand(cxx::MethodDecl *op, cc::Expr *rhs, cc::Type *rt,
-                              cc::ASTNode *at);
     bool isClassType(cc::Type *t);
     // Walks the base chain, most derived first -- which IS name hiding.
     // `foundIn` receives the class it was found in, for the diagnostic.

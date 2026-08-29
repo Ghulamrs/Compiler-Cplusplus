@@ -379,7 +379,9 @@ std::string Parser::operatorMemberName() {
         { TOK_SLASH, "/" }, { TOK_PERCENT, "%" },
         { TOK_EQ, "==" }, { TOK_NE, "!=" },
         { TOK_LT, "<" }, { TOK_GT, ">" }, { TOK_LE, "<=" }, { TOK_GE, ">=" },
-        { TOK_ASSIGN, "=" }
+        { TOK_ASSIGN, "=" },
+        { TOK_PLUSEQ, "+=" }, { TOK_MINUSEQ, "-=" }, { TOK_STAREQ, "*=" },
+        { TOK_SLASHEQ, "/=" }, { TOK_PERCENTEQ, "%=" }
     };
     const int count = static_cast<int>(sizeof(table) / sizeof(table[0]));
     for (int i = 0; i < count; ++i) {
