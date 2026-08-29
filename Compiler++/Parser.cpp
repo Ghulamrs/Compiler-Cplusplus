@@ -273,6 +273,12 @@ void Parser::parseFunctionParamsAndBody(Function *fn) {
     }
     expect(TOK_RPAREN, "after parameter list");
 
+    // int get() const  -- named rather than left to fail as a missing body.
+    if (cur.kind == TOK_CONST) {
+        errorAtCurrent("const member functions are not supported in this version");
+        advance();
+    }
+
     parseFunctionTail(fn);                          // virtual: C++ adds  : x(1)
 
     if (match(TOK_SEMI)) return;                    // a declaration only
@@ -318,7 +324,20 @@ Type *Parser::parseArraySuffixes(Type *element) {
 }
 
 void Parser::parseVarInitializer(VarDecl *vd) {
-    if (match(TOK_ASSIGN)) vd->init = parseExpression();
+    if (!match(TOK_ASSIGN)) return;
+    // int a[3] = {1, 2, 3};  -- a brace list, which this version does not take.
+    // Name it, because "expected an expression, found '{'" explains nothing.
+    if (cur.kind == TOK_LBRACE) {
+        errorAtCurrent("brace initialisers are not supported in this version");
+        int depth = 0;
+        while (cur.kind != TOK_EOF) {
+            if (cur.kind == TOK_LBRACE) ++depth;
+            else if (cur.kind == TOK_RBRACE) { --depth; advance(); if (!depth) break; continue; }
+            advance();
+        }
+        return;
+    }
+    vd->init = parseExpression();
 }
 
 // --- statements -------------------------------------------------------

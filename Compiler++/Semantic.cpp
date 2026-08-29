@@ -314,12 +314,21 @@ bool SemanticAnalyzer::convertible(cc::Expr *fromExpr, cc::Type *from, cc::Type 
 // int, int*, int** need no resolution; a class name does.
 bool SemanticAnalyzer::checkTypeIsKnown(cc::Type *t, cc::ASTNode *at, const std::string &where) {
     if (!t) return true;
+    // A pointer or reference to a class needs only its NAME: `class A;` then
+    // `A *p;` is the whole point of a forward declaration.  Anything by value
+    // needs the definition, and says so below.
     cc::PointerType *pt = dynamic_cast<cc::PointerType*>(t);
-    if (pt) return checkTypeIsKnown(pt->base, at, where);
+    if (pt) {
+        if (dynamic_cast<cxx::ClassType*>(pt->base)) return true;
+        return checkTypeIsKnown(pt->base, at, where);
+    }
+    cxx::ReferenceType *rt = dynamic_cast<cxx::ReferenceType*>(t);
+    if (rt) {
+        if (dynamic_cast<cxx::ClassType*>(rt->base)) return true;
+        return checkTypeIsKnown(rt->base, at, where);
+    }
     cc::ArrayType *arr = dynamic_cast<cc::ArrayType*>(t);
     if (arr) return checkTypeIsKnown(arr->element, at, where);
-    cxx::ReferenceType *rt = dynamic_cast<cxx::ReferenceType*>(t);
-    if (rt) return checkTypeIsKnown(rt->base, at, where);
     cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(t);
     if (ct && !findClass(ct->className)) {
         error(at, "unknown type '" + ct->className + "' in " + where);

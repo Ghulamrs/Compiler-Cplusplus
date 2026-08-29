@@ -127,6 +127,15 @@ ClassDecl *Parser::parseClass() {
     advance();
     classNames.insert(cname);                   // before the body, so Node *next; works
 
+    // `class A;` names a type without defining it.  Recording the name is the
+    // whole of what a forward declaration does, and it is what lets two
+    // classes point at each other.
+    if (cur.kind == TOK_SEMI) {
+        advance();
+        suppressSync = true;
+        return 0;
+    }
+
     ClassDecl *cd = new ClassDecl(cname);
     cd->line = line;
     cd->col = col;
@@ -296,6 +305,15 @@ Decl *Parser::parseMemberDecl(const std::string &className, Access access) {
         advance();
     }
 
+    if (cur.kind == TOK_COLON) {
+        errorAtCurrent("bit-fields are not supported in this version");
+        while (cur.kind != TOK_SEMI && cur.kind != TOK_RBRACE && cur.kind != TOK_EOF) advance();
+        match(TOK_SEMI);
+        delete t;
+        suppressSync = true;
+        return 0;
+    }
+
     if (cur.kind == TOK_LPAREN) {
         // MethodDecl IS a cc::Function, so the C layer's routine fills it.
         MethodDecl *md = new MethodDecl(t, name, access);
@@ -389,6 +407,22 @@ std::string Parser::operatorMemberName() {
         { TOK_PLUSEQ, "+=" }, { TOK_MINUSEQ, "-=" }, { TOK_STAREQ, "*=" },
         { TOK_SLASHEQ, "/=" }, { TOK_PERCENTEQ, "%=" }
     };
+    // '<<' and '>>' are two tokens here -- this version has no shift operator --
+    // so the pair is tested before the single, or `operator<<` would be read as
+    // `operator<` with a stray '<' after it.
+    if (cur.kind == TOK_LT || cur.kind == TOK_GT) {
+        const State probe = save();
+        const TokenKind first = cur.kind;
+        advance();
+        const bool doubled = (cur.kind == first);
+        restore(probe);
+        if (doubled) {
+            errorAtCurrent(std::string("operator") + (first == TOK_LT ? "<<" : ">>")
+                           + " is not supported in this version");
+            return std::string();
+        }
+    }
+
     const int count = static_cast<int>(sizeof(table) / sizeof(table[0]));
     for (int i = 0; i < count; ++i) {
         if (cur.kind == table[i].kind) {
