@@ -1,7 +1,4 @@
-// Lexer.h
-//
-// One lexer serves both class layers, so it stays at global scope: the token
-// set is the one thing C and C++ genuinely share unchanged.
+// Lexer.h -- one lexer for both layers, so it stays at global scope.
 //
 // C++98 only.
 
@@ -18,11 +15,8 @@ public:
     Lexer(const std::string &s) : src(s), pos(0), line(1), col(1) {}
     Token nextToken();
 
-    // Speculation support.  The parser sometimes has to try a rule and take it
-    // back -- inside a function body,  Point p;  and  p.x = 1;  both start with
-    // an identifier, so the declaration rule is attempted first and rewound if
-    // it does not fit.  The line and column travel with the offset, or a rewind
-    // would leave later tokens reporting the wrong place.
+    // Rewind, for the parser's speculation.  Line and column travel with the
+    // offset, or later tokens would report the wrong place.
     struct Position {
         std::size_t offset;
         int line;
@@ -41,12 +35,8 @@ private:
     char peekAt(std::size_t ahead) const {
         return pos + ahead < src.size() ? src[pos + ahead] : '\0';
     }
-    // The single place the position advances, so line and column cannot drift
-    // out of step with the offset.
+    // The only place the position advances, so line and column cannot drift.
     char get();
-
-    // Whitespace and comments are equivalent for the grammar, so they are
-    // skipped together:  //  to end of line, and  /* */  possibly spanning lines.
     void skipWhitespaceAndComments();
 
     Token makeToken(TokenKind k, int startLine, int startCol);

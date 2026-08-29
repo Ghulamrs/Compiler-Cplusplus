@@ -1,26 +1,14 @@
-// Lower.h
+// Lower.h -- PASS 5b, LAYER 1: lowering the C layer, namespace `cc`.
 //
-// PASS 5b, LAYER 1 -- lowering the C layer, in namespace `cc`.
+// Walks the parts of the tree C already had and turns them into IR.  Where a
+// construct might be a C++ one it asks a virtual hook, which here answers "not
+// mine"; cxx::Lowering (Lower1.h) answers them.
 //
-// This is the last place the two-layer design does its trick, and the place it
-// does the most work.  cc::Lowering walks the parts of the tree C already had
-// -- arithmetic, control flow, locals, calls -- and turns them into IR.  Where
-// a construct might be a C++ one it asks a VIRTUAL hook, which in this layer
-// answers "not mine".  cxx::Lowering (Lower1.h) derives from this class and
-// answers those hooks with member access, `this`, virtual dispatch, `new` and
-// `delete`.
-//
-// The hooks are shaped around a single idea that runs through the whole pass:
-//
-//     ADDRESS versus VALUE.
-//
-// Every expression can be asked for its address (lowerAddress) or its value
-// (lowerValue).  An lvalue -- a variable, a field, *p -- has an address, and
-// its value is a load from it.  A non-lvalue -- 1, a + b, a call -- has only a
-// value.  Assignment lowers its left side as an address and its right as a
-// value.  That one distinction is what the semantic pass's isLValue result was
-// for, and it is what makes references disappear: a reference variable holds an
-// address, so lowering its ADDRESS is a load, not a local-slot lookup.
+// The pass turns on one distinction: ADDRESS versus VALUE.  An lvalue has an
+// address and its value is a load from it; a non-lvalue has only a value.
+// Assignment lowers its left side as an address and its right as a value.
+// This is also what makes references disappear -- a reference variable holds
+// an address, so lowering its address is a load, not a slot lookup.
 //
 // C++98 only.
 
@@ -58,20 +46,16 @@ protected:
     // Labels to jump to for `break` and `continue`, innermost last.
     std::vector<int> breakTargets;
     std::vector<int> continueTargets;
-    // Blocks currently being lowered, innermost last.  A `return` in the
-    // middle of nested scopes has to run the destructors of every one of them,
-    // and this is the list it walks.
+    // Innermost last.  A `return` inside nested scopes runs the destructors of
+    // every one of them, walking this list.
     std::vector<CompoundStmt*> openBlocks;
 
     // --- declarations -------------------------------------------------
     virtual void lowerDecl(Decl *d);
     void lowerFunction(Function *f, const std::string &mangled,
                        const std::string &sourceName, bool hasThis);
-    // Called after the parameters are in place and before the body, so a
-    // constructor can emit its base call, vptr store and member initialisers.
-    virtual void emitPrologue(Function *f);
-    // Called before every `return` and at the end of the body.
-    virtual void emitEpilogue(Function *f);
+    virtual void emitPrologue(Function *f);     // a ctor's base call and inits
+    virtual void emitEpilogue(Function *f);     // a dtor's tail
 
     // --- statements ---------------------------------------------------
     virtual void lowerStmt(Stmt *s);
@@ -80,15 +64,11 @@ protected:
     void lowerWhile(WhileStmt *s);
     void lowerFor(ForStmt *s);
     virtual void lowerVarDecl(VarDecl *vd);
-    // Destructor calls for the locals a block owns.  Nothing in the C layer
-    // has a destructor, so this does nothing here.
+    // Nothing in the C layer has a destructor, so these do nothing here.
     virtual void emitScopeExit(CompoundStmt *block);
-    // Destructors for every block still open, innermost first -- what a
-    // `return` in the middle of nested scopes has to run.
     virtual void emitAllOpenScopeExits();
 
     // --- expressions --------------------------------------------------
-    // The two halves of the address/value distinction.
     IRReg lowerValue(Expr *e);
     IRReg lowerAddress(Expr *e);
     IRReg lowerBinary(BinaryExpr *e);
@@ -98,26 +78,20 @@ protected:
     virtual IRReg lowerCall(CallExpr *e, bool wantsResult);
 
     // --- hooks the C++ layer answers ----------------------------------
-    // Each returns false when the node is not one this layer handles, which is
-    // always the case in the C layer.  `out` receives the register on success.
+    // false when the node is not one this layer handles -- always, here.
     virtual bool lowerLayerValue(Expr *e, IRReg &out);
     virtual bool lowerLayerAddress(Expr *e, IRReg &out);
 
     // --- helpers ------------------------------------------------------
     int sizeOfType(Type *t) const;
-    // The declared type of an expression, as the semantic pass would give it.
     // Lowering needs sizes, not meanings, so this is a small local recompute
-    // rather than a second full type checker.
+    // rather than a second type checker.
     virtual Type *typeOf(Expr *e);
     void pushScope();
     void popScope();
     int declareLocal(const std::string &name, int size, bool isParam);
     int findSlot(const std::string &name) const;
-    // Is this expression a reference variable?  Then its slot holds an address.
-    virtual bool isReferenceExpr(Expr *e);
-
-    // Records the type the semantic pass gave each declaration, so lowering can
-    // ask for a size without redoing analysis.
+    virtual bool isReferenceExpr(Expr *e);  // its slot holds an address
     std::map<std::string, Type*> localTypes;
     std::map<std::string, Type*> globalTypes;
 

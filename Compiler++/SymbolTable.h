@@ -1,11 +1,8 @@
-// SymbolTable.h
+// SymbolTable.h -- scopes and the names in them.
 //
-// Scopes and the names in them.
-//
-// A SymbolTable is a STACK of Scopes: the innermost is searched first and a
-// lookup walks outward, which is exactly what lexical scoping means.  Class
-// members get a scope of their own, pushed while a method body is analysed --
-// that is what makes an unqualified `x` inside a method find the class's field.
+// A stack of Scopes: the innermost is searched first and lookup walks outward.
+// Class members get a scope of their own, pushed while a method body is
+// analysed, which is what makes an unqualified `x` find the class's field.
 //
 // C++98 only.
 

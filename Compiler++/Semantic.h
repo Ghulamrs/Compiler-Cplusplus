@@ -1,29 +1,15 @@
+// Semantic.h -- PASS 3, semantic analysis.
 //
-//  Semantic.h
-//  Compiler++
+// Walks the one tree the layered parser produced, which mixes cc:: and cxx::
+// nodes, so this pass is deliberately not split in two.
 //
-//  Created by G. R. Akhtar on 29/08/2026.
+// Checks: names resolve and nothing is declared twice; reference initialisers
+// and assignment targets are lvalues; types match on initialisation,
+// assignment, arithmetic, calls and return; access control including protected
+// through derivation; overrides, hiding and the virtual-destructor rule;
+// initialiser-list membership, duplication and declaration order.
 //
-//  PASS 3 -- semantic analysis, run after the layered parser has produced a
-//  tree.  Like the parser, it works across BOTH class layers at once:
-//
-//      cc::   LAYER 1, the C layer   -- functions, statements, expressions
-//      cxx::  LAYER 2, the C++ layer -- classes, fields, methods, members
-//
-//  The analyzer is deliberately NOT split in two: a single tree mixes cc::
-//  and cxx:: nodes (see the layering model at the top of AST.h), so one walk
-//  resolves both.  Node kinds are told apart with dynamic_cast, which works
-//  across the layers because every node derives from cc::ASTNode.
-//
-//  What it checks today:
-//    * every name resolves, and nothing is declared twice in one scope
-//    * a reference initialiser is an lvalue, and an assignment target is one
-//    * types match on initialisation, assignment and arithmetic
-//    * calls match their function's parameter count and types
-//    * a return expression matches the enclosing function's return type
-//    * a private member is not touched from outside its class
-//
-//  C++98 only.
+// C++98 only.
 
 #ifndef SEMANTIC_H
 #define SEMANTIC_H
@@ -45,60 +31,44 @@ public:
     // entry point: a whole translation unit
     void analyze(const std::vector<cc::Decl*> &units);
 
-    // The resolved hierarchy, for the layout pass that runs next.  Handing it
-    // over rather than recomputing it means there is one answer to "what is
-    // this class's base", and the layout pass inherits the cycle-breaking the
-    // semantic pass already did.
+    // The resolved hierarchy, for the layout pass -- one answer to "what is
+    // this class's base", with the cycles already broken.
     const std::map<std::string, cxx::ClassDecl*> &classMap() const { return classes; }
 
 private:
     SymbolTable symbols;
     Diagnostics &diag;
 
-    // Every class by name, so a member access can find the class a value's
-    // type names.  When single inheritance lands, member lookup becomes a walk
-    // up this map from a class to its base.
     std::map<std::string, cxx::ClassDecl*> classes;
 
-    // Context for the function currently being analysed.
+    // Context for the function being analysed.
     cc::Type *currentReturnType;
     std::string currentClass;       // empty outside a method body
-    // A constructor and a destructor have no return type at all, which is not
-    // the same as returning void: `return;` is fine, `return x;` is not.
+    // A ctor/dtor has no return type at all, which is not the same as void.
     bool currentIsCtorOrDtor;
     int loopDepth;                  // break/continue legality
 
-    // Types the analyzer creates for expression results.  They belong to no
-    // AST node, so the analyzer owns them and frees them in its destructor.
+    // Types the analyzer forms itself belong to no AST node, so it owns them
+    // and frees them in its destructor.  A formed type must own every node in
+    // it -- borrowing a subtree the AST will delete leaves a dangling pointer.
     std::vector<cc::Type*> ownedTypes;
     cc::Type *makeBuiltin(const std::string &name);
-    // A deep copy, registered for cleanup.  Needed whenever the analyzer forms
-    // a NEW type out of an existing one -- &x is a pointer to x's type, and
-    // that pointer type cannot borrow a subtree the AST will delete.
     cc::Type *cloneType(cc::Type *t);
     cc::Type *makePointerTo(cc::Type *t);
 
     // passes
     void collectClasses(const std::vector<cc::Decl*> &units);
-    // Links each class to its base and rejects unknown bases and cycles.
-    // Runs before anything looks a member up, because member lookup walks the
-    // chain this pass builds.
+    // Runs before anything looks a member up: member lookup walks this chain.
     void resolveBases();
-    // Marks a method that matches a base virtual as an override.
     void resolveOverrides(cxx::ClassDecl *cd);
-    // A constructor's  : x(1), Base(2)  list.
     void analyzeMemberInits(cxx::MethodDecl *ctor, cxx::ClassDecl *cd);
-    // Rules that concern a class as a whole rather than one member.
     void checkClassInvariants(cxx::ClassDecl *cd);
-    // Chooses the constructor taking argCount arguments; reports if there is
-    // none, or more than one.  0 means "the class declares no constructors",
-    // which is legal and means there is nothing to call.
+    // By argument count.  0 means the class declares no constructors, which is
+    // legal and means there is nothing to call.
     cxx::MethodDecl *selectConstructor(cxx::ClassDecl *cd, std::size_t argCount,
                                        cc::ASTNode *at, const std::string &what);
-    // Records, on each block, the locals whose destructors must run on exit.
     void recordScopeExitDestruction(cc::CompoundStmt *block,
                                     const std::vector<cc::VarDecl*> &declared);
-    // Does an object of this type need a destructor call when it dies?
     bool hasDestructor(cc::Type *t);
     void declareTopLevel(const std::vector<cc::Decl*> &units);
     void analyzeDecl(cc::Decl *d);
@@ -111,17 +81,14 @@ private:
 
     // member lookup
     cxx::ClassDecl *findClass(const std::string &name);
-    // Walks the base chain: the most derived class wins, which IS name hiding.
-    // `foundIn` receives the class the member was actually found in, so an
-    // access diagnostic can name the right class.
+    // Walks the base chain, most derived first -- which IS name hiding.
+    // `foundIn` receives the class it was found in, for the diagnostic.
     cc::Decl *findMember(cxx::ClassDecl *cd, const std::string &member,
                          cxx::ClassDecl **foundIn = 0);
-    // Is `derived` the same class as `base`, or below it in the chain?
     static bool isDerivedFrom(cxx::ClassDecl *derived, cxx::ClassDecl *base);
-    // The access rule, in one place: public everywhere, protected inside the
-    // class or anything derived from it, private only inside the class itself.
+    // public everywhere, protected inside the class or anything derived from
+    // it, private only inside the class itself.
     bool memberIsAccessible(cc::Decl *m, cxx::ClassDecl *owner) const;
-    // The class a member belongs to, from the member itself.
     cxx::ClassDecl *ownerClassOf(cc::Decl *m);
     static bool sameSignature(cc::Function *a, cc::Function *b);
     static cxx::Access memberAccess(cc::Decl *m);
@@ -134,19 +101,15 @@ private:
     static cc::Type *stripReference(cc::Type *t);
     static std::string describe(cc::Type *t);
     static bool sameType(cc::Type *a, cc::Type *b);
-    // Implicit conversion, which is sameType plus the upcasts single
-    // inheritance makes free:  Derived* -> Base*  and  Derived -> Base&.
+    // sameType plus the upcasts single inheritance makes free.
     bool canConvert(cc::Type *from, cc::Type *to);
-    // canConvert, plus the one rule that needs the EXPRESSION and not just its
-    // type: the literal 0 is the null pointer constant, so it initialises any
-    // pointer even though its type is int.
+    // canConvert, plus the rule needing the EXPRESSION: literal 0 is the null
+    // pointer constant, though its type is int.
     bool convertible(cc::Expr *fromExpr, cc::Type *from, cc::Type *to);
     static bool isNullPointerConstant(cc::Expr *e);
-    // The class a type names, looking through one pointer or reference.
-    cxx::ClassDecl *classOf(cc::Type *t);
+    cxx::ClassDecl *classOf(cc::Type *t);   // through one pointer or reference
     static bool isVoid(cc::Type *t);
-    // std::size_t as text.  A stream rather than sprintf, so the code carries
-    // no fixed-size buffer and MSVC raises no deprecation warning.
+    // A stream rather than sprintf: no fixed buffer, and MSVC stays quiet.
     static std::string countText(std::size_t n);
     void checkTypeIsKnown(cc::Type *t, cc::ASTNode *at, const std::string &where);
     void checkCallArgs(cc::CallExpr *call, cc::Function *fn);

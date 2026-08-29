@@ -23,16 +23,12 @@ void SemanticAnalyzer::error(cc::ASTNode *at, const std::string &msg) {
     else    diag.error(0, 0, msg);
 }
 
-// Expression results need a type object that outlives the call but belongs to
-// no AST node.  The analyzer keeps them and frees them in its destructor.
 cc::Type *SemanticAnalyzer::makeBuiltin(const std::string &name) {
     cc::Type *t = new cc::BuiltinType(name);
     ownedTypes.push_back(t);
     return t;
 }
 
-// A type formed by the analyzer must own every node in it: the AST deletes its
-// own types, so borrowing a subtree would leave a dangling pointer.
 cc::Type *SemanticAnalyzer::cloneType(cc::Type *t) {
     if (!t) return 0;
     cc::BuiltinType *bt = dynamic_cast<cc::BuiltinType*>(t);
@@ -52,9 +48,7 @@ cc::Type *SemanticAnalyzer::makePointerTo(cc::Type *t) {
     return p;
 }
 
-// ---------------------------------------------------------------------
-// Type helpers
-// ---------------------------------------------------------------------
+// --- Type helpers ---
 
 cc::Type *SemanticAnalyzer::stripReference(cc::Type *t) {
     cxx::ReferenceType *rt = dynamic_cast<cxx::ReferenceType*>(t);
@@ -101,8 +95,6 @@ bool SemanticAnalyzer::sameType(cc::Type *a, cc::Type *b) {
     return false;                       // different shapes entirely
 }
 
-// The class a type names, seeing through at most one pointer or reference --
-// which is all single inheritance ever needs to look through.
 cxx::ClassDecl *SemanticAnalyzer::classOf(cc::Type *t) {
     t = stripReference(t);
     cc::PointerType *pt = dynamic_cast<cc::PointerType*>(t);
@@ -111,11 +103,8 @@ cxx::ClassDecl *SemanticAnalyzer::classOf(cc::Type *t) {
     return ct ? findClass(ct->className) : 0;
 }
 
-// What may be used where a `to` is expected.  Beyond an exact match, single
-// inheritance makes the upcasts free: a Derived object BEGINS with its Base
-// subobject at offset 0, so Derived* and Base* are the same address and the
-// conversion costs nothing at runtime.  The reverse is not allowed -- a Base*
-// need not point at a Derived.
+// A Derived object begins with its Base subobject at offset 0, so the upcast
+// costs nothing.  The reverse is not allowed: a Base* need not be a Derived.
 bool SemanticAnalyzer::canConvert(cc::Type *from, cc::Type *to) {
     if (sameType(from, to)) return true;
     if (!from || !to) return true;              // an earlier error already spoke
@@ -141,9 +130,8 @@ bool SemanticAnalyzer::canConvert(cc::Type *from, cc::Type *to) {
     return false;
 }
 
-// In C++98 a literal 0 is the null pointer constant.  Its TYPE is int, so no
-// type-only rule can accept it where a pointer is wanted; the expression
-// itself has to be looked at.
+// Its TYPE is int, so no type-only rule can accept it where a pointer is
+// wanted -- the expression itself has to be looked at.
 bool SemanticAnalyzer::isNullPointerConstant(cc::Expr *e) {
     cc::NumberExpr *n = dynamic_cast<cc::NumberExpr*>(e);
     return n && n->value == 0;
@@ -170,17 +158,13 @@ void SemanticAnalyzer::checkTypeIsKnown(cc::Type *t, cc::ASTNode *at, const std:
     }
 }
 
-// ---------------------------------------------------------------------
-// Classes and their members
-// ---------------------------------------------------------------------
+// --- Classes and their members ---
 
 cxx::ClassDecl *SemanticAnalyzer::findClass(const std::string &name) {
     std::map<std::string, cxx::ClassDecl*>::iterator it = classes.find(name);
     return (it == classes.end()) ? 0 : it->second;
 }
 
-// Link every class to its base, and refuse the two ways that can go wrong:
-// a base that was never declared, and a chain that loops back on itself.
 void SemanticAnalyzer::resolveBases() {
     std::map<std::string, cxx::ClassDecl*>::iterator it;
     for (it = classes.begin(); it != classes.end(); ++it) {
@@ -198,7 +182,6 @@ void SemanticAnalyzer::resolveBases() {
         cd->base = base;
     }
 
-    // Cycle detection, done after linking so it can just walk the pointers.
     // A chain longer than the number of classes must have revisited one.
     for (it = classes.begin(); it != classes.end(); ++it) {
         cxx::ClassDecl *cd = it->second;
@@ -213,8 +196,7 @@ void SemanticAnalyzer::resolveBases() {
     }
 }
 
-// Most-derived first: the first match wins, and that IS name hiding -- a
-// derived member with the same name conceals the base's.
+// Most-derived first: the first match wins, which IS name hiding.
 cc::Decl *SemanticAnalyzer::findMember(cxx::ClassDecl *cd, const std::string &member,
                                        cxx::ClassDecl **foundIn) {
     for (cxx::ClassDecl *c = cd; c; c = c->base) {
@@ -222,8 +204,7 @@ cc::Decl *SemanticAnalyzer::findMember(cxx::ClassDecl *cd, const std::string &me
             cxx::FieldDecl *fd = dynamic_cast<cxx::FieldDecl*>(c->members[i]);
             if (fd && fd->name == member) { if (foundIn) *foundIn = c; return fd; }
             cxx::MethodDecl *md = dynamic_cast<cxx::MethodDecl*>(c->members[i]);
-            // Constructors share the class's name and destructors are never
-            // reached by ordinary lookup, so neither takes part in it.
+            // Neither takes part in ordinary name lookup.
             if (md && !md->isConstructor && !md->isDestructor && md->name == member) {
                 if (foundIn) *foundIn = c;
                 return md;
@@ -244,8 +225,7 @@ bool SemanticAnalyzer::memberIsAccessible(cc::Decl *m, cxx::ClassDecl *owner) co
     const cxx::Access a = memberAccess(m);
     if (a == cxx::ACC_Public) return true;
     if (currentClass.empty()) return false;
-    // `const` on this method means findClass() is off limits, so the current
-    // class is looked up directly.
+    // const, so findClass() is off limits.
     std::map<std::string, cxx::ClassDecl*>::const_iterator it = classes.find(currentClass);
     cxx::ClassDecl *from = (it == classes.end()) ? 0 : it->second;
     if (!from) return false;
@@ -286,16 +266,13 @@ cc::Type *SemanticAnalyzer::memberType(cc::Decl *m) {
     return 0;
 }
 
-// A method that matches a base method by name becomes an override when the
-// signatures agree AND the base one is virtual.  Same name, different
-// signature is legal C++ but almost always a mistake, so it warns: the derived
-// method HIDES the base one rather than overriding it.
+// Same name and matching signature over a base virtual is an override.  Same
+// name, different signature is legal but almost always a mistake, so it warns.
 void SemanticAnalyzer::resolveOverrides(cxx::ClassDecl *cd) {
     if (!cd->base) return;
 
-    // A destructor overrides by POSITION, not by name: ~Derived and ~Base are
-    // spelled differently but occupy the same vtable slot.  So it is matched
-    // here rather than by the name search below.
+    // A destructor overrides by POSITION: ~Derived and ~Base are spelled
+    // differently but occupy the same vtable slot.
     if (cd->dtor) {
         for (cxx::ClassDecl *b = cd->base; b; b = b->base) {
             if (!b->dtor) continue;
@@ -327,16 +304,15 @@ void SemanticAnalyzer::resolveOverrides(cxx::ClassDecl *cd) {
                       + " instead of " + describe(bm->retType));
             continue;
         }
-        // In C++ an overriding function is virtual whether or not the keyword
-        // is repeated, so virtualness propagates down the chain from here.
+        // Virtualness propagates down the chain whether or not `virtual` is
+        // repeated.
         md->overrides = bm;
         md->isVirtual = true;
     }
 }
 
-// Members of the class AND of every base, so a method body sees them
-// unqualified.  Walking most-derived first means insert() -- which refuses a
-// duplicate -- keeps the derived member, which is exactly name hiding.
+// Most-derived first, so insert() -- which refuses a duplicate -- keeps the
+// derived member.  That is name hiding, for free.
 void SemanticAnalyzer::pushClassScope(cxx::ClassDecl *cd) {
     symbols.pushScope();
     for (cxx::ClassDecl *c = cd; c; c = c->base) {
@@ -356,9 +332,8 @@ void SemanticAnalyzer::pushClassScope(cxx::ClassDecl *cd) {
     }
 }
 
-// Does a value of this type need a destructor call when it dies?  Only a
-// class object does -- and only one whose class, or some base of it, declares
-// a destructor.  A pointer never does: `delete` is explicit for a reason.
+// Only a class object whose class or some base declares one.  A pointer never
+// does -- `delete` is explicit for a reason.
 bool SemanticAnalyzer::hasDestructor(cc::Type *t) {
     if (!t) return false;
     if (dynamic_cast<cc::PointerType*>(t)) return false;
@@ -388,11 +363,8 @@ void SemanticAnalyzer::checkClassInvariants(cxx::ClassDecl *cd) {
         error(cd->dtor, "a destructor cannot take parameters");
     }
 
-    // Does this class, or any base, have a virtual function?  If so it is meant
-    // to be used through a base pointer, and deleting through that pointer with
-    // a non-virtual destructor would run the WRONG destructor -- the classic
-    // silent leak.  This subset has no exceptions to complicate it, so the rule
-    // is simply stated and worth stating.
+    // A polymorphic class is meant to be used through a base pointer, and
+    // deleting through one with a non-virtual destructor runs the wrong one.
     bool polymorphic = false;
     for (cxx::ClassDecl *c = cd; c && !polymorphic; c = c->base) {
         for (std::size_t i = 0; i < c->members.size(); ++i) {
@@ -410,9 +382,8 @@ void SemanticAnalyzer::checkClassInvariants(cxx::ClassDecl *cd) {
     }
 }
 
-// ': x(1), Base(2)' -- each name is either a field OF THIS CLASS or the base's
-// own name.  Inherited fields cannot be initialised here; that is the base
-// constructor's job, which is why the base gets an entry of its own.
+// Each name is a field OF THIS CLASS or the base's own name.  An inherited
+// field is the base constructor's job, which is why the base gets an entry.
 void SemanticAnalyzer::analyzeMemberInits(cxx::MethodDecl *ctor, cxx::ClassDecl *cd) {
     std::vector<std::string> seen;
     int lastFieldIndex = -1;
@@ -490,10 +461,8 @@ void SemanticAnalyzer::analyzeMemberInits(cxx::MethodDecl *ctor, cxx::ClassDecl 
         }
     }
 
-    // THE ORDERING TRAP.  Members are constructed in DECLARATION order, never
-    // in the order the initialiser list happens to be written.  Code that
-    // writes them out of order usually believes otherwise, and the bug only
-    // shows when one member's initialiser reads another.
+    // Members are constructed in DECLARATION order, never in the order the
+    // list is written.  The bug only shows when one initialiser reads another.
     if (outOfOrder) {
         diag.warning(ctor->line, ctor->col,
                      "the initialiser list is written out of declaration order; members are "
@@ -504,8 +473,7 @@ void SemanticAnalyzer::analyzeMemberInits(cxx::MethodDecl *ctor, cxx::ClassDecl 
 cxx::MethodDecl *SemanticAnalyzer::selectConstructor(cxx::ClassDecl *cd, std::size_t argCount,
                                                      cc::ASTNode *at, const std::string &what) {
     if (!cd) return 0;
-    // A class with no constructors at all needs none: its fields are simply
-    // uninitialised, exactly as in C.
+    // No constructors at all is legal: the fields are uninitialised, as in C.
     if (cd->ctors.empty()) {
         if (argCount > 0) {
             error(at, "class '" + cd->name + "' has no constructor, so " + what
@@ -513,8 +481,7 @@ cxx::MethodDecl *SemanticAnalyzer::selectConstructor(cxx::ClassDecl *cd, std::si
         }
         return 0;
     }
-    // Selection is by argument COUNT.  Full overload resolution on parameter
-    // types is a later job; arity settles every case this subset can express.
+    // By argument COUNT.  Full overload resolution is a later job.
     cxx::MethodDecl *found = 0;
     int matches = 0;
     for (std::size_t i = 0; i < cd->ctors.size(); ++i) {
@@ -532,9 +499,7 @@ cxx::MethodDecl *SemanticAnalyzer::selectConstructor(cxx::ClassDecl *cd, std::si
     return found;
 }
 
-// ---------------------------------------------------------------------
-// Entry point
-// ---------------------------------------------------------------------
+// --- Entry point ---
 
 void SemanticAnalyzer::analyze(const std::vector<cc::Decl*> &units) {
     // 1) every class name, so declarations may refer to a class defined later
@@ -682,9 +647,7 @@ void SemanticAnalyzer::analyzeFunction(cc::Function *fn) {
     currentIsCtorOrDtor = savedCtorDtor;
 }
 
-// ---------------------------------------------------------------------
-// Statements
-// ---------------------------------------------------------------------
+// --- Statements ---
 
 void SemanticAnalyzer::analyzeBlock(cc::CompoundStmt *block) {
     symbols.pushScope();
@@ -699,12 +662,9 @@ void SemanticAnalyzer::analyzeBlock(cc::CompoundStmt *block) {
     symbols.popScope();
 }
 
-// Objects are destroyed in the exact REVERSE of the order they were created:
-// the last one built is the first taken apart.  Recording the list here, on
-// the block, is what lets the lowering phase emit those calls on every path
-// that leaves -- the end of the block, a return, a break -- without having to
-// work the scoping out again.  With no exceptions in this subset, those are
-// the only paths there are, which is what keeps this simple.
+// Exact reverse of construction.  Recording it here lets the lowering phase
+// emit the calls on every path out without redoing the scoping.  With no
+// exceptions, those paths are just: end of block, return, break.
 void SemanticAnalyzer::recordScopeExitDestruction(cc::CompoundStmt *block,
                                                   const std::vector<cc::VarDecl*> &declared) {
     block->destroyAtExit.clear();
@@ -723,11 +683,9 @@ void SemanticAnalyzer::analyzeVarDecl(cc::VarDecl *vd, bool declareIt) {
     bool initIsLValue = false;
     if (vd->init) initType = analyzeExpr(vd->init, initIsLValue);
 
-    // THE REFERENCE RULE.  `int &r = p.x;` binds a name to an existing object,
-    // so the initialiser must denote one -- an lvalue.  `int &s = 1;` has
-    // nothing to bind to: 1 is a value, not an object.  This is the check that
-    // needs analyzeExpr()'s isLValue result, and it is why that result is
-    // threaded through every expression form.
+    // A reference binds a name to an existing object, so its initialiser must
+    // denote one.  `int &s = 1;` has nothing to bind to.  This is what
+    // analyzeExpr()'s isLValue result exists for.
     cxx::ReferenceType *rt = dynamic_cast<cxx::ReferenceType*>(vd->type);
     if (rt) {
         if (!vd->init) {
@@ -853,9 +811,7 @@ void SemanticAnalyzer::analyzeStmt(cc::Stmt *s) {
     }
 }
 
-// ---------------------------------------------------------------------
-// Calls
-// ---------------------------------------------------------------------
+// --- Calls ---
 
 void SemanticAnalyzer::checkCallArgs(cc::CallExpr *call, cc::Function *fn) {
     if (call->args.size() != fn->params.size()) {
@@ -868,7 +824,7 @@ void SemanticAnalyzer::checkCallArgs(cc::CallExpr *call, cc::Function *fn) {
         cc::Type *at = analyzeExpr(call->args[i], lv);
         cc::Type *pt = fn->params[i]->type;
         if (!at || !pt) continue;
-        // a reference parameter needs an lvalue, same rule as a reference variable
+        // a reference parameter needs an lvalue, same rule as a variable
         cxx::ReferenceType *rt = dynamic_cast<cxx::ReferenceType*>(pt);
         if (rt && !lv) {
             error(call->args[i], "argument to reference parameter '"
@@ -882,15 +838,13 @@ void SemanticAnalyzer::checkCallArgs(cc::CallExpr *call, cc::Function *fn) {
     }
 }
 
-// ---------------------------------------------------------------------
-// Expressions: one walk over a tree that mixes cc:: and cxx:: nodes
-// ---------------------------------------------------------------------
+// --- Expressions: one walk over a tree that mixes cc:: and cxx:: nodes ---
 
 cc::Type *SemanticAnalyzer::analyzeExpr(cc::Expr *e, bool &isLValue) {
     isLValue = false;
     if (!e) return 0;
 
-    // --- LAYER 2 forms, tested first because their operands are expressions ---
+    // --- LAYER 2 forms, tested first: their operands are expressions ---
 
     cxx::MemberAccessExpr *ma = dynamic_cast<cxx::MemberAccessExpr*>(e);
     if (ma) {
@@ -934,8 +888,7 @@ cc::Type *SemanticAnalyzer::analyzeExpr(cc::Expr *e, bool &isLValue) {
             bool lv = false;
             analyzeExpr(ne->args[i], lv);
         }
-        // new T(args) allocates AND constructs, so the arguments must match a
-        // constructor exactly as they would for a named object.
+        // new allocates AND constructs, so the arguments must match a ctor.
         cxx::ClassType *nct = dynamic_cast<cxx::ClassType*>(ne->allocType);
         if (nct) selectConstructor(findClass(nct->className), ne->args.size(), ne, "'new'");
         else if (!ne->args.empty()) {
@@ -953,8 +906,7 @@ cc::Type *SemanticAnalyzer::analyzeExpr(cc::Expr *e, bool &isLValue) {
         if (t && !pt) {
             error(de, "'delete' applied to " + describe(t) + ", which is not a pointer");
         } else if (pt) {
-            // Deleting through a base pointer runs the destructor found by the
-            // vtable -- but only if there IS one in the vtable.
+            // Only a virtual destructor is found through the vtable.
             cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(pt->base);
             cxx::ClassDecl *cd = ct ? findClass(ct->className) : 0;
             if (cd && cd->dtor && !cd->dtor->isVirtual) {
@@ -980,10 +932,8 @@ cc::Type *SemanticAnalyzer::analyzeExpr(cc::Expr *e, bool &isLValue) {
         Symbol *s = symbols.lookup(id->name);
         if (!s) { error(id, "undeclared identifier '" + id->name + "'"); return 0; }
         if (s->kind == SYM_Type) { error(id, "type '" + id->name + "' used as an expression"); return 0; }
-        // An unqualified name inside a method may have come from a BASE class
-        // scope, so it needs the same access check that obj.member gets --
-        // otherwise a private base member would be reachable simply by not
-        // writing `this->` in front of it.
+        // May have come from a base class scope, so it needs the same access
+        // check obj.member gets -- or omitting `this->` would defeat it.
         if (s->kind == SYM_Field || s->kind == SYM_Method) {
             cc::Decl *m = dynamic_cast<cc::Decl*>(s->decl);
             cxx::ClassDecl *owner = m ? ownerClassOf(m) : 0;
@@ -1070,8 +1020,7 @@ cc::Type *SemanticAnalyzer::analyzeExpr(cc::Expr *e, bool &isLValue) {
         if (!lt || !rt) return 0;       // the operand already reported its error
 
         if (be->op == cc::BIN_Assign) {
-            // THE ASSIGNMENT RULE, the other half of lvalue-ness: only an
-            // object can be assigned to.  `1 = p.x;` is rejected here.
+            // The other half of lvalue-ness: only an object can be assigned to.
             if (!lL) { error(be, "left side of assignment is not an lvalue"); return 0; }
             if (!convertible(be->rhs, rt, lt)) {
                 error(be, "cannot assign " + describe(rt) + " to " + describe(lt));

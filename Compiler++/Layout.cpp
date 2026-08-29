@@ -70,8 +70,7 @@ void Layout::computeFor(cxx::ClassDecl *cd) {
     ClassLayout cl;
     cl.name = cd->name;
 
-    // Does this class need a vptr?  Yes if it declares a virtual function, or
-    // if its base already had one.
+    // Needed if this class declares a virtual, or its base already had one.
     bool declaresVirtual = false;
     for (std::size_t i = 0; i < cd->members.size(); ++i) {
         cxx::MethodDecl *md = dynamic_cast<cxx::MethodDecl*>(cd->members[i]);
@@ -83,15 +82,12 @@ void Layout::computeFor(cxx::ClassDecl *cd) {
     cl.align = 1;
 
     if (baseLayout) {
-        // The base subobject sits at offset 0 -- which is what makes an upcast
-        // free -- so its fields keep the offsets they already had.
+        // The base subobject sits at offset 0, so its fields keep their offsets.
         cl.fields = baseLayout->fields;
         offset = baseLayout->size;
         cl.align = baseLayout->align;
-        // A base without a vptr, derived from by a class that has one, would
-        // need the vptr in front and the base pushed down.  Rejecting that
-        // keeps every upcast a no-op; requiring `virtual` in the base instead
-        // is the ordinary way to write such a hierarchy anyway.
+        // That would need the vptr in front and the base pushed down.
+        // Rejecting it keeps every upcast a no-op.
         if (cl.hasVPtr && !baseLayout->hasVPtr) {
             diag.error(cd->line, cd->col,
                        "class '" + cd->name + "' introduces a virtual function but its base '"
@@ -127,35 +123,28 @@ void Layout::computeFor(cxx::ClassDecl *cd) {
         if (falign > cl.align) cl.align = falign;
     }
 
-    // An object's size is rounded up so that an array of them stays aligned.
+    // Rounded up so an array of them stays aligned.
     cl.size = roundUp(offset, cl.align);
     if (cl.size == 0) cl.size = 1;              // an empty class still occupies a byte
 
     // --- construction and destruction order -------------------------------
-    // The base is built first, because a derived object is not usable until
-    // the part of it that came from the base exists.  Then this class's own
-    // fields, in DECLARATION order -- not the order some constructor's
-    // initialiser list happens to be written in, which is why writing them out
-    // of order earns a warning.  Then the constructor body, which may now rely
-    // on everything being in place.
+    // Base first, then this class's own fields in DECLARATION order -- not the
+    // order an initialiser list is written in, hence that warning -- then the
+    // constructor body, which can now rely on everything being in place.
     cl.hasCtor = !cd->ctors.empty();
     if (cd->base) cl.constructionPlan.push_back(InitStep(InitStep::StepBase, cd->base->name));
-    // The vptr is set AFTER the base is built and BEFORE this class's fields.
-    // That ordering is what makes a virtual call inside a constructor reach
-    // THIS class's override and not a derived one: while the base constructor
-    // ran, the object was still, for dispatch purposes, a base.
+    // AFTER the base and BEFORE this class's fields: that is what makes a
+    // virtual call inside a constructor reach THIS class's override.
     if (cl.hasVPtr) cl.constructionPlan.push_back(InitStep(InitStep::StepVPtr, cd->name));
     for (std::size_t i = 0; i < cd->members.size(); ++i) {
         cxx::FieldDecl *fd = dynamic_cast<cxx::FieldDecl*>(cd->members[i]);
         if (fd) cl.constructionPlan.push_back(InitStep(InitStep::StepField, fd->name));
     }
-    // Only a class that HAS a constructor gets a body step; without one there
-    // is simply nothing to run after the fields are in place.
+    // Without a constructor there is nothing to run after the fields.
     if (cl.hasCtor || cd->dtor) cl.constructionPlan.push_back(InitStep(InitStep::StepBody, cd->name));
 
-    // Destruction is the exact reverse: body first (it may still need the
-    // members), then the members backwards, then the base last -- the base
-    // outlives the derived part, just as it was there before it.
+    // Exact reverse: body first (it may still need the members), then members
+    // backwards, then the base -- which outlives the derived part.
     for (std::size_t i = cl.constructionPlan.size(); i > 0; --i) {
         cl.destructionPlan.push_back(cl.constructionPlan[i - 1]);
     }
@@ -163,9 +152,8 @@ void Layout::computeFor(cxx::ClassDecl *cd) {
     cl.hasDtor = (cd->dtor != 0) || (baseLayout && baseLayout->hasDtor);
 
     // --- the vtable -------------------------------------------------------
-    // Start from the base's, so a slot index means the same thing all the way
-    // down the chain.  An override REPLACES its base's slot; a newly
-    // introduced virtual APPENDS one.
+    // Start from the base's, so a slot means the same thing down the chain.
+    // An override REPLACES its slot; a new virtual APPENDS one.
     if (baseLayout) cl.vtable = baseLayout->vtable;
     if (cl.hasVPtr) {
         for (std::size_t i = 0; i < cd->members.size(); ++i) {
@@ -207,9 +195,7 @@ void Layout::print() const {
             cxx::MethodDecl *m = cl.vtable[s];
             std::cout << "    vtable[" << s << "] = " << m->ownerClass << "::" << m->name << std::endl;
         }
-        // The plan is only worth showing when the order can actually matter:
-        // a class with a base, a constructor or a destructor.  A plain
-        // aggregate has nothing interesting to say here.
+        // Only worth showing when the order can matter.
         if (cl.hasCtor || cl.hasDtor || cl.hasVPtr) {
             std::cout << "    construct:";
             for (std::size_t i = 0; i < cl.constructionPlan.size(); ++i) {

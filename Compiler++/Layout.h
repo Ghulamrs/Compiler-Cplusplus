@@ -1,26 +1,17 @@
-// Layout.h
+// Layout.h -- PASS 4, the object model.
 //
-// PASS 4 -- the object model.  Where does each field sit inside an object, how
-// big is an object, and which function does a virtual call actually reach?
+// Where each field sits, how big an object is, and which function a virtual
+// call reaches.  Single inheritance makes the rules fit in three sentences:
 //
-// This is the first pass that thinks about machine representation rather than
-// meaning, and it is where the decision to allow only SINGLE inheritance pays
-// for itself.  With one base, the rules fit in a paragraph:
+//   * A derived object begins with its base subobject, so a Derived* and its
+//     Base* are the same address and an upcast costs nothing.
+//   * If a class or any base has a virtual function, the object starts with a
+//     pointer to its vtable; a base that already has one shares it.
+//   * A vtable is its base's, copied, with overridden slots replaced and new
+//     virtuals appended -- so a slot index means the same thing all the way
+//     down the chain.
 //
-//   * A derived object BEGINS with its base subobject.  So the address of a
-//     Derived is also the address of its Base, and the upcast the semantic
-//     pass allows costs nothing at all at runtime -- no pointer adjustment.
-//   * If a class or any of its bases has a virtual function, the object starts
-//     with a hidden pointer to its class's vtable.  Because the base subobject
-//     is at offset 0, a base that already has a vptr SHARES it with the derived
-//     class; only a class that introduces the first virtual function in its
-//     chain adds one.
-//   * A vtable is its base's vtable, copied, with overridden slots replaced and
-//     newly introduced virtuals appended.  So a slot index means the same thing
-//     in every class of the chain, which is exactly what makes a virtual call
-//     "load the vptr, index by a constant, call".
-//
-// Multiple inheritance would break all three of those sentences at once.
+// Multiple inheritance would break all three at once.
 //
 // C++98 only.
 

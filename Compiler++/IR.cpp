@@ -51,8 +51,7 @@ std::string mangleFunction(const std::string &className, const std::string &name
     return className + "__" + name;
 }
 
-// Constructors overload by argument count in this subset, so the count is what
-// makes their symbols distinct.
+// Constructors overload by argument count, so the count distinguishes them.
 std::string mangleConstructor(const std::string &className, std::size_t argCount) {
     std::ostringstream ss;
     ss << className << "__ctor" << argCount;
@@ -127,8 +126,7 @@ IRReg IRFunction::emitGlobalAddr(const std::string &sym, int line) {
     return i.dest;
 }
 
-// A field access is an address plus a constant.  Offset zero still emits the
-// instruction, so a dump shows every member access as one step.
+// Offset zero still emits, so a dump shows every member access as one step.
 IRReg IRFunction::emitFieldAddr(IRReg base, long offset, int line) {
     IRInstr i(IR_FieldAddr);
     i.dest = newReg();

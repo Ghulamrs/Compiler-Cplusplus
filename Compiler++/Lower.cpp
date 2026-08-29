@@ -11,9 +11,7 @@ namespace cc {
 Lowering::Lowering(IRModule &module, const Layout &l, Diagnostics &d)
     : mod(module), layout(l), diag(d), fn(0) {}
 
-// ---------------------------------------------------------------------
-// Scopes and slots
-// ---------------------------------------------------------------------
+// --- Scopes and slots ---
 
 void Lowering::pushScope() {
     scopeMarks.push_back(static_cast<int>(scopeNames.size()));
@@ -47,9 +45,7 @@ int Lowering::sizeOfType(Type *t) const {
     return s > 0 ? s : Layout::IntSize;
 }
 
-// ---------------------------------------------------------------------
-// Types, recomputed cheaply
-// ---------------------------------------------------------------------
+// --- types, recomputed cheaply ---------------------------------------
 
 Type *Lowering::typeOf(Expr *e) {
     if (!e) return 0;
@@ -78,9 +74,7 @@ bool Lowering::isReferenceExpr(Expr *) {
     return false;               // C has no references
 }
 
-// ---------------------------------------------------------------------
-// Declarations
-// ---------------------------------------------------------------------
+// --- Declarations ---
 
 void Lowering::lowerUnit(const std::vector<Decl*> &units) {
     // Globals first, so a function body can refer to any of them.
@@ -106,8 +100,7 @@ void Lowering::lowerFunction(Function *f, const std::string &mangled,
 
     IRFunction *savedFn = fn;
     fn = irf;
-    // A function body is a fresh naming environment; nothing from the caller's
-    // scope is visible, so the slot map starts empty and is restored after.
+    // A fresh naming environment: nothing from the caller's scope is visible.
     std::map<std::string, int> savedSlots;
     savedSlots.swap(slots);
     std::map<std::string, Type*> savedTypes;
@@ -115,7 +108,7 @@ void Lowering::lowerFunction(Function *f, const std::string &mangled,
 
     pushScope();
 
-    // `this` is an ordinary first parameter once the C++ has been erased.
+    // An ordinary first parameter, once the C++ is erased.
     if (hasThis) {
         declareLocal("this", Layout::PointerSize, true);
         ++irf->paramCount;
@@ -131,8 +124,7 @@ void Lowering::lowerFunction(Function *f, const std::string &mangled,
 
     emitPrologue(f);                        // virtual: a constructor's preamble
     if (f->body) lowerBlock(f->body);
-    // A body that already returned needs no tail: the destructor calls and the
-    // implicit return were emitted on the path that left.
+    // A body that already returned emitted its tail on the path that left.
     if (!irf->endsWithTerminator()) {
         emitEpilogue(f);                    // virtual: a destructor's tail
         irf->emitReturn(IR_NoReg, f->line);
@@ -149,9 +141,7 @@ void Lowering::emitEpilogue(Function *) {}
 void Lowering::emitScopeExit(CompoundStmt *) {}
 void Lowering::emitAllOpenScopeExits() {}
 
-// ---------------------------------------------------------------------
-// Statements
-// ---------------------------------------------------------------------
+// --- Statements ---
 
 void Lowering::lowerBlock(CompoundStmt *block) {
     pushScope();
@@ -170,7 +160,7 @@ void Lowering::lowerStmt(Stmt *s) {
     if (DeclStmt *ds = dynamic_cast<DeclStmt*>(s))        { lowerVarDecl(ds->var); return; }
 
     if (ExprStmt *es = dynamic_cast<ExprStmt*>(s)) {
-        // The value is discarded, but a call still has to happen.
+        // The value is discarded, but the call still happens.
         if (CallExpr *call = dynamic_cast<CallExpr*>(es->expr)) lowerCall(call, false);
         else if (es->expr) lowerValue(es->expr);
         return;
@@ -179,7 +169,7 @@ void Lowering::lowerStmt(Stmt *s) {
     if (ReturnStmt *rs = dynamic_cast<ReturnStmt*>(s)) {
         IRReg v = IR_NoReg;
         if (rs->expr) v = lowerValue(rs->expr);
-        // Everything this return is leaving must be torn down first.
+        // Everything this return leaves is torn down first.
         emitAllOpenScopeExits();
         fn->emitReturn(v, rs->line);
         return;
@@ -205,11 +195,10 @@ void Lowering::lowerVarDecl(VarDecl *vd) {
     const int slot = declareLocal(vd->name, size, false);
     localTypes[vd->name] = vd->type;
     if (vd->init) {
+        // A reference stores the ADDRESS of what it binds to -- the whole of
+        // what a reference becomes.
         const IRReg value = lowerValue(vd->init);
         const IRReg addr = fn->emitLocalAddr(slot, vd->line);
-        // A reference variable stores the ADDRESS of what it binds to, so its
-        // initialiser is lowered as an address; that is the whole of what a
-        // reference becomes.
         fn->emitStore(addr, value, size, vd->line);
     }
 }
@@ -250,7 +239,7 @@ void Lowering::lowerWhile(WhileStmt *s) {
 }
 
 void Lowering::lowerFor(ForStmt *s) {
-    // The init declaration belongs to the loop, not to the enclosing block.
+    // The init declaration belongs to the loop.
     pushScope();
     if (s->init) lowerStmt(s->init);
 
@@ -265,7 +254,7 @@ void Lowering::lowerFor(ForStmt *s) {
     }
 
     breakTargets.push_back(done);
-    continueTargets.push_back(step);        // `continue` runs the step first
+    continueTargets.push_back(step);        // continue runs the step first
     lowerStmt(s->body);
     continueTargets.pop_back();
     breakTargets.pop_back();
@@ -277,9 +266,7 @@ void Lowering::lowerFor(ForStmt *s) {
     popScope();
 }
 
-// ---------------------------------------------------------------------
-// Expressions
-// ---------------------------------------------------------------------
+// --- Expressions ---
 
 IRReg Lowering::lowerAddress(Expr *e) {
     if (!e) return IR_NoReg;
@@ -291,8 +278,8 @@ IRReg Lowering::lowerAddress(Expr *e) {
         const int slot = findSlot(id->name);
         if (slot >= 0) {
             const IRReg addr = fn->emitLocalAddr(slot, e->line);
-            // A reference's slot holds the address of another object, so the
-            // address OF the reference is the value IN its slot.
+            // A reference's slot holds another object's address, so the address
+            // OF the reference is the value IN its slot.
             if (isReferenceExpr(e)) return fn->emitLoad(addr, Layout::PointerSize, e->line);
             return addr;
         }
@@ -300,12 +287,11 @@ IRReg Lowering::lowerAddress(Expr *e) {
     }
 
     if (UnaryExpr *u = dynamic_cast<UnaryExpr*>(e)) {
-        // *p as an lvalue: the address is simply p's value.
-        if (u->op == UN_Deref) return lowerValue(u->operand);
+        if (u->op == UN_Deref) return lowerValue(u->operand);   // *p: p's value
     }
 
     if (BinaryExpr *b = dynamic_cast<BinaryExpr*>(e)) {
-        // An assignment is an lvalue in C++; its address is the left side's.
+        // An assignment is an lvalue; its address is the left side's.
         if (b->op == BIN_Assign) { lowerAssign(b); return lowerAddress(b->lhs); }
     }
 
@@ -342,7 +328,7 @@ IRReg Lowering::lowerUnary(UnaryExpr *e) {
     switch (e->op) {
     case UN_Neg:    return fn->emitUnary(IR_Neg, lowerValue(e->operand), e->line);
     case UN_Not:    return fn->emitUnary(IR_LogicalNot, lowerValue(e->operand), e->line);
-    case UN_AddrOf: return lowerAddress(e->operand);        // &x IS an address
+    case UN_AddrOf: return lowerAddress(e->operand);        // &x IS the address
     case UN_Deref: {
         const IRReg addr = lowerValue(e->operand);
         Type *t = typeOf(e);
@@ -377,8 +363,8 @@ IRReg Lowering::lowerBinary(BinaryExpr *e) {
 }
 
 IRReg Lowering::lowerAssign(BinaryExpr *e) {
-    // Right side first is not arbitrary: it is the order the language leaves
-    // open and the order that keeps the address live for the shortest time.
+    // Right side first: the order the language leaves open, and the one that
+    // keeps the address live for the shortest time.
     const IRReg value = lowerValue(e->rhs);
     const IRReg addr = lowerAddress(e->lhs);
     Type *t = typeOf(e->lhs);
@@ -386,8 +372,8 @@ IRReg Lowering::lowerAssign(BinaryExpr *e) {
     return value;
 }
 
-// && and || must not evaluate their right side when the left already decides.
-// That is a control-flow fact, so it lowers to branches, not to an operator.
+// The right side must not run when the left already decides -- a control-flow
+// fact, so it lowers to branches rather than an operator.
 IRReg Lowering::lowerShortCircuit(BinaryExpr *e) {
     const int slot = fn->addLocal("__sc", Layout::IntSize, false);
     const int done = fn->newLabel();

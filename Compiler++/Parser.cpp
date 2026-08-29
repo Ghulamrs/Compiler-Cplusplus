@@ -41,9 +41,7 @@ bool Parser::match(TokenKind k) {
     return true;
 }
 
-// After an error, skip forward to a token that plausibly begins something new.
-// A ';' ends the broken construct; a '}' closes it; a keyword that can only
-// start a statement or declaration is a safe place to resume.
+// Skip to a token that plausibly begins something new.
 void Parser::synchronize() {
     while (cur.kind != TOK_EOF) {
         if (cur.kind == TOK_SEMI) { advance(); return; }
@@ -88,11 +86,9 @@ std::vector<Decl*> Parser::parseTranslationUnit() {
         const std::size_t posBefore = lexer->tell().offset;
         Decl *d = parseDeclaration();       // virtual
         if (d) units.push_back(d);
-        // Only a FAILED parse needs resynchronising.  A declaration that
-        // produced a node left the parser in a sensible place even if it also
-        // produced a diagnostic, and skipping from there would swallow the
-        // next declaration whole.  The progress check is the backstop that
-        // makes this loop terminate whatever happens.
+        // Only a FAILED parse resynchronises: one that produced a node left the
+        // parser somewhere sensible even if it also reported.  The progress
+        // check is the backstop that makes this loop terminate regardless.
         if (!d) synchronize();
         if (lexer->tell().offset == posBefore && cur.kind != TOK_EOF) advance();
     }
@@ -204,11 +200,9 @@ CompoundStmt *Parser::parseBlock() {
     return block;
 }
 
-// A statement is a keyword form, a block, a declaration, or an expression.
-// Declaration and expression cannot be told apart by their first token in C++
-// --  Point p;  vs  p.x = 1;  -- so the declaration rule is tried first and
-// rewound if it fails.  Because parseType() is VIRTUAL, this one C-layer rule
-// also declares the C++ layer's types, with no C++-layer statement code.
+// Declaration and expression share a first token -- Point p; vs p.x = 1; -- so
+// the declaration rule is tried first and rewound if it fails.  parseType() is
+// VIRTUAL, so this one C rule also declares the C++ layer's types.
 Stmt *Parser::parseStatement() {
     const int line = cur.line, col = cur.col;
     Stmt *s = 0;
@@ -305,7 +299,7 @@ Type *Parser::parsePointerSuffixes(Type *base) {
 }
 
 Type *Parser::parseType() {
-    match(TOK_CONST);                               // accepted and ignored for now
+    match(TOK_CONST);                               // accepted, not enforced
     const char *name = 0;
     switch (cur.kind) {
     case TOK_INT:  name = "int"; break;
@@ -322,17 +316,16 @@ Type *Parser::parseType() {
     return parsePointerSuffixes(t);
 }
 
-// --- the expression precedence chain ----------------------------------
-// Each level parses the level below it and then loops on its own operators.
-// Reading them top to bottom is reading the precedence table.
+// --- the precedence chain ---------------------------------------------
+// Each level parses the one below and loops on its own operators, so reading
+// top to bottom is reading the precedence table.
 
 Expr *Parser::parseExpression() {
     return parseAssign();
 }
 
-// Assignment binds loosest and groups to the RIGHT:  a = b = c  is  a = (b = c).
-// Whether the left side is assignable is not a grammar question -- the semantic
-// pass decides that, which is why it is not checked here.
+// Loosest, and groups RIGHT: a = b = c is a = (b = c).  Whether the left side
+// is assignable is the semantic pass's question, not the grammar's.
 Expr *Parser::parseAssign() {
     Expr *left = parseLogicalOr();
     if (left && cur.kind == TOK_ASSIGN) {
@@ -345,9 +338,6 @@ Expr *Parser::parseAssign() {
     }
     return left;
 }
-
-// A small helper would need a table of token-to-operator mappings; at this size
-// an explicit loop per level stays easier to read than the machinery to avoid it.
 
 Expr *Parser::parseLogicalOr() {
     Expr *left = parseLogicalAnd();
@@ -452,9 +442,8 @@ Expr *Parser::parseUnary() {
     return e;
 }
 
-// The suffix loop.  Calls belong to C; member access does not, so it is asked
-// for through a virtual hook that returns 0 in this layer.  One loop handles
-// both, in any order, which is what makes  p.getX().y  parse.
+// Calls belong to C, member access does not -- so it comes through a virtual
+// hook.  One loop handles both in any order, which is what parses p.getX().y
 Expr *Parser::parsePostfix() {
     Expr *e = parsePrimary();                       // virtual
     while (e) {
@@ -508,13 +497,11 @@ Expr *Parser::parsePrimary() {
     return 0;
 }
 
-// C has no member access -- structs do, but this teaching subset introduces
-// them with classes, in the layer above.
+// This subset introduces member access with classes, in the layer above.
 Expr *Parser::parseMemberSuffix(Expr *) {
     return 0;
 }
 
-// C puts nothing between a parameter list and a body.
 void Parser::parseFunctionTail(Function *) {
 }
 

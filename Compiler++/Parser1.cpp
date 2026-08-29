@@ -11,9 +11,7 @@ namespace cxx {
 // The base constructor creates the lexer and primes the first token.
 Parser::Parser(const std::string &s, Diagnostics &d) : cc::Parser(s, d) {}
 
-// --- declarations -----------------------------------------------------
-// Only the class form is new.  Variables and functions are C's, so they are
-// handed straight back to the base class rather than reimplemented.
+// Only the class form is new; the rest goes back to the base class.
 cc::Decl *Parser::parseDeclaration() {
     if (cur.kind == TOK_CLASS || cur.kind == TOK_STRUCT) return parseClass();
     return cc::Parser::parseDeclaration();
@@ -39,8 +37,7 @@ ClassDecl *Parser::parseClass() {
 
     // optional base clause:  : [public|private|protected] Base
     if (match(TOK_COLON)) {
-        // `struct D : B` inherits publicly, `class D : B` privately -- the same
-        // default the keyword sets for members.
+        // The same default the keyword sets for members.
         cd->baseAccess = defaultAccess == ACC_Public ? ACC_Public : ACC_Private;
         if (cur.kind == TOK_PUBLIC || cur.kind == TOK_PRIVATE || cur.kind == TOK_PROTECTED) {
             cd->baseAccess = (cur.kind == TOK_PUBLIC)  ? ACC_Public
@@ -54,8 +51,7 @@ ClassDecl *Parser::parseClass() {
             cd->baseName = cur.text;
             advance();
         }
-        // Single inheritance is a deliberate limit of this subset, so say so
-        // plainly rather than letting it surface as a confusing parse error.
+        // A deliberate limit, so say so rather than emitting a parse error.
         if (cur.kind == TOK_COMMA) {
             errorAtCurrent("multiple inheritance is not supported; "
                            "this compiler allows a single base class");
@@ -80,10 +76,7 @@ ClassDecl *Parser::parseClass() {
         Decl *m = parseMemberDecl(cname, access);
         if (m) {
             cd->members.push_back(m);
-            // Index the constructors and the destructor.  They live in
-            // `members`, which owns them; these are aliases for lookup, because
-            // constructors all share one name and a destructor is never found
-            // by ordinary name lookup at all.
+            // Aliases for lookup; `members` owns them.
             MethodDecl *md = dynamic_cast<MethodDecl*>(m);
             if (md && md->isConstructor) cd->ctors.push_back(md);
             if (md && md->isDestructor) {
@@ -92,9 +85,7 @@ ClassDecl *Parser::parseClass() {
                 else cd->dtor = md;
             }
         }
-        // A member that produced a node left the parser somewhere sensible,
-        // even if it also produced a diagnostic; only a failed parse needs
-        // resynchronising, and only a stalled one needs forcing along.
+        // Only a failed parse resynchronises; only a stalled one is forced.
         if (!m) synchronize();
         if (lexer->tell().offset == posBefore && cur.kind != TOK_EOF) advance();
     }
@@ -104,12 +95,8 @@ ClassDecl *Parser::parseClass() {
     return cd;
 }
 
-// A member is a field or a method.  Both start with a type and a name, so the
-// parameter list is what tells them apart -- and the method case reuses the C
-// layer's parseFunctionRest(), which also parses the body.
-// Two tokens of lookahead:  IDENT '('  where IDENT is the class's own name.
-// Anything else -- including a field or method that merely starts with a type
-// -- is not a constructor.
+// Both start with a type and a name, so the parameter list tells them apart.
+// Two tokens of lookahead: IDENT '(' where IDENT is the class's own name.
 bool Parser::looksLikeConstructor(const std::string &className) {
     if (cur.kind != TOK_IDENTIFIER || cur.text != className) return false;
     State st = save();
@@ -156,9 +143,8 @@ Decl *Parser::parseMemberDecl(const std::string &className, Access access) {
         MethodDecl *md = new MethodDecl(0, className, access);
         md->ownerClass = className;
         md->isConstructor = true;
-        // Recorded, not rejected: whether a constructor may be virtual is a
-        // rule about meaning, and reporting it here would make the parser
-        // resynchronise over a member it actually parsed perfectly well.
+        // Recorded, not rejected: that is a rule about meaning, and reporting
+        // it here would resynchronise over a member that parsed fine.
         md->isVirtual = sawVirtual;
         md->line = line;
         md->col = col;
@@ -183,9 +169,7 @@ Decl *Parser::parseMemberDecl(const std::string &className, Access access) {
     advance();
 
     if (cur.kind == TOK_LPAREN) {
-        // A method is a C function that also knows its access and its class.
-        // parseFunctionRest() fills in a cc::Function; because MethodDecl IS a
-        // cc::Function, the same call populates the derived node.
+        // MethodDecl IS a cc::Function, so the C layer's routine fills it.
         MethodDecl *md = new MethodDecl(t, name, access);
         md->ownerClass = className;
         md->isVirtual = sawVirtual;
@@ -206,10 +190,8 @@ Decl *Parser::parseMemberDecl(const std::string &className, Access access) {
     return fd;
 }
 
-// --- overridden extension point: the type grammar ---------------------
-// C++ types are C types (int, int*, int**) plus class/qualified names and
-// references.  The builtin and pointer forms come from cc::Parser; only the
-// genuinely C++ parts are added here.
+// C types plus class names and references; the builtin and pointer forms come
+// from cc::Parser.
 cc::Type *Parser::parseType() {
     cc::Type *t = cc::Parser::parseType();      // int, char, void, bool, and T*
 
@@ -239,10 +221,8 @@ cc::Type *Parser::parseType() {
     return t;
 }
 
-// ': ' name '(' args ')' { ',' name '(' args ')' }  -- only on a constructor.
-// The names are not resolved here: whether `x` is a field of this class or the
-// name of its base is a question about the hierarchy, which is the semantic
-// pass's business, not the grammar's.
+// Names are not resolved here: whether `x` is a field or the base's name is a
+// question about the hierarchy, which is the semantic pass's business.
 void Parser::parseFunctionTail(cc::Function *fn) {
     MethodDecl *md = dynamic_cast<MethodDecl*>(fn);
     if (cur.kind != TOK_COLON) return;
@@ -276,8 +256,7 @@ void Parser::parseFunctionTail(cc::Function *fn) {
     }
 }
 
-// C initialises with  = expr .  C++ adds direct initialisation,  Point q(1, 2),
-// which is how a constructor is called on a named object.
+// C++ adds direct initialisation, Point q(1, 2).
 void Parser::parseVarInitializer(cc::VarDecl *vd) {
     if (cur.kind == TOK_LPAREN) {
         advance();
@@ -313,9 +292,7 @@ QualifiedName *Parser::parseQualifiedName() {
     return qn;
 }
 
-// --- overridden extension point: primary expressions ------------------
-// Numbers, identifiers and parentheses are C's.  This layer adds the two
-// primary forms C has no notion of.
+// Numbers, identifiers and parentheses are C's; these are not.
 cc::Expr *Parser::parsePrimary() {
     const int line = cur.line, col = cur.col;
 
@@ -354,11 +331,8 @@ cc::Expr *Parser::parsePrimary() {
     return cc::Parser::parsePrimary();
 }
 
-// --- overridden extension point: the postfix hook ---------------------
-// The inherited parsePostfix() loop asks this on every turn.  Returning 0 in
-// the C layer and a node here is what lets ONE loop parse  p.getX().y  --
-// alternating between a C form (the call) and a C++ form (the member access)
-// without either layer knowing about the other's suffix.
+// The inherited parsePostfix() loop asks this every turn, which is what lets
+// one loop parse p.getX().y -- alternating C and C++ suffixes.
 cc::Expr *Parser::parseMemberSuffix(cc::Expr *base) {
     if (cur.kind != TOK_DOT && cur.kind != TOK_ARROW) return 0;
     const bool arrow = (cur.kind == TOK_ARROW);

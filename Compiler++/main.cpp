@@ -5,11 +5,7 @@
 //  Created by G. R. Akhtar on 29/08/2026.
 //
 //  Reads a source file and runs it through the front end:
-//
-//      cc::Parser        -- LAYER 1, the C layer   (base class)
-//      cxx::Parser       -- LAYER 2, the C++ layer (derives from cc::Parser)
-//      SemanticAnalyzer  -- PASS 3, walks the mixed cc:: / cxx:: tree
-//      Diagnostics       -- every complaint, with a file:line:col
+//      Parser -> Semantic -> Layout -> Lower, reporting via Diagnostics.
 //
 //  Usage:   Compiler++ [options] [source-file]
 //             -ast        print the syntax tree
@@ -17,13 +13,11 @@
 //             -ir         print the lowered intermediate representation
 //             -q          diagnostics only, no banner
 //
-//  With no file it reads DEFAULT_INPUT below.  Xcode runs the binary with its
-//  working directory set to the build products folder, not the project folder,
-//  so the default is an absolute path; pass a path on the command line
-//  (Product > Scheme > Edit Scheme > Arguments) to analyse a different file.
+//  With no file it reads DEFAULT_INPUT below: Xcode runs the binary from the
+//  build products folder, so the default is an absolute path.  Pass a path via
+//  Product > Scheme > Edit Scheme > Arguments to analyse a different file.
 //
-//  Exit status is 0 when the file has no errors, 1 when it has some, and 2
-//  when the file could not be read -- so a test script can just check it.
+//  Exit status: 0 clean, 1 errors, 2 the file could not be read.
 //
 //  C++98 only.
 //
@@ -46,9 +40,8 @@
 #include "Parser1.h"
 #include "Semantic.h"
 
-// The test input lives in the PROJECT folder, one level above the sources.
-// It deliberately sits outside the Compiler++ source folder: that folder is a
-// synchronized group, so any .cpp inside it would be compiled into this target.
+// Outside the Compiler++ source folder on purpose: that folder is a
+// synchronized group, so any .cpp inside it would be compiled into the target.
 static const char *DEFAULT_INPUT =
     "/Users/g.r.akhtar/Documents/Compiler++/point_input.cpp";
 
@@ -61,7 +54,7 @@ static bool readFile(const std::string &path, std::string &out) {
     return true;
 }
 
-// Everything after the last '/' -- diagnostics read better without the path.
+// Diagnostics read better without the path.
 static std::string baseName(const std::string &path) {
     const std::string::size_type slash = path.find_last_of('/');
     return (slash == std::string::npos) ? path : path.substr(slash + 1);
@@ -92,17 +85,14 @@ int main(int argc, char **argv) {
 
     Diagnostics diag(baseName(path));
 
-    // LAYERS 1+2.  parseTranslationUnit() is the C layer's, but every hook it
-    // calls is virtual, so a cxx::Parser instance parses classes, references,
-    // member access, `this` and `new` through the very same loop.
+    // parseTranslationUnit() is the C layer's, but every hook it calls is
+    // virtual, so a cxx::Parser parses the C++ forms through the same loop.
     cxx::Parser parser(source, diag);
     std::vector<cc::Decl*> unit = parser.parseTranslationUnit();
 
-    // PASS 3.  Analysis runs even after syntax errors: the tree is still worth
-    // walking, and a second round of diagnostics is more useful than silence.
-    // It comes BEFORE printing, because it writes conclusions back into the
-    // tree -- which methods are virtual, and what each one overrides -- and a
-    // dump taken beforehand would not show them.
+    // Analysis runs even after syntax errors, and BEFORE printing: it writes
+    // conclusions back into the tree (virtualness, overrides) that a dump taken
+    // earlier would not show.
     {
         SemanticAnalyzer sem(diag);
         sem.analyze(unit);
@@ -113,10 +103,8 @@ int main(int argc, char **argv) {
             std::cout << std::endl;
         }
 
-        // PASS 4.  The object model: offsets, sizes and vtables.  It runs
-        // ALWAYS, not only when printing, because it enforces constraints of
-        // its own -- a diagnostic must not depend on whether a debug flag was
-        // passed.  The flag controls the dump, not the pass.
+        // Runs ALWAYS, not only when printing: it enforces constraints of its
+        // own, and a diagnostic must not depend on a debug flag.
         Layout layout(diag);
         layout.computeAll(sem.classMap());
         if (showLayout) {
@@ -124,9 +112,8 @@ int main(int argc, char **argv) {
             layout.print();
         }
 
-        // PASS 5.  Lowering, but only over a tree that survived analysis --
-        // lowering a program with unresolved names would produce nonsense
-        // rather than a better diagnostic.
+        // Only over a tree that survived analysis: lowering unresolved names
+        // would produce nonsense rather than a better diagnostic.
         if (showIR && !diag.hadError()) {
             IRModule module;
             cxx::Lowering lower(module, layout, diag, sem.classMap());

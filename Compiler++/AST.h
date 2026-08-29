@@ -1,96 +1,52 @@
-// AST.h
+// AST.h -- LAYER 1, the C layer, namespace `cc`.
 //
 // ============================ LAYERING MODEL ============================
 //
-//   Compiler++ is built as TWO LAYERS, and the second inherits the first:
+//   Two layers, and the second inherits the first:   cxx::X : public cc::X
 //
-//                       cxx::X : public cc::X
+//     cc::   AST.h  / AST.cpp  / Parser.h  / Parser.cpp    -- what C has
+//     cxx::  AST1.h / AST1.cpp / Parser1.h / Parser1.cpp   -- what C++ adds
 //
-//   cc::   LAYER 1, the C layer   -- AST.h  / AST.cpp  / Parser.h  / Parser.cpp
-//   cxx::  LAYER 2, the C++ layer -- AST1.h / AST1.cpp / Parser1.h / Parser1.cpp
+//   Layer 2 never duplicates layer 1.  The test for where a node belongs is
+//   simply: does C already have this?
 //
-//   Nothing in layer 2 duplicates layer 1.  A C++ node is either a cc:: node
-//   reused verbatim, or a new node derived from a cc:: base.  The test for
-//   which layer a node belongs to is simply: does C already have this?
-//   Declarations, variables and functions are C's, so they live here; classes,
-//   fields, references and member access are C++'s, so they live in AST1.h.
-//
-//   ---- AST -----------------------------------------------------------
-//   cc::ASTNode                                    (the single root)
+//   cc::ASTNode                                   (the single root)
 //     |-- cc::Type
-//     |     |-- cc::BuiltinType                    int, char, void, bool
-//     |     |-- cc::PointerType                    T*
-//     |     |-- cxx::ReferenceType  : public cc::Type    T&      NEW in C++
-//     |     '-- cxx::ClassType      : public cc::Type    Point   NEW in C++
+//     |     |-- cc::BuiltinType | cc::PointerType        int, T*
+//     |     '-- cxx::ReferenceType | cxx::ClassType      T&, Point
 //     |-- cc::Expr
-//     |     |-- cc::NumberExpr  | cc::IdentExpr
-//     |     |-- cc::UnaryExpr   | cc::BinaryExpr | cc::CallExpr
-//     |     |-- cxx::MemberAccessExpr : public cc::Expr  a.b p->q  NEW in C++
-//     |     |-- cxx::ThisExpr         : public cc::Expr  this     NEW in C++
-//     |     '-- cxx::NewExpr / cxx::DeleteExpr           new/delete NEW in C++
+//     |     |-- cc::NumberExpr | cc::IdentExpr
+//     |     |-- cc::UnaryExpr | cc::BinaryExpr | cc::CallExpr
+//     |     '-- cxx::MemberAccessExpr | cxx::ThisExpr
+//     |         cxx::NewExpr | cxx::DeleteExpr
 //     |-- cc::Stmt
-//     |     |-- cc::CompoundStmt   { ... }         also the unit of scope
-//     |     |-- cc::DeclStmt       wraps a cc::VarDecl
-//     |     |-- cc::ExprStmt       | cc::ReturnStmt
-//     |     |-- cc::IfStmt         | cc::WhileStmt | cc::ForStmt
-//     |     '-- cc::BreakStmt      | cc::ContinueStmt
+//     |     |-- cc::CompoundStmt      { ... }, also the unit of scope
+//     |     |-- cc::DeclStmt | cc::ExprStmt | cc::ReturnStmt
+//     |     |-- cc::IfStmt | cc::WhileStmt | cc::ForStmt
+//     |     '-- cc::BreakStmt | cc::ContinueStmt
 //     '-- cc::Decl
-//           |-- cc::VarDecl                        int x;   Point p;
-//           |-- cc::Function                       int f(int a) { ... }
-//           |-- cxx::FieldDecl  : public cc::Decl      NEW in C++ (has access)
-//           |-- cxx::MethodDecl : public cc::Function  NEW in C++ (has access,
-//           |                                          and later virtual/ctor)
-//           '-- cxx::ClassDecl  : public cc::Decl      NEW in C++
+//           |-- cc::VarDecl | cc::Function
+//           |-- cxx::FieldDecl  : cc::Decl        adds access
+//           |-- cxx::MethodDecl : cc::Function    adds access, virtual, ctor
+//           '-- cxx::ClassDecl  : cc::Decl
 //
-//   Note what is NOT in layer 2 any more: C has variables and functions, so
-//   cc::VarDecl and cc::Function are used by both layers directly.  A C++
-//   method is a C function that additionally knows its access and its class,
-//   which is exactly what inheritance is for.
+//   Parser: cc::Parser holds the grammar; cxx::Parser derives from it and
+//   answers the virtual hooks -- parseDeclaration, parseStatement, parseType,
+//   parsePrimary, parseMemberSuffix, parseFunctionTail, parseVarInitializer.
+//   The hooks run both ways: parsePostfix() asks parseMemberSuffix(), so
+//   p.getX().y parses in one loop; parseStatement() asks parseType(), so a C
+//   rule declares C++ types (Point p;) with no C++ statement code.
 //
-//   ---- Parser --------------------------------------------------------
-//   cc::Parser
-//     parseTranslationUnit, parseFunctionRest, parseBlock, parseDeclTail
-//     the precedence chain, defined ONCE, here:
-//       parseExpression -> parseAssign -> parseLogicalOr -> parseLogicalAnd
-//         -> parseEquality -> parseRelational -> parseAddSub -> parseMulDiv
-//         -> parseUnary -> parsePostfix -> parsePrimary
-//     parsePointerSuffixes(Type*)                       T* T**  shared down
-//     save() / restore()         one-token rewind, for speculation
-//     virtual parseStatement()   declaration vs expression, decided by rewind
-//     virtual parsePrimary()     numbers, identifiers, parentheses
-//     virtual parseType()        int, char, void, bool, and T*
-//     virtual parseMemberSuffix(Expr*)  returns 0 in C; the hook for  a.b  p->q
-//     virtual parseDeclaration()        the hook for  class ... ;
-//        ^
-//        | public
-//   cxx::Parser : public cc::Parser
-//     parseClass, parseMemberDecl, parseQualifiedName
-//     virtual parseMemberSuffix()  adds  a.b  p->q
-//     virtual parseType()          asks cc:: first, then adds A::B and T&
-//     virtual parsePrimary()       adds  this  and  new T
-//     virtual parseDeclaration()   adds class definitions
+//   The result is ONE tree mixing both namespaces, which is why the semantic
+//   pass is not split in two -- it walks the tree and uses dynamic_cast.
 //
-//   Because the C layer's rules call these hooks VIRTUALLY, the two layers
-//   parse cooperatively and yield ONE tree mixing cc:: and cxx:: nodes:
-//     * parsePostfix() calls parseMemberSuffix(), so (a.b + 1) * 2 works;
-//     * parseStatement() calls parseType(), so the C layer's statement rule
-//       declares C++ types --  Point p;  int &r = p.x;  -- with no C++-layer
-//       statement code at all.
+//   Passes: Parser -> Semantic (+ SymbolTable) -> Layout -> Lower (+ IR).
 //
-//   ---- Semantic analysis ---------------------------------------------
-//   SemanticAnalyzer (Semantic.h) walks that one mixed tree, using SymbolTable
-//   (SymbolTable.h) for scopes.  It is deliberately NOT split in two, because
-//   the tree is not: dynamic_cast tells cc:: and cxx:: nodes apart, which works
-//   because every node derives from cc::ASTNode.
-//
-//   C++98 has no `override` keyword: a derived layer re-declares the function
-//   with an EXACTLY matching signature, or it silently hides instead.
+//   C++98 only, everywhere.  No `override` keyword exists, so a derived layer
+//   re-declares a virtual with an exactly matching signature or silently hides.
 //
 // ========================================================================
-//
-// LAYER 1 -- the C layer, namespace `cc`.
-//
-// C++98 only.
+
 #ifndef AST_H
 #define AST_H
 
@@ -102,9 +58,7 @@
 namespace cc {
 
 struct ASTNode {
-    // Where this node came from, copied off the token that started it.  A
-    // semantic error can then point at source just as a syntax error does.
-    int line;
+    int line;                   // copied off the token that started this node
     int col;
 
     ASTNode() : line(0), col(0) {}
@@ -118,8 +72,6 @@ protected:
 };
 
 // --- Types ------------------------------------------------------------
-// The type system starts in the C layer: C already has builtin types and
-// pointers.  The C++ layer adds references (T&) and class types on top.
 
 struct Type : public ASTNode {
     virtual ~Type() {}
@@ -142,9 +94,7 @@ struct PointerType : public Type {
 
 // --- Expressions ------------------------------------------------------
 
-// The operator sets are enums rather than characters, because  ==  and  &&  do
-// not fit in a char, and because a named constant cannot be mistyped the way a
-// string comparison can.
+// Enums rather than characters: == and && do not fit in a char.
 enum BinaryOp {
     BIN_Add, BIN_Sub, BIN_Mul, BIN_Div, BIN_Mod,
     BIN_Assign,
@@ -189,7 +139,6 @@ struct BinaryExpr : public Expr {
     void print(int indent);
 };
 
-// f(1, 2)  and, once the C++ layer supplies the callee,  p.getX()
 struct CallExpr : public Expr {
     Expr *callee;
     std::vector<Expr*> args;
@@ -199,23 +148,20 @@ struct CallExpr : public Expr {
 };
 
 // --- Declarations -----------------------------------------------------
-// C has declarations, so the base and the two plain forms live in this layer.
 
 struct Decl : public ASTNode {
     virtual ~Decl() {}
 };
 
-// int x;   int x = 1;   Point p;   int &r = p.x;
-// One node for a variable wherever it appears -- at file scope on its own, or
-// inside a block wrapped in a DeclStmt.
+// One node for a variable wherever it appears: at file scope, or inside a
+// block wrapped in a DeclStmt.
 struct VarDecl : public Decl {
     Type *type;
     std::string name;
     Expr *init;                 // for  = expr ; 0 otherwise
-    // For the direct-initialisation form  Point q(1, 2);  which the C++ layer
-    // adds.  `init` and `ctorArgs` are alternatives, never both.
+    // Direct initialisation, Point q(1, 2) -- an alternative to init, never both.
     std::vector<Expr*> ctorArgs;
-    bool hasCtorArgs;           // true even for  Point q();  with no arguments
+    bool hasCtorArgs;           // true even for  Point q();
     VarDecl(Type *t, const std::string &n, Expr *i)
         : type(t), name(n), init(i), hasCtorArgs(false) {}
     ~VarDecl();
@@ -225,7 +171,6 @@ struct VarDecl : public Decl {
 struct Stmt;
 struct CompoundStmt;
 
-// int f(int a) { ... }   -- and, via cxx::MethodDecl, a C++ method too.
 struct Function : public Decl {
     Type *retType;
     std::string name;
@@ -234,25 +179,19 @@ struct Function : public Decl {
     Function(Type *r, const std::string &n) : retType(r), name(n), body(0) {}
     ~Function();
     void print(int indent);
-    // Lets MethodDecl add "Method"/"Class::" without repeating the rest.
     virtual void printSignature(int indent);
-    // Printed between the parameters and the body; C has nothing to put there,
-    // a C++ constructor has its initialiser list.
-    virtual void printBodyPrefix(int indent);
+    virtual void printBodyPrefix(int indent);   // a ctor's initialiser list
 };
 
 // --- Statements -------------------------------------------------------
 struct Stmt : public ASTNode {};
 
-// { ... }  -- also the unit of scope, which is why it is a node and not just
-// a vector held by whoever needed one.
+// Also the unit of scope, which is why it is a node.
 struct CompoundStmt : public Stmt {
     std::vector<Stmt*> body;
-    // Class-typed locals declared in this block, in REVERSE declaration order:
-    // the list of destructors the lowering phase must run on every path that
-    // leaves this block -- falling off the end, a return, a break.  Filled in
-    // by the semantic pass, which is the only thing that knows which types have
-    // destructors.  Aliases into the block's own DeclStmts; not owned.
+    // Class-typed locals in REVERSE declaration order: the destructors the
+    // lowering phase runs on every path out of this block.  Filled in by the
+    // semantic pass; aliases into the block's own DeclStmts, not owned.
     std::vector<VarDecl*> destroyAtExit;
     ~CompoundStmt();
     void print(int indent);
@@ -296,7 +235,7 @@ struct WhileStmt : public Stmt {
     void print(int indent);
 };
 
-// for (init; cond; step) body   -- any of the three may be 0
+// any of init, cond and step may be 0
 struct ForStmt : public Stmt {
     Stmt *init;
     Expr *cond;

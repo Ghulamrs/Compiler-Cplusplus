@@ -1,14 +1,8 @@
-// AST1.h
+// AST1.h -- LAYER 2, the C++ layer, namespace `cxx`.
 //
-// LAYER 2 -- the C++ layer, namespace `cxx`.
-//
-//     cxx::X : public cc::X
-//
-// The authoritative layering model (full AST + parser diagram) lives at the
-// top of AST.h.  This file declares only what C++ ADDS to C: reference and
-// class types, classes and their members, qualified names, member access,
-// `this`, and free-store allocation.  Everything else -- variables, functions,
-// statements, the whole expression grammar -- is used directly from cc.
+// Declares only what C++ adds to C: reference and class types, classes and
+// their members, qualified names, member access, `this` and the free store.
+// Everything else is used directly from cc.  See AST.h for the layering model.
 //
 // C++98 only.
 
@@ -24,9 +18,8 @@
 
 namespace cxx {
 
-// These names are the SAME types as in cc, not copies.  They are pulled in so
-// this layer can spell them unqualified, and so existing code that says
-// cxx::Decl or cxx::VarDecl keeps meaning exactly what it did.
+// The SAME types as in cc, not copies -- pulled in so this layer can spell
+// them unqualified.
 using cc::Type;
 using cc::BuiltinType;
 using cc::PointerType;
@@ -34,15 +27,12 @@ using cc::Decl;
 using cc::VarDecl;
 using cc::Function;
 
-// Access control is meaningless in C, so the enum belongs to this layer.
-// `protected` differs from `private` only once inheritance exists, which is
-// the next feature to land.
+// `protected` differs from `private` only once inheritance exists.
 enum Access { ACC_Public, ACC_Private, ACC_Protected };
 const char *accessText(Access a);
 
 // --- Types added by C++ -----------------------------------------------
 
-// Reference type T&  -- does not exist in C
 struct ReferenceType : public Type {
     Type *base;
     ReferenceType(Type *b) : base(b) {}
@@ -50,7 +40,6 @@ struct ReferenceType : public Type {
     void print(int indent);
 };
 
-// A class / user-defined type name -- does not exist in C
 struct ClassType : public Type {
     std::string className;
     ClassType(const std::string &n) : className(n) {}
@@ -59,8 +48,8 @@ struct ClassType : public Type {
 
 // --- Declarations added by C++ ----------------------------------------
 
-// A data member.  It is a declaration with an access level and an owning
-// class -- a plain cc::VarDecl knows neither.
+// A declaration with an access level and an owning class, which a plain
+// cc::VarDecl has neither of.
 struct FieldDecl : public Decl {
     Type *type;
     std::string name;
@@ -72,9 +61,8 @@ struct FieldDecl : public Decl {
     void print(int indent);
 };
 
-// One entry in a constructor's initialiser list:  x(1)  or  Base(a, b).
-// The name is either a field of this class or the base class's name; which one
-// it is, is decided by the semantic pass and recorded in `isBase`.
+// One entry in a constructor's initialiser list: x(1) or Base(a, b).  Which
+// kind it is, is decided by the semantic pass and recorded in `isBase`.
 struct MemberInit {
     std::string name;
     std::vector<cc::Expr*> args;
@@ -84,30 +72,20 @@ struct MemberInit {
     MemberInit() : isBase(false), line(0), col(0) {}
 };
 
-// A member function.  A method IS a function -- same return type, name,
-// parameters and body -- that additionally knows its access, its class, and
-// whether it is virtual.  So it derives from cc::Function instead of
-// restating it.
+// A method IS a function that also knows its access, its class and whether it
+// is virtual -- so it derives from cc::Function instead of restating it.
+// Constructors and destructors are methods too: no return type and a special
+// name, but otherwise nothing different.
 struct MethodDecl : public Function {
     Access access;
     std::string ownerClass;
-    // Written `virtual`, OR inherited virtualness by overriding a base method.
-    // In C++ a function that overrides a virtual function is itself virtual
-    // whether or not the keyword is repeated, so this is set by the semantic
-    // pass as well as by the parser.
+    // Written `virtual`, or inherited by overriding a base virtual -- so the
+    // semantic pass sets this as well as the parser.
     bool isVirtual;
-    // The base-class method this one overrides, filled in by the semantic
-    // pass; 0 when this method overrides nothing.
-    MethodDecl *overrides;
-
-    // A constructor and a destructor are member functions with no return type
-    // and a special name -- the class's own, and ~ plus the class's own.  They
-    // are not separate node types because everything else about them (access,
-    // parameters, a body, virtualness for a destructor) is a method's.
+    MethodDecl *overrides;      // 0 when this overrides nothing
     bool isConstructor;
     bool isDestructor;
-    // Only a constructor has these:  Point(int a) : x(a) { }
-    std::vector<MemberInit> memberInits;
+    std::vector<MemberInit> memberInits;    // constructors only
 
     MethodDecl(Type *r, const std::string &n, Access a)
         : Function(r, n), access(a), isVirtual(false), overrides(0),
@@ -118,24 +96,17 @@ struct MethodDecl : public Function {
     void printBodyPrefix(int indent);
 };
 
-// class D : public B { ... };
-//
-// SINGLE inheritance only: one base, by design.  With one base the derived
-// object is simply the base object with fields appended, so an upcast is a
-// no-op and the vptr can be shared -- the whole object model stays something
-// you can hold in your head.  Multiple bases would mean several subobjects at
-// different offsets and pointer adjustment on every conversion, so the parser
-// rejects a second base with a message that says so.
+// SINGLE inheritance by design: with one base the derived object is the base
+// object with fields appended, so an upcast is a no-op and the vptr is shared.
+// The parser rejects a second base by name rather than as a syntax error.
 struct ClassDecl : public Decl {
     std::string name;
     std::string baseName;       // empty when the class has no base
     Access baseAccess;          // public/private/protected inheritance
-    // Resolved by the semantic pass from baseName; NOT owned, and 0 until then.
-    ClassDecl *base;
+    ClassDecl *base;            // resolved by the semantic pass; not owned
     std::vector<Decl*> members;
-    // Aliases INTO `members`, which owns them.  Constructors are indexed apart
-    // because they all share one name and so cannot be told apart by ordinary
-    // name lookup; they are selected by argument count instead.
+    // Aliases into `members`, which owns them.  Constructors are indexed apart
+    // because they share one name; they are selected by argument count.
     std::vector<MethodDecl*> ctors;
     MethodDecl *dtor;               // 0 when the class declares none
     ClassDecl(const std::string &n)
@@ -152,10 +123,8 @@ struct QualifiedName : public cc::ASTNode {
 };
 
 // --- Expressions added by C++ -----------------------------------------
-// NumberExpr, IdentExpr, UnaryExpr, BinaryExpr and CallExpr are NOT
-// redeclared: this layer uses the cc:: forms directly.  Only genuinely new
-// forms appear here, each deriving from cc::Expr so C and C++ expressions
-// share one tree:  (a.b + 1) * 2
+// The cc:: forms are used directly, not redeclared.  Only new forms appear
+// here, each deriving from cc::Expr so both share one tree:  (a.b + 1) * 2
 
 struct MemberAccessExpr : public cc::Expr {
     cc::Expr *base;
@@ -167,13 +136,10 @@ struct MemberAccessExpr : public cc::Expr {
     void print(int indent);
 };
 
-// `this` inside a method body
 struct ThisExpr : public cc::Expr {
     void print(int indent);
 };
 
-// new T   -- allocation and construction; the constructor call arrives with
-// the next phase, so the argument list is already here to receive it.
 struct NewExpr : public cc::Expr {
     Type *allocType;
     std::vector<cc::Expr*> args;
@@ -182,7 +148,6 @@ struct NewExpr : public cc::Expr {
     void print(int indent);
 };
 
-// delete p  -- destruction and release
 struct DeleteExpr : public cc::Expr {
     cc::Expr *operand;
     DeleteExpr(cc::Expr *e) : operand(e) {}

@@ -1,9 +1,6 @@
-// Token.h
+// Token.h -- the token set, shared by both layers.
 //
-// The token set is shared by both class layers, so it lives at global scope
-// and names C and C++ keywords side by side.
-//
-// C++98 only. No feature from C++11 or later is used anywhere in this project.
+// C++98 only.  No feature from C++11 or later is used anywhere in this project.
 
 #ifndef TOKEN_H
 #define TOKEN_H
@@ -76,10 +73,8 @@ enum TokenKind {
     TOK_UNKNOWN
 };
 
-// A token remembers WHERE it came from.  Every diagnostic in the compiler is
-// only as good as this: without a line and column, an error message can say
-// what went wrong but never where.  The position is copied onto AST nodes as
-// they are built, so the semantic pass can point at source too.
+// The position is copied onto AST nodes as they are built, so the semantic
+// pass can point at source just as a syntax error does.
 struct Token {
     TokenKind kind;
     std::string text;

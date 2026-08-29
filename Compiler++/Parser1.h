@@ -1,23 +1,9 @@
-// Parser1.h
+// Parser1.h -- LAYER 2, the C++ layer's parser, namespace `cxx`.
 //
-// LAYER 2 -- the C++ layer's parser, in namespace `cxx`.
-//
-// It DERIVES from cc::Parser.  Everything C already knew how to parse -- the
-// expression precedence chain, control flow, function bodies, declarations
-// with initialisers -- is inherited, not copied.  This class adds only what
-// C++ adds to C:
-//
-//     parseDeclaration()    OVERRIDE: adds class/struct definitions, then
-//                           defers to the C layer for everything else
-//     parseClass()          class body + access specifiers
-//     parseMemberDecl()     fields and methods, tagged with their access
-//     parseType()           OVERRIDE: extends C's int/int* with qualified
-//                           names A::B and references T&
-//     parsePrimary()        OVERRIDE: adds  this  and  new T
-//     parseMemberSuffix()   OVERRIDE: adds  a.b  and  p->q  to the inherited
-//                           postfix loop
-//
-// The authoritative layering model lives at the top of AST.h.
+// Derives from cc::Parser.  The expression chain, control flow and function
+// bodies are inherited, not copied; this class adds classes, base clauses,
+// constructors, initialiser lists, and the C++ forms of type, primary and
+// postfix expression.
 //
 // C++98 only.
 

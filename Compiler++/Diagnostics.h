@@ -1,16 +1,9 @@
-// Diagnostics.h
+// Diagnostics.h -- one place for every complaint the compiler makes.
 //
-// One place for every complaint the compiler makes.
-//
-// Before this class existed, each parser error called std::exit(1): the first
-// mistake in a file ended the process, so a second error could never be shown
-// and no test could assert on malformed input.  Reporting is now separated from
-// deciding what to do next -- the parser reports and then recovers, the
-// semantic pass reports and carries on -- and main() asks at the end whether
-// anything went wrong.
-//
-// Messages use the conventional  file:line:col: error: text  format, which is
-// also the format Xcode parses into clickable entries in its issue navigator.
+// Reporting is separate from deciding what to do next: the parser reports and
+// then recovers, the semantic pass reports and carries on, and main() asks at
+// the end whether anything went wrong.  The file:line:col format is the one
+// Xcode parses into clickable issues.
 //
 // C++98 only.
 

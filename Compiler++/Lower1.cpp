@@ -12,9 +12,7 @@ Lowering::Lowering(IRModule &module, const Layout &l, Diagnostics &d,
                    const std::map<std::string, ClassDecl*> &cls)
     : cc::Lowering(module, l, d), classes(cls) {}
 
-// ---------------------------------------------------------------------
-// Looking things up
-// ---------------------------------------------------------------------
+// --- Looking things up ---
 
 Lowering::~Lowering() {
     for (std::size_t i = 0; i < ownedTypes.size(); ++i) delete ownedTypes[i];
@@ -48,9 +46,8 @@ ClassDecl *Lowering::classOfType(cc::Type *t) const {
     return ct ? findClass(ct->className) : 0;
 }
 
-// Offsets come from Layout, which already flattened the base chain -- an
-// inherited field is in the derived class's field list at the offset it had in
-// the base, because the base subobject sits at zero.
+// Layout already flattened the base chain: an inherited field sits at the
+// offset it had in the base, because the base subobject is at zero.
 const FieldLayout *Lowering::findField(const std::string &className,
                                        const std::string &member) const {
     const ClassLayout *cl = layout.forClass(className);
@@ -75,8 +72,8 @@ int Lowering::vtableSlotOf(const std::string &className, MethodDecl *m) const {
     const ClassLayout *cl = layout.forClass(className);
     if (!cl) return -1;
     for (std::size_t s = 0; s < cl->vtable.size(); ++s) {
-        // Match by name: the slot holds the FINAL override, which for a base
-        // pointer is a different MethodDecl than the one lookup found.
+        // The slot holds the FINAL override, a different MethodDecl than the
+        // one lookup found.
         if (cl->vtable[s]->name == m->name) return static_cast<int>(s);
     }
     return -1;
@@ -87,9 +84,7 @@ bool Lowering::classHasDestructor(ClassDecl *cd) const {
     return false;
 }
 
-// ---------------------------------------------------------------------
-// Vtables, emitted as module data
-// ---------------------------------------------------------------------
+// --- Vtables, emitted as module data ---
 
 void Lowering::lowerClasses() {
     std::map<std::string, ClassDecl*>::const_iterator it;
@@ -107,9 +102,7 @@ void Lowering::lowerClasses() {
     }
 }
 
-// ---------------------------------------------------------------------
-// Declarations
-// ---------------------------------------------------------------------
+// --- Declarations ---
 
 void Lowering::lowerDecl(cc::Decl *d) {
     ClassDecl *cd = dynamic_cast<ClassDecl*>(d);
@@ -123,8 +116,8 @@ void Lowering::lowerDecl(cc::Decl *d) {
             if (md->isConstructor)     mangled = mangleConstructor(cd->name, md->params.size());
             else if (md->isDestructor) mangled = mangleDestructor(cd->name);
             else                       mangled = mangleFunction(cd->name, md->name);
-            // A method is a function with `this` in front.  That is the whole
-            // of what "member function" means once the C++ is gone.
+            // A function with `this` in front -- all "member function" means
+            // once the C++ is gone.
             lowerFunction(md, mangled, cd->name + "::" + md->name, true);
         }
         currentClass = saved;
@@ -133,9 +126,7 @@ void Lowering::lowerDecl(cc::Decl *d) {
     cc::Lowering::lowerDecl(d);
 }
 
-// ---------------------------------------------------------------------
-// `this`, member addresses
-// ---------------------------------------------------------------------
+// --- `this`, member addresses ---
 
 IRReg Lowering::loadThis(int line) {
     const int slot = findSlot("this");
@@ -144,9 +135,8 @@ IRReg Lowering::loadThis(int line) {
     return fn->emitLoad(addr, Layout::PointerSize, line);
 }
 
-// `o.x` needs o's ADDRESS; `p->x` needs p's VALUE.  Both end up as the address
-// of an object, which is the only thing the offset arithmetic below cares
-// about -- so the arrow/dot distinction ends here and never reaches the IR.
+// o.x needs o's ADDRESS, p->x needs p's VALUE.  Both end as an object address,
+// so the arrow/dot distinction ends here and never reaches the IR.
 IRReg Lowering::lowerObjectAddress(MemberAccessExpr *ma) {
     if (ma->isArrow) return lowerValue(ma->base);
     return lowerAddress(ma->base);
@@ -156,11 +146,8 @@ bool Lowering::lowerLayerAddress(cc::Expr *e, IRReg &out) {
     if (MemberAccessExpr *ma = dynamic_cast<MemberAccessExpr*>(e)) {
         const IRReg obj = lowerObjectAddress(ma);
         ClassDecl *cd = classOfType(typeOf(ma->base));
-        if (!cd) {
-            // The base may be `this`, or something whose type lowering did not
-            // recompute; fall back to the enclosing class.
-            cd = findClass(currentClass);
-        }
+        // The base may be `this`, or a type lowering did not recompute.
+        if (!cd) cd = findClass(currentClass);
         if (!cd) return false;
         const FieldLayout *f = findField(cd->name, ma->member);
         if (!f) return false;
@@ -207,8 +194,7 @@ bool Lowering::lowerLayerValue(cc::Expr *e, IRReg &out) {
         return true;
     }
 
-    // new T(args): allocate, then construct.  Two steps, in that order, which
-    // is exactly what the language promises.
+    // Allocate, then construct -- two steps, in the order the language says.
     if (NewExpr *ne = dynamic_cast<NewExpr*>(e)) {
         ClassDecl *cd = classOfType(ne->allocType);
         const int size = cd ? layout.sizeOf(ne->allocType) : layout.sizeOf(ne->allocType);
@@ -217,24 +203,20 @@ bool Lowering::lowerLayerValue(cc::Expr *e, IRReg &out) {
         return true;
     }
 
-    // delete p: destroy, then release.  The reverse order of `new`, and the
-    // reason a non-virtual destructor on a base is a warning -- the destructor
-    // reached here is whichever the vtable names.
+    // Destroy, then release: the reverse of `new`.  The destructor reached is
+    // whichever the vtable names, hence the non-virtual-destructor warning.
     if (DeleteExpr *de = dynamic_cast<DeleteExpr*>(e)) {
         const IRReg ptr = lowerValue(de->operand);
         ClassDecl *cd = classOfType(typeOf(de->operand));
         if (cd) emitDestruct(cd, ptr, e->line);
         fn->emitFree(ptr, e->line);
-        // `delete` has no value.  Handing back the pointer register costs no
-        // instruction and keeps callers from having to special-case void.
-        out = ptr;
+        out = ptr;              // delete has no value; reusing ptr emits nothing
         return true;
     }
     return false;
 }
 
-// The C layer can only work out the types C has.  A member access, a call, a
-// `new` and `this` all need the class table, so they are recovered here.
+// Member access, calls, `new` and `this` need the class table.
 cc::Type *Lowering::typeOf(cc::Expr *e) {
     if (!e) return 0;
 
@@ -283,8 +265,7 @@ cc::Type *Lowering::typeOf(cc::Expr *e) {
     return cc::Lowering::typeOf(e);
 }
 
-// A class-typed local is an object, so declaring it CONSTRUCTS it, and the
-// block it belongs to already knows to destroy it on the way out.
+// Declaring one CONSTRUCTS it; the block already knows to destroy it.
 void Lowering::lowerVarDecl(cc::VarDecl *vd) {
     if (!vd) return;
     ClassDecl *cd = 0;
@@ -305,9 +286,7 @@ bool Lowering::isReferenceExpr(cc::Expr *e) {
     return t && dynamic_cast<ReferenceType*>(t) != 0;
 }
 
-// ---------------------------------------------------------------------
-// Calls, including the one that matters
-// ---------------------------------------------------------------------
+// --- Calls, including the one that matters ---
 
 IRReg Lowering::lowerCall(cc::CallExpr *e, bool wantsResult) {
     MemberAccessExpr *ma = dynamic_cast<MemberAccessExpr*>(e->callee);
@@ -339,18 +318,16 @@ IRReg Lowering::lowerCall(cc::CallExpr *e, bool wantsResult) {
         return fn->emitConst(0, e->line);
     }
 
-    // The receiver is the first argument.  Every method takes `this`, virtual
-    // or not; dispatch decides WHICH function runs, not how it is called.
+    // Every method takes `this`, virtual or not: dispatch decides WHICH
+    // function runs, not how it is called.
     std::vector<IRReg> args;
     args.push_back(object);
     for (std::size_t i = 0; i < e->args.size(); ++i) args.push_back(lowerValue(e->args[i]));
 
-    // A virtual call through a POINTER or a REFERENCE has to be dispatched:
-    // the static type is only a lower bound on what the object really is.  A
-    // call on a named object is different -- `sq.area()` where sq is a Square
-    // can be nothing but Square::area, so the slot lookup is pure overhead.
-    // Resolving it here is the one optimisation this pass performs, and it is
-    // the same one every real C++ compiler performs for the same reason.
+    // Through a pointer or reference the static type is only a lower bound, so
+    // the call must dispatch.  On a named object it cannot be anything but that
+    // class's override, so the slot lookup is pure overhead.  This is the one
+    // optimisation the pass performs, and every real compiler performs it too.
     bool dynamicType = true;
     if (!ma->isArrow) {
         cc::Type *bt = typeOf(ma->base);
@@ -358,8 +335,8 @@ IRReg Lowering::lowerCall(cc::CallExpr *e, bool wantsResult) {
     }
 
     if (m->isVirtual && dynamicType) {
-        // The whole of dynamic dispatch: the slot index is a constant known at
-        // compile time; the function found there is not.
+        // All of dynamic dispatch: the slot is a compile-time constant, the
+        // function found there is not.
         const int slot = vtableSlotOf(cd->name, m);
         if (slot >= 0) {
             const IRReg target = fn->emitVCallTarget(object, slot, e->line);
@@ -367,7 +344,7 @@ IRReg Lowering::lowerCall(cc::CallExpr *e, bool wantsResult) {
         }
     }
     if (m->isVirtual && !dynamicType) {
-        // The final override for this exact class, not the one lookup found.
+        // The final override for this exact class.
         const ClassLayout *cl = layout.forClass(cd->name);
         if (cl) {
             for (std::size_t s = 0; s < cl->vtable.size(); ++s) {
@@ -378,14 +355,12 @@ IRReg Lowering::lowerCall(cc::CallExpr *e, bool wantsResult) {
     return fn->emitCall(mangleFunction(m->ownerClass, m->name), args, wantsResult, e->line);
 }
 
-// ---------------------------------------------------------------------
-// Object lifetime
-// ---------------------------------------------------------------------
+// --- Object lifetime ---
 
 void Lowering::emitVPtrStore(ClassDecl *cd, IRReg objectAddr, int line) {
     const ClassLayout *cl = layout.forClass(cd->name);
     if (!cl || !cl->hasVPtr) return;
-    // The vptr lives at offset 0 -- the decision that makes an upcast free.
+    // Offset 0 -- the decision that makes an upcast free.
     const IRReg vt = fn->emitGlobalAddr(mangleVTable(cd->name), line);
     const IRReg at = fn->emitFieldAddr(objectAddr, 0, line);
     fn->emitStore(at, vt, Layout::PointerSize, line);
@@ -394,8 +369,7 @@ void Lowering::emitVPtrStore(ClassDecl *cd, IRReg objectAddr, int line) {
 void Lowering::emitConstruct(ClassDecl *cd, IRReg objectAddr,
                              const std::vector<cc::Expr*> &args, int line) {
     if (cd->ctors.empty()) {
-        // No constructor to call, but a polymorphic object still needs its
-        // vptr before anyone dispatches through it.
+        // No constructor, but a polymorphic object still needs its vptr.
         emitVPtrStore(cd, objectAddr, line);
         return;
     }
@@ -405,9 +379,8 @@ void Lowering::emitConstruct(ClassDecl *cd, IRReg objectAddr,
     fn->emitCall(mangleConstructor(cd->name, args.size()), callArgs, false, line);
 }
 
-// `concreteType` says the exact class is known -- a named local, not something
-// reached through a pointer -- in which case the destructor is called directly
-// for the same reason a method call on a named object is.
+// `concreteType`: the exact class is known (a named local), so the destructor
+// is called directly, for the same reason a method call on one is.
 void Lowering::emitDestruct(ClassDecl *cd, IRReg objectAddr, int line, bool concreteType) {
     if (!classHasDestructor(cd)) return;
     // Find the class that actually declares one, walking up.
@@ -443,7 +416,7 @@ void Lowering::emitDestruct(ClassDecl *cd, IRReg objectAddr, int line, bool conc
     fn->emitCall(mangleDestructor(owner->name), callArgs, false, line);
 }
 
-// A constructor's preamble, in the order Layout fixed: base, vptr, members.
+// In the order Layout fixed: base, vptr, members.
 void Lowering::emitPrologue(cc::Function *f) {
     MethodDecl *md = dynamic_cast<MethodDecl*>(f);
     if (!md || !md->isConstructor) return;
@@ -467,12 +440,11 @@ void Lowering::emitPrologue(cc::Function *f) {
         }
     }
 
-    // 2. the vptr -- AFTER the base, so that while the base constructor ran the
-    //    object still dispatched as a base, and BEFORE the members, so the
-    //    body can call its own virtuals.
+    // 2. the vptr: AFTER the base, so the base ctor still dispatched as a
+    //    base; BEFORE the members, so the body can call its own virtuals.
     emitVPtrStore(cd, self, f->line);
 
-    // 3. members, in DECLARATION order regardless of how the list was written
+    // 3. members, in DECLARATION order however the list was written
     for (std::size_t i = 0; i < cd->members.size(); ++i) {
         FieldDecl *fd = dynamic_cast<FieldDecl*>(cd->members[i]);
         if (!fd) continue;
@@ -489,9 +461,8 @@ void Lowering::emitPrologue(cc::Function *f) {
     }
 }
 
-// A destructor's tail: members backwards, then the base.  The body has already
-// run by the time this is emitted, which is what makes the order the exact
-// reverse of construction.
+// Members backwards, then the base.  The body has already run, which makes
+// this the exact reverse of construction.
 void Lowering::emitEpilogue(cc::Function *f) {
     MethodDecl *md = dynamic_cast<MethodDecl*>(f);
     if (!md || !md->isDestructor) return;
@@ -504,13 +475,11 @@ void Lowering::emitEpilogue(cc::Function *f) {
     if (!owner) return;
     std::vector<IRReg> args;
     args.push_back(loadThis(f->line));
-    // A base destructor is always called directly, never through the vtable:
-    // the derived part is already gone, so there is nothing to dispatch to.
+    // Always direct, never through the vtable: the derived part is gone.
     fn->emitCall(mangleDestructor(owner->name), args, false, f->line);
 }
 
-// Destructors for the locals this block owns, in the order the semantic pass
-// recorded -- reverse of construction.
+// In the order the semantic pass recorded: reverse of construction.
 void Lowering::emitScopeExit(cc::CompoundStmt *block) {
     for (std::size_t i = 0; i < block->destroyAtExit.size(); ++i) {
         cc::VarDecl *vd = block->destroyAtExit[i];
@@ -522,8 +491,7 @@ void Lowering::emitScopeExit(cc::CompoundStmt *block) {
     }
 }
 
-// A `return` leaves every open block at once, so every one of them runs its
-// destructors -- innermost first.
+// A return leaves every open block at once, innermost first.
 void Lowering::emitAllOpenScopeExits() {
     for (std::size_t i = openBlocks.size(); i > 0; --i) emitScopeExit(openBlocks[i - 1]);
 }

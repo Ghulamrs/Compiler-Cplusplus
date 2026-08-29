@@ -1,34 +1,16 @@
-// IR.h
+// IR.h -- PASS 5a, the intermediate representation.
 //
-// PASS 5a -- the intermediate representation.
+// There is no IR1.h, and that is the point.  Lowering's whole job is to erase
+// the C++ layer -- a method becomes a function taking `this`, a reference
+// becomes a pointer, a field becomes an address plus an offset, a virtual call
+// becomes load-vptr / index / call.  By the time anything reaches this file
+// there are no classes, references, inheritance or dispatch left.  So the two
+// lowering PASSES are layered as usual (Lower.h, Lower1.h) but both target
+// this one C-level instruction set.
 //
-// ============================ WHY THERE IS NO IR1 =========================
-//
-//   Every other part of this compiler comes in two layers, cc:: and cxx::,
-//   because C++ adds things to C that C has no way to say.  The IR has ONE
-//   layer, and that is the whole point of it.
-//
-//   Lowering's entire job is to ERASE the C++ layer.  A method becomes a
-//   function whose first parameter is `this`.  A reference becomes a pointer.
-//   A field access becomes an address plus a constant offset.  A virtual call
-//   becomes: load the vptr, index it by a constant, call through the result.
-//   `new` becomes allocate-then-call, `delete` becomes call-then-free.  By the
-//   time anything reaches this file, there are no classes, no references, no
-//   inheritance and no dispatch left -- only memory, arithmetic and calls.
-//
-//   So the two lowering PASSES are layered in the usual way (Lower.h holds
-//   cc::Lowering, Lower1.h holds cxx::Lowering deriving from it), but they
-//   both target this one C-level instruction set.  "C++ is C plus X" and
-//   "code generation for C++ is code generation for C, after X is erased" are
-//   the same sentence, and this file is where that sentence lands.
-//
-// ==========================================================================
-//
-//   Shape of the IR: a flat list of three-address instructions per function,
-//   over an unlimited supply of virtual registers, with labels and jumps
-//   rather than explicit basic blocks.  Flat and linear is easier to read than
-//   a block graph, and it lowers directly to either of the back ends under
-//   consideration -- a stack VM, or emitted C.
+// Shape: a flat list of three-address instructions per function over unlimited
+// virtual registers, with labels rather than basic blocks.  Linear is easier
+// to read and lowers directly to either a stack VM or emitted C.
 //
 // C++98 only.
 
@@ -41,8 +23,7 @@
 
 #include "AST.h"
 
-// A virtual register.  There is no register allocation here; that is the code
-// generator's problem, and a stack VM does not even have it.
+// No register allocation here -- that is the code generator's problem.
 typedef int IRReg;
 const IRReg IR_NoReg = -1;
 
@@ -74,9 +55,8 @@ enum IROp {
     IR_CallIndirect, // dest = (*a)(args...)  -- this is a virtual call
 
     // --- dispatch -----------------------------------------------------
-    // a = the object's address; imm = the vtable slot.  Kept as one opcode
-    // rather than three loads because naming the operation is what makes a
-    // dump readable -- the code generator expands it.
+    // One opcode rather than three loads, so a dump stays readable; the code
+    // generator expands it.
     IR_VCallTarget,  // dest = (*(vptr of a))[imm]
 
     // --- free store ---------------------------------------------------
@@ -101,15 +81,14 @@ struct IRInstr {
     long imm;
     std::string sym;            // callee or global name
     std::vector<IRReg> args;    // for IR_Call / IR_CallIndirect
-    int line;                   // source line, so a dump can be traced back
+    int line;
 
     IRInstr(IROp o)
         : op(o), dest(IR_NoReg), a(IR_NoReg), b(IR_NoReg), imm(0), line(0) {}
 };
 
-// One named slot in a function's frame.  Class-typed locals occupy their whole
-// object size here, which is what makes `Point p;` a real object rather than a
-// pointer to one.
+// A class-typed local occupies its whole object size here, which is what makes
+// `Point p;` a real object rather than a pointer to one.
 struct IRLocal {
     std::string name;
     int slot;
@@ -135,9 +114,7 @@ struct IRFunction {
     int newLabel() { return nextLabel++; }
     int addLocal(const std::string &n, int size, bool isParam);
 
-    // The builder.  Every emit returns the instruction's destination register
-    // where it has one, so expressions compose without a temporary variable
-    // at every step.
+    // Every emit returns its destination register, so expressions compose.
     IRReg emitConst(long value, int line);
     IRReg emitUnary(IROp op, IRReg a, int line);
     IRReg emitBinary(IROp op, IRReg a, IRReg b, int line);
@@ -161,9 +138,8 @@ struct IRFunction {
     void  emitReturn(IRReg value, int line);
 
     int registerCount() const { return nextReg; }
-    // Does control already leave here?  Anything emitted after a return or an
-    // unconditional jump, up to the next label, can never run -- so lowering
-    // asks before emitting a function's trailing code.
+    // Anything after a return or jump cannot run, so lowering asks before
+    // emitting a function's trailing code.
     bool endsWithTerminator() const;
 
 private:
@@ -178,9 +154,8 @@ struct IRGlobal {
     IRGlobal(const std::string &n, int s) : name(n), size(s) {}
 };
 
-// A vtable is data, not code: an array of function addresses, one per slot.
-// Slot indices come straight from Layout, which is why they mean the same
-// thing in a base and in everything derived from it.
+// Data, not code.  Slot indices come from Layout, which is why they mean the
+// same thing in a base and everything derived from it.
 struct IRVTable {
     std::string className;
     std::vector<std::string> slots;     // mangled function names
@@ -198,8 +173,7 @@ private:
     static void printInstr(const IRInstr &i);
 };
 
-// Name mangling.  One flat namespace of symbols is all a linker or a VM wants,
-// so a class member's owning class is folded into its name.
+// One flat namespace of symbols, so the owning class folds into the name.
 std::string mangleFunction(const std::string &className, const std::string &name);
 std::string mangleConstructor(const std::string &className, std::size_t argCount);
 std::string mangleDestructor(const std::string &className);
