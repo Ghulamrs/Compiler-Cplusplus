@@ -198,21 +198,23 @@ IRReg IRFunction::emitFuncAddr(const std::string &sym, int line) {
     return i.dest;
 }
 
-IRReg IRFunction::emitLoad(IRReg addr, int size, int line) {
+IRReg IRFunction::emitLoad(IRReg addr, int size, bool isFloat, int line) {
     IRInstr i(IR_Load);
     i.dest = newReg();
     i.a = addr;
     i.imm = size;
+    i.isFloat = isFloat;
     i.line = line;
     push(i);
     return i.dest;
 }
 
-void IRFunction::emitStore(IRReg addr, IRReg value, int size, int line) {
+void IRFunction::emitStore(IRReg addr, IRReg value, int size, bool isFloat, int line) {
     IRInstr i(IR_Store);
     i.a = addr;
     i.b = value;
     i.imm = size;
+    i.isFloat = isFloat;
     i.line = line;
     push(i);
 }
@@ -367,10 +369,11 @@ void IRModule::printInstr(const IRInstr &i) {
         std::cout << " " << regName(i.a) << " +" << i.imm;
         break;
     case IR_Load:
-        std::cout << " [" << regName(i.a) << "] :" << i.imm;
+        std::cout << " [" << regName(i.a) << "] :" << i.imm << (i.isFloat ? "f" : "");
         break;
     case IR_Store:
-        std::cout << " [" << regName(i.a) << "] <- " << regName(i.b) << " :" << i.imm;
+        std::cout << " [" << regName(i.a) << "] <- " << regName(i.b)
+                  << " :" << i.imm << (i.isFloat ? "f" : "");
         break;
     case IR_VCallTarget:
         std::cout << " [" << regName(i.a) << "] slot " << i.imm;

@@ -86,6 +86,9 @@ protected:
     Expr *parseUnary();
     Expr *parsePostfix();
     Expr *parseCallSuffix(Expr *callee);
+    // a[i] is desugared to *(a + i), which is what it means in C -- so it
+    // needs no node, no type rule and no lowering of its own.
+    Expr *parseIndexSuffix(Expr *base);
 
     // C's type grammar:  int   int*   int**
     Type *parsePointerSuffixes(Type *base);

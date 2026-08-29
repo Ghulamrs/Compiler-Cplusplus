@@ -98,13 +98,16 @@ struct IRInstr {
     IRReg b;
     long imm;
     double fimm;            // IR_FConst
+    // A load or store of a floating value moves different bits than an integer
+    // one of the same width -- a 4-byte float is not the low half of a double.
+    bool isFloat;
     std::string sym;            // callee or global name
     std::vector<IRReg> args;    // for IR_Call / IR_CallIndirect
     int line;
 
     IRInstr(IROp o)
         : op(o), dest(IR_NoReg), a(IR_NoReg), b(IR_NoReg), imm(0), fimm(0.0),
-          line(0) {}
+          isFloat(false), line(0) {}
 };
 
 // A class-typed local occupies its whole object size here, which is what makes
@@ -145,8 +148,8 @@ struct IRFunction {
     IRReg emitGlobalAddr(const std::string &sym, int line);
     IRReg emitFieldAddr(IRReg base, long offset, int line);
     IRReg emitFuncAddr(const std::string &sym, int line);
-    IRReg emitLoad(IRReg addr, int size, int line);
-    void  emitStore(IRReg addr, IRReg value, int size, int line);
+    IRReg emitLoad(IRReg addr, int size, bool isFloat, int line);
+    void  emitStore(IRReg addr, IRReg value, int size, bool isFloat, int line);
     IRReg emitCall(const std::string &sym, const std::vector<IRReg> &args,
                    bool wantsResult, int line);
     IRReg emitCallIndirect(IRReg target, const std::vector<IRReg> &args,

@@ -79,6 +79,7 @@ protected:
     // The type an expression's operands meet in, so both sides are converted
     // before the operator runs.
     static bool arithKind(Type *t, BuiltinKind &out);
+    static bool isFloatType(Type *t);
     static BuiltinKind commonKind(BuiltinKind a, BuiltinKind b);
     Type *literalType(BuiltinKind k);
     Type *commonType(BuiltinKind k);
@@ -88,6 +89,7 @@ protected:
     IRReg lowerAssign(BinaryExpr *e);
     IRReg lowerShortCircuit(BinaryExpr *e);
     virtual IRReg lowerCall(CallExpr *e, bool wantsResult);
+    std::vector<IRReg> lowerArgs(CallExpr *e, Function *target, std::size_t skip);
 
     // --- hooks the C++ layer answers ----------------------------------
     // false when the node is not one this layer handles -- always, here.
@@ -104,8 +106,15 @@ protected:
     int declareLocal(const std::string &name, int size, bool isParam);
     int findSlot(const std::string &name) const;
     virtual bool isReferenceExpr(Expr *e);  // its slot holds an address
+    // A reference binds to an object, so it is passed and stored as that
+    // object's ADDRESS.  C has no references, so this is false here.
+    virtual bool isReferenceType(Type *t);
     std::map<std::string, Type*> localTypes;
     std::map<std::string, Type*> globalTypes;
+    // Declared functions by name, bodiless ones included -- lowering needs
+    // their parameter types to convert arguments at the call.
+    std::map<std::string, Function*> functions;
+    Type *currentReturnType;    // for converting a return expression
 
 private:
     Lowering(const Lowering &);

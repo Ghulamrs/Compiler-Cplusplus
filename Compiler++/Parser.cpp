@@ -525,6 +525,7 @@ Expr *Parser::parsePostfix() {
     Expr *e = parsePrimary();                       // virtual
     while (e) {
         if (cur.kind == TOK_LPAREN) { e = parseCallSuffix(e); continue; }
+        if (cur.kind == TOK_LBRACKET) { e = parseIndexSuffix(e); continue; }
         Expr *m = parseMemberSuffix(e);             // virtual; 0 in the C layer
         if (m) { e = m; continue; }
         break;
@@ -546,6 +547,21 @@ Expr *Parser::parseCallSuffix(Expr *callee) {
     }
     expect(TOK_RPAREN, "after call arguments");
     return call;
+}
+
+// a[i] means *(a + i).  Building exactly that keeps subscripting and pointer
+// arithmetic one feature rather than two.
+Expr *Parser::parseIndexSuffix(Expr *base) {
+    const int line = cur.line, col = cur.col;
+    advance();                                  // consume '['
+    Expr *index = parseExpression();
+    expect(TOK_RBRACKET, "after a subscript");
+    if (!index) return base;
+    Expr *sum = new BinaryExpr(BIN_Add, base, index);
+    sum->line = line; sum->col = col;
+    Expr *deref = new UnaryExpr(UN_Deref, sum);
+    deref->line = line; deref->col = col;
+    return deref;
 }
 
 Expr *Parser::parsePrimary() {

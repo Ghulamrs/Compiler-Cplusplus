@@ -9,7 +9,7 @@
 namespace cc {
 
 Lowering::Lowering(IRModule &module, const Layout &l, Diagnostics &d)
-    : mod(module), layout(l), diag(d), fn(0) {}
+    : mod(module), layout(l), diag(d), fn(0), currentReturnType(0) {}
 
 Lowering::~Lowering() {
     for (std::map<int, Type*>::iterator it = builtinCache.begin();
@@ -76,6 +76,11 @@ BuiltinKind Lowering::commonKind(BuiltinKind a, BuiltinKind b) {
     return builtinIsSigned(a) ? b : a;
 }
 
+bool Lowering::isFloatType(Type *t) {
+    BuiltinKind k;
+    return arithKind(t, k) && builtinIsFloating(k);
+}
+
 bool Lowering::arithKind(Type *t, BuiltinKind &out) {
     BuiltinType *bt = dynamic_cast<BuiltinType*>(t);
     if (!bt || !builtinIsArithmetic(bt->kind)) return false;
@@ -135,6 +140,14 @@ Type *Lowering::typeOf(Expr *e) {
     }
     if (BinaryExpr *b = dynamic_cast<BinaryExpr*>(e)) {
         if (b->op == BIN_Assign) return typeOf(b->lhs);
+        // p + n and p - n stay pointers, which is what makes a[i] load the
+        // right width.
+        if (b->op == BIN_Add || b->op == BIN_Sub) {
+            Type *lt = typeOf(b->lhs);
+            if (dynamic_cast<PointerType*>(lt)) return lt;
+            Type *rt = typeOf(b->rhs);
+            if (b->op == BIN_Add && dynamic_cast<PointerType*>(rt)) return rt;
+        }
         return 0;
     }
     return 0;
@@ -142,6 +155,10 @@ Type *Lowering::typeOf(Expr *e) {
 
 bool Lowering::isReferenceExpr(Expr *) {
     return false;               // C has no references
+}
+
+bool Lowering::isReferenceType(Type *) {
+    return false;
 }
 
 // --- Declarations ---
@@ -154,6 +171,13 @@ void Lowering::lowerUnit(const std::vector<Decl*> &units) {
             mod.globals.push_back(IRGlobal(vd->name, sizeOfType(vd->type)));
             globalTypes[vd->name] = vd->type;
         }
+    }
+    // Record every function first, bodiless declarations included: an argument
+    // must be converted to its parameter's type, and a native is declared and
+    // never defined.
+    for (std::size_t i = 0; i < units.size(); ++i) {
+        Function *f = dynamic_cast<Function*>(units[i]);
+        if (f) functions[f->name] = f;
     }
     for (std::size_t i = 0; i < units.size(); ++i) lowerDecl(units[i]);
 }
@@ -169,7 +193,9 @@ void Lowering::lowerFunction(Function *f, const std::string &mangled,
     mod.functions.push_back(irf);
 
     IRFunction *savedFn = fn;
+    Type *savedReturn = currentReturnType;
     fn = irf;
+    currentReturnType = f->retType;
     // A fresh naming environment: nothing from the caller's scope is visible.
     std::map<std::string, int> savedSlots;
     savedSlots.swap(slots);
@@ -202,6 +228,7 @@ void Lowering::lowerFunction(Function *f, const std::string &mangled,
 
     popScope();
     fn = savedFn;
+    currentReturnType = savedReturn;
     slots.swap(savedSlots);
     localTypes.swap(savedTypes);
 }
@@ -238,7 +265,10 @@ void Lowering::lowerStmt(Stmt *s) {
 
     if (ReturnStmt *rs = dynamic_cast<ReturnStmt*>(s)) {
         IRReg v = IR_NoReg;
-        if (rs->expr) v = lowerValue(rs->expr);
+        if (rs->expr) {
+            v = lowerValue(rs->expr);
+            v = convert(v, typeOf(rs->expr), currentReturnType, rs->line);
+        }
         // Everything this return leaves is torn down first.
         emitAllOpenScopeExits();
         fn->emitReturn(v, rs->line);
@@ -266,13 +296,17 @@ void Lowering::lowerVarDecl(VarDecl *vd) {
     localTypes[vd->name] = vd->type;
     if (vd->init) {
         // A reference stores the ADDRESS of what it binds to -- the whole of
-        // what a reference becomes.
-        IRReg value = lowerValue(vd->init);
-        if (!isReferenceExpr(vd->init)) {
+        // what a reference becomes.  The DECLARED type decides that, not the
+        // initialiser: `Base& r = obj;` binds to obj, it does not copy it.
+        IRReg value;
+        if (isReferenceType(vd->type)) {
+            value = lowerAddress(vd->init);
+        } else {
+            value = lowerValue(vd->init);
             value = convert(value, typeOf(vd->init), vd->type, vd->line);
         }
         const IRReg addr = fn->emitLocalAddr(slot, vd->line);
-        fn->emitStore(addr, value, size, vd->line);
+        fn->emitStore(addr, value, size, isFloatType(vd->type), vd->line);
     }
 }
 
@@ -353,7 +387,7 @@ IRReg Lowering::lowerAddress(Expr *e) {
             const IRReg addr = fn->emitLocalAddr(slot, e->line);
             // A reference's slot holds another object's address, so the address
             // OF the reference is the value IN its slot.
-            if (isReferenceExpr(e)) return fn->emitLoad(addr, Layout::PointerSize, e->line);
+            if (isReferenceExpr(e)) return fn->emitLoad(addr, Layout::PointerSize, false, e->line);
             return addr;
         }
         return fn->emitGlobalAddr(id->name, e->line);
@@ -392,7 +426,8 @@ IRReg Lowering::lowerValue(Expr *e) {
         const IRReg addr = lowerAddress(e);
         Type *t = typeOf(e);
         (void)id;
-        return fn->emitLoad(addr, t ? sizeOfType(t) : Layout::IntSize, e->line);
+        return fn->emitLoad(addr, t ? sizeOfType(t) : Layout::IntSize,
+                            isFloatType(t), e->line);
     }
 
     if (CallExpr *call = dynamic_cast<CallExpr*>(e)) return lowerCall(call, true);
@@ -415,7 +450,8 @@ IRReg Lowering::lowerUnary(UnaryExpr *e) {
     case UN_Deref: {
         const IRReg addr = lowerValue(e->operand);
         Type *t = typeOf(e);
-        return fn->emitLoad(addr, t ? sizeOfType(t) : Layout::IntSize, e->line);
+        return fn->emitLoad(addr, t ? sizeOfType(t) : Layout::IntSize,
+                            isFloatType(t), e->line);
     }
     }
     return IR_NoReg;
@@ -432,6 +468,30 @@ IRReg Lowering::lowerBinary(BinaryExpr *e) {
     Type *rt = typeOf(e->rhs);
     IRReg a = lowerValue(e->lhs);
     IRReg b = lowerValue(e->rhs);
+
+    // Pointer arithmetic counts objects, not bytes, so the integer side is
+    // scaled by the pointee's size before the add.  This is the whole of what
+    // makes a[i] reach element i rather than byte i.
+    PointerType *pl = dynamic_cast<PointerType*>(lt);
+    PointerType *pr = dynamic_cast<PointerType*>(rt);
+    if ((pl || pr) && (e->op == BIN_Add || e->op == BIN_Sub)) {
+        if (pl && pr) {
+            // p - q: the byte difference divided by the element size.
+            const IRReg diff = fn->emitBinary(IR_Sub, a, b, e->line);
+            const int step = sizeOfType(pl->base);
+            if (step <= 1) return diff;
+            const IRReg by = fn->emitConst(step, e->line);
+            return fn->emitBinary(IR_Div, diff, by, e->line);
+        }
+        PointerType *p = pl ? pl : pr;
+        IRReg &index = pl ? b : a;
+        const int step = sizeOfType(p->base);
+        if (step > 1) {
+            const IRReg by = fn->emitConst(step, e->line);
+            index = fn->emitBinary(IR_Mul, index, by, e->line);
+        }
+        return fn->emitBinary(e->op == BIN_Add ? IR_Add : IR_Sub, a, b, e->line);
+    }
 
     BuiltinKind kl, kr;
     BuiltinKind common = BK_Int;
@@ -468,7 +528,8 @@ IRReg Lowering::lowerAssign(BinaryExpr *e) {
     Type *t = typeOf(e->lhs);
     value = convert(value, typeOf(e->rhs), t, e->line);
     const IRReg addr = lowerAddress(e->lhs);
-    fn->emitStore(addr, value, t ? sizeOfType(t) : Layout::IntSize, e->line);
+    fn->emitStore(addr, value, t ? sizeOfType(t) : Layout::IntSize,
+                  isFloatType(t), e->line);
     return value;
 }
 
@@ -480,29 +541,51 @@ IRReg Lowering::lowerShortCircuit(BinaryExpr *e) {
 
     const IRReg left = lowerValue(e->lhs);
     IRReg addr = fn->emitLocalAddr(slot, e->line);
-    fn->emitStore(addr, left, Layout::IntSize, e->line);
+    fn->emitStore(addr, left, Layout::IntSize, false, e->line);
 
     if (e->op == BIN_LAnd) fn->emitBranchZero(left, done, e->line);
     else                   fn->emitBranchNZ(left, done, e->line);
 
     const IRReg right = lowerValue(e->rhs);
     addr = fn->emitLocalAddr(slot, e->line);
-    fn->emitStore(addr, right, Layout::IntSize, e->line);
+    fn->emitStore(addr, right, Layout::IntSize, false, e->line);
 
     fn->emitLabel(done);
     addr = fn->emitLocalAddr(slot, e->line);
-    return fn->emitLoad(addr, Layout::IntSize, e->line);
+    return fn->emitLoad(addr, Layout::IntSize, false, e->line);
 }
 
 IRReg Lowering::lowerCall(CallExpr *e, bool wantsResult) {
-    std::vector<IRReg> args;
-    for (std::size_t i = 0; i < e->args.size(); ++i) args.push_back(lowerValue(e->args[i]));
     IdentExpr *callee = dynamic_cast<IdentExpr*>(e->callee);
     if (!callee) {
         diag.error(e->line, e->col, "internal: unsupported callee in lowering");
         return fn->emitConst(0, e->line);
     }
-    return fn->emitCall(callee->name, args, wantsResult, e->line);
+    std::map<std::string, Function*>::const_iterator it = functions.find(callee->name);
+    Function *target = (it == functions.end()) ? 0 : it->second;
+    return fn->emitCall(callee->name, lowerArgs(e, target, 0), wantsResult, e->line);
+}
+
+// Each argument is converted to its parameter's declared type.  Without this a
+// double handed to an int parameter would arrive as raw bits.  `skip` is 1 when
+// the callee is a method and `this` already occupies the first slot.
+std::vector<IRReg> Lowering::lowerArgs(CallExpr *e, Function *target, std::size_t skip) {
+    std::vector<IRReg> args;
+    for (std::size_t i = 0; i < e->args.size(); ++i) {
+        const std::size_t p = i + skip;
+        Type *want = (target && p < target->params.size()) ? target->params[p]->type : 0;
+        IRReg v;
+        if (want && isReferenceType(want)) {
+            // A reference parameter receives the object's address, never a
+            // copy of its bytes.
+            v = lowerAddress(e->args[i]);
+        } else {
+            v = lowerValue(e->args[i]);
+            if (want) v = convert(v, typeOf(e->args[i]), want, e->line);
+        }
+        args.push_back(v);
+    }
+    return args;
 }
 
 bool Lowering::lowerLayerValue(Expr *, IRReg &)   { return false; }

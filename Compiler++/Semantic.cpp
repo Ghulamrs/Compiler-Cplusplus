@@ -1165,6 +1165,25 @@ cc::Type *SemanticAnalyzer::analyzeExpr(cc::Expr *e, bool &isLValue) {
             return makeBuiltin(cc::BK_Int);
         }
 
+        // Pointer arithmetic: p + n and p - n step by whole objects, so the
+        // result is still a pointer.  p - q counts the objects between them.
+        cc::PointerType *pl = dynamic_cast<cc::PointerType*>(stripReference(lt));
+        cc::PointerType *pr = dynamic_cast<cc::PointerType*>(stripReference(rt));
+        if (pl || pr) {
+            cc::BuiltinKind ik;
+            const bool lIsInt = builtinKindOf(lt, ik) && cc::builtinIsInteger(ik);
+            const bool rIsInt = builtinKindOf(rt, ik) && cc::builtinIsInteger(ik);
+            if (be->op == cc::BIN_Add && pl && rIsInt) return lt;
+            if (be->op == cc::BIN_Add && pr && lIsInt) return rt;
+            if (be->op == cc::BIN_Sub && pl && rIsInt) return lt;
+            if (be->op == cc::BIN_Sub && pl && pr && sameType(lt, rt)) {
+                return makeBuiltin(cc::BK_Long);
+            }
+            error(be, std::string("invalid pointer arithmetic: ") + describe(lt)
+                      + " " + cc::binaryOpText(be->op) + " " + describe(rt));
+            return 0;
+        }
+
         // Arithmetic: both operands meet in a common type, and that is the
         // type of the result.  % is integers only.
         cc::BuiltinKind kl, kr;

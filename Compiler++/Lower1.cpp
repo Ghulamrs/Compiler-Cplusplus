@@ -132,7 +132,7 @@ IRReg Lowering::loadThis(int line) {
     const int slot = findSlot("this");
     if (slot < 0) return fn->emitConst(0, line);
     const IRReg addr = fn->emitLocalAddr(slot, line);
-    return fn->emitLoad(addr, Layout::PointerSize, line);
+    return fn->emitLoad(addr, Layout::PointerSize, false, line);
 }
 
 // o.x needs o's ADDRESS, p->x needs p's VALUE.  Both end as an object address,
@@ -179,7 +179,8 @@ bool Lowering::lowerLayerValue(cc::Expr *e, IRReg &out) {
         ClassDecl *cd = classOfType(typeOf(ma->base));
         if (!cd) cd = findClass(currentClass);
         const FieldLayout *f = cd ? findField(cd->name, ma->member) : 0;
-        out = fn->emitLoad(addr, f ? f->size : Layout::IntSize, e->line);
+        out = fn->emitLoad(addr, f ? f->size : Layout::IntSize,
+                           f && isFloatType(f->type), e->line);
         return true;
     }
 
@@ -190,7 +191,7 @@ bool Lowering::lowerLayerValue(cc::Expr *e, IRReg &out) {
         const FieldLayout *f = findField(currentClass, id->name);
         if (!f) return false;
         const IRReg addr = fn->emitFieldAddr(loadThis(e->line), f->offset, e->line);
-        out = fn->emitLoad(addr, f->size, e->line);
+        out = fn->emitLoad(addr, f->size, isFloatType(f->type), e->line);
         return true;
     }
 
@@ -286,6 +287,10 @@ bool Lowering::isReferenceExpr(cc::Expr *e) {
     return t && dynamic_cast<ReferenceType*>(t) != 0;
 }
 
+bool Lowering::isReferenceType(cc::Type *t) {
+    return dynamic_cast<ReferenceType*>(t) != 0;
+}
+
 // --- Calls, including the one that matters ---
 
 IRReg Lowering::lowerCall(cc::CallExpr *e, bool wantsResult) {
@@ -299,9 +304,8 @@ IRReg Lowering::lowerCall(cc::CallExpr *e, bool wantsResult) {
             if (m) {
                 std::vector<IRReg> args;
                 args.push_back(loadThis(e->line));
-                for (std::size_t i = 0; i < e->args.size(); ++i) {
-                    args.push_back(lowerValue(e->args[i]));
-                }
+                const std::vector<IRReg> rest = lowerArgs(e, m, 0);
+                args.insert(args.end(), rest.begin(), rest.end());
                 return fn->emitCall(mangleFunction(m->ownerClass, m->name), args,
                                     wantsResult, e->line);
             }
@@ -322,7 +326,8 @@ IRReg Lowering::lowerCall(cc::CallExpr *e, bool wantsResult) {
     // function runs, not how it is called.
     std::vector<IRReg> args;
     args.push_back(object);
-    for (std::size_t i = 0; i < e->args.size(); ++i) args.push_back(lowerValue(e->args[i]));
+    const std::vector<IRReg> rest = lowerArgs(e, m, 0);
+    args.insert(args.end(), rest.begin(), rest.end());
 
     // Through a pointer or reference the static type is only a lower bound, so
     // the call must dispatch.  On a named object it cannot be anything but that
@@ -363,7 +368,7 @@ void Lowering::emitVPtrStore(ClassDecl *cd, IRReg objectAddr, int line) {
     // Offset 0 -- the decision that makes an upcast free.
     const IRReg vt = fn->emitGlobalAddr(mangleVTable(cd->name), line);
     const IRReg at = fn->emitFieldAddr(objectAddr, 0, line);
-    fn->emitStore(at, vt, Layout::PointerSize, line);
+    fn->emitStore(at, vt, Layout::PointerSize, false, line);
 }
 
 void Lowering::emitConstruct(ClassDecl *cd, IRReg objectAddr,
@@ -373,9 +378,19 @@ void Lowering::emitConstruct(ClassDecl *cd, IRReg objectAddr,
         emitVPtrStore(cd, objectAddr, line);
         return;
     }
+    MethodDecl *ctor = 0;
+    for (std::size_t i = 0; i < cd->ctors.size(); ++i) {
+        if (cd->ctors[i]->params.size() == args.size()) { ctor = cd->ctors[i]; break; }
+    }
     std::vector<IRReg> callArgs;
     callArgs.push_back(objectAddr);
-    for (std::size_t i = 0; i < args.size(); ++i) callArgs.push_back(lowerValue(args[i]));
+    for (std::size_t i = 0; i < args.size(); ++i) {
+        IRReg v = lowerValue(args[i]);
+        if (ctor && i < ctor->params.size()) {
+            v = convert(v, typeOf(args[i]), ctor->params[i]->type, line);
+        }
+        callArgs.push_back(v);
+    }
     fn->emitCall(mangleConstructor(cd->name, args.size()), callArgs, false, line);
 }
 
@@ -453,9 +468,10 @@ void Lowering::emitPrologue(cc::Function *f) {
             if (mi.isBase || mi.name != fd->name || mi.args.empty()) continue;
             const FieldLayout *fl = findField(cd->name, fd->name);
             if (!fl) break;
-            const IRReg value = lowerValue(mi.args[0]);
+            IRReg value = lowerValue(mi.args[0]);
+            value = convert(value, typeOf(mi.args[0]), fd->type, mi.line);
             const IRReg addr = fn->emitFieldAddr(loadThis(f->line), fl->offset, mi.line);
-            fn->emitStore(addr, value, fl->size, mi.line);
+            fn->emitStore(addr, value, fl->size, isFloatType(fd->type), mi.line);
             break;
         }
     }

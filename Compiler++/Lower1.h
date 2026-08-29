@@ -65,6 +65,7 @@ private:
     virtual bool lowerLayerAddress(cc::Expr *e, IRReg &out);
     virtual IRReg lowerCall(cc::CallExpr *e, bool wantsResult);
     virtual bool isReferenceExpr(cc::Expr *e);
+    virtual bool isReferenceType(cc::Type *t);
     virtual void lowerDecl(cc::Decl *d);
     virtual void emitPrologue(cc::Function *f);
     virtual void emitEpilogue(cc::Function *f);
