@@ -1,10 +1,20 @@
-//symboltable.h
+// SymbolTable.h
+//
+// Scopes and the names in them.
+//
+// A SymbolTable is a STACK of Scopes: the innermost is searched first and a
+// lookup walks outward, which is exactly what lexical scoping means.  Class
+// members get a scope of their own, pushed while a method body is analysed --
+// that is what makes an unqualified `x` inside a method find the class's field.
+//
+// C++98 only.
 
 #ifndef SYMBOLTABLE_H
 #define SYMBOLTABLE_H
 
-#include <string>
+#include <cstddef>
 #include <map>
+#include <string>
 #include <vector>
 
 // The AST lives in two namespaces: the C layer is `cc`, the C++ layer is
@@ -25,10 +35,10 @@ enum SymbolKind {
 struct Symbol {
     SymbolKind kind;
     std::string name;
-    // Any AST node may own a symbol: cxx::Decl for declarations, cc::Function
-    // for C-layer functions.  cc::ASTNode is the common root of both.
-    cc::ASTNode *decl;  // pointer to declaration node (optional)
-    cc::Type *type;     // associated type (for vars/fields/methods return type)
+    // Any AST node may own a symbol: cc::VarDecl, cc::Function, cxx::FieldDecl.
+    // cc::ASTNode is the common root of all of them.
+    cc::ASTNode *decl;
+    cc::Type *type;         // not owned
     Symbol(SymbolKind k, const std::string &n, cc::ASTNode *d, cc::Type *t)
         : kind(k), name(n), decl(d), type(t) {}
 };
@@ -37,26 +47,36 @@ class Scope {
 public:
     Scope() {}
     ~Scope();
+    // Returns false if the name is already declared in THIS scope.
     bool insert(const std::string &name, Symbol *sym);
-    Symbol *lookupLocal(const std::string &name);
-    Symbol *lookup(const std::string &name);
-    void pushChild(Scope *s) { children.push_back(s); }
+    Symbol *lookup(const std::string &name) const;
+
 private:
     std::map<std::string, Symbol*> table;
-    std::vector<Scope*> children;
+
+    Scope(const Scope &);
+    Scope &operator=(const Scope &);
 };
 
 class SymbolTable {
 public:
     SymbolTable();
     ~SymbolTable();
+
     void pushScope();
     void popScope();
+
     bool insert(const std::string &name, Symbol *sym);
-    Symbol *lookup(const std::string &name);
-    Symbol *lookupLocal(const std::string &name);
+    // Innermost outward.
+    Symbol *lookup(const std::string &name) const;
+    // Current scope only -- the redeclaration test.
+    Symbol *lookupLocal(const std::string &name) const;
+
 private:
     std::vector<Scope*> stack;
+
+    SymbolTable(const SymbolTable &);
+    SymbolTable &operator=(const SymbolTable &);
 };
 
 #endif

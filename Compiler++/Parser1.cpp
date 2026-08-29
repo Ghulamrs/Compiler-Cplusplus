@@ -3,121 +3,102 @@
 // C++98 only.  See Parser1.h for what this layer adds to cc::Parser.
 
 #include "Parser1.h"
-#include "Lexer.h"
-#include "AST1.h"
-#include <cstdlib>
-#include <iostream>
+
+#include <string>
 
 namespace cxx {
 
 // The base constructor creates the lexer and primes the first token.
-Parser::Parser(const std::string &s) : cc::Parser(s) {}
+Parser::Parser(const std::string &s, Diagnostics &d) : cc::Parser(s, d) {}
 
-std::vector<Decl*> Parser::parseTranslationUnit() {
-    std::vector<Decl*> units;
-    while (cur.kind != TOK_EOF) {
-        Decl *d = parseDeclaration();
-        if (d) units.push_back(d);
-    }
-    return units;
-}
-
-Decl *Parser::parseDeclaration() {
+// --- declarations -----------------------------------------------------
+// Only the class form is new.  Variables and functions are C's, so they are
+// handed straight back to the base class rather than reimplemented.
+cc::Decl *Parser::parseDeclaration() {
     if (cur.kind == TOK_CLASS || cur.kind == TOK_STRUCT) return parseClass();
-    // variable or function declaration
-    Type *t = parseType();
-    if (!t) { std::cerr << "Expected type in declaration\n"; std::exit(1); }
-    if (cur.kind != TOK_IDENTIFIER) { std::cerr << "Expected identifier\n"; std::exit(1); }
-    std::string name = cur.text;
-    advance();
-    // a function at file scope:  int main() { ... }
-    if (cur.kind == TOK_LPAREN) {
-        return parseFunctionRest(t, name);
-    }
-    // simple var decl ending with ';'
-    if (cur.kind == TOK_SEMI) {
-        advance();
-        return new VarDecl(t, name);
-    }
-    std::cerr << "Unsupported declaration form for '" << name << "'\n";
-    std::exit(1);
-    return 0;
-}
-
-// '(' [ type IDENT { ',' type IDENT } ] ')' followed by ';' or a body.
-// The body is parsed by cc::Parser::parseBlock(), inherited from the C layer,
-// so C++ contributes the signature and C contributes the statements.
-MethodDecl *Parser::parseFunctionRest(Type *retType, const std::string &name) {
-    if (cur.kind != TOK_LPAREN) { std::cerr << "Expected (\n"; std::exit(1); }
-    advance();
-    MethodDecl *md = new MethodDecl(retType, name);
-    while (cur.kind != TOK_RPAREN && cur.kind != TOK_EOF) {
-        Type *pt = parseType();
-        if (!pt) { std::cerr << "Expected param type\n"; std::exit(1); }
-        if (cur.kind != TOK_IDENTIFIER) { std::cerr << "Expected param name\n"; std::exit(1); }
-        std::string pname = cur.text;
-        advance();
-        md->params.push_back(new VarDecl(pt, pname));
-        if (cur.kind == TOK_COMMA) advance();
-    }
-    if (cur.kind != TOK_RPAREN) { std::cerr << "Expected )\n"; std::exit(1); }
-    advance();
-    if (cur.kind == TOK_SEMI) {          // just a declaration
-        advance();
-        return md;
-    }
-    if (cur.kind == TOK_LBRACE) {        // a definition: keep the body
-        md->hasBody = true;
-        parseBlock(md->body);            // inherited from cc::Parser
-        return md;
-    }
-    std::cerr << "Expected ; or { after function " << name << "\n";
-    std::exit(1);
-    return 0;
+    return cc::Parser::parseDeclaration();
 }
 
 ClassDecl *Parser::parseClass() {
-    // consume 'class' or 'struct'
+    // `struct` members default to public, `class` members to private -- the
+    // only difference between the two keywords in this subset.
+    const Access defaultAccess = (cur.kind == TOK_STRUCT) ? ACC_Public : ACC_Private;
+    const int line = cur.line, col = cur.col;
+    advance();                                  // consume 'class' or 'struct'
+
+    if (cur.kind != TOK_IDENTIFIER) {
+        errorAtCurrent("expected a class name");
+        return 0;
+    }
+    const std::string cname = cur.text;
     advance();
-    if (cur.kind != TOK_IDENTIFIER) { std::cerr << "Expected class name\n"; std::exit(1); }
-    std::string cname = cur.text;
-    advance();
-    if (cur.kind != TOK_LBRACE) { std::cerr << "Expected { in class\n"; std::exit(1); }
-    advance();
+
     ClassDecl *cd = new ClassDecl(cname);
-    // simple member parsing until '}'
+    cd->line = line;
+    cd->col = col;
+
+    if (!expect(TOK_LBRACE, "to open a class body")) return cd;
+
+    Access access = defaultAccess;
     while (cur.kind != TOK_RBRACE && cur.kind != TOK_EOF) {
-        // handle access specifiers like 'public:'
+        // an access specifier:  public:  private:  protected:
         if (cur.kind == TOK_PUBLIC || cur.kind == TOK_PRIVATE || cur.kind == TOK_PROTECTED) {
+            access = (cur.kind == TOK_PUBLIC)  ? ACC_Public
+                   : (cur.kind == TOK_PRIVATE) ? ACC_Private
+                                               : ACC_Protected;
             advance();
-            if (cur.kind != TOK_COLON) { std::cerr << "Expected : after access\n"; std::exit(1); }
-            advance();
+            expect(TOK_COLON, "after an access specifier");
             continue;
         }
-        Decl *m = parseMemberDecl();
+        const int before = diag.errorCount();
+        Decl *m = parseMemberDecl(cname, access);
         if (m) cd->members.push_back(m);
+        if (diag.errorCount() != before) synchronize();
     }
-    if (cur.kind != TOK_RBRACE) { std::cerr << "Expected } after class\n"; std::exit(1); }
-    advance();
-    if (cur.kind == TOK_SEMI) advance();
+
+    expect(TOK_RBRACE, "to close a class body");
+    expect(TOK_SEMI, "after a class definition");
     return cd;
 }
 
-Decl *Parser::parseMemberDecl() {
-    Type *t = parseType();
-    if (!t) { std::cerr << "Expected type in member\n"; std::exit(1); }
-    if (cur.kind != TOK_IDENTIFIER) { std::cerr << "Expected member name\n"; std::exit(1); }
-    std::string name = cur.text;
-    advance();
-    // a method if '(' follows -- same rule as a free function
-    if (cur.kind == TOK_LPAREN) {
-        return parseFunctionRest(t, name);
+// A member is a field or a method.  Both start with a type and a name, so the
+// parameter list is what tells them apart -- and the method case reuses the C
+// layer's parseFunctionRest(), which also parses the body.
+Decl *Parser::parseMemberDecl(const std::string &className, Access access) {
+    cc::Type *t = parseType();                  // virtual: knows C++ types
+    if (!t) {
+        errorAtCurrent(std::string("expected a member declaration, found ")
+                       + tokenName(cur.kind));
+        advance();                              // guarantee progress
+        return 0;
     }
-    // field
-    if (cur.kind == TOK_SEMI) { advance(); return new FieldDecl(t, name); }
-    std::cerr << "Unsupported member form\n";
-    std::exit(1);
-    return 0;
+    if (cur.kind != TOK_IDENTIFIER) {
+        errorAtCurrent("expected a member name");
+        delete t;
+        return 0;
+    }
+    const int line = cur.line, col = cur.col;
+    const std::string name = cur.text;
+    advance();
+
+    if (cur.kind == TOK_LPAREN) {
+        // A method is a C function that also knows its access and its class.
+        // parseFunctionRest() fills in a cc::Function; because MethodDecl IS a
+        // cc::Function, the same call populates the derived node.
+        MethodDecl *md = new MethodDecl(t, name, access);
+        md->ownerClass = className;
+        md->line = line;
+        md->col = col;
+        parseFunctionParamsAndBody(md);
+        return md;
+    }
+
+    FieldDecl *fd = new FieldDecl(t, name, access);
+    fd->ownerClass = className;
+    fd->line = line;
+    fd->col = col;
+    expect(TOK_SEMI, ("after field " + name).c_str());
+    return fd;
 }
 
 // --- overridden extension point: the type grammar ---------------------
@@ -125,17 +106,19 @@ Decl *Parser::parseMemberDecl() {
 // references.  The builtin and pointer forms come from cc::Parser; only the
 // genuinely C++ parts are added here.
 cc::Type *Parser::parseType() {
-    // int, int*, int** ... handled entirely by the C layer
-    cc::Type *t = cc::Parser::parseType();
+    cc::Type *t = cc::Parser::parseType();      // int, char, void, bool, and T*
 
-    // qualified / class name like A::B  -- new in C++
+    // a qualified / class name like A::B -- new in C++
     if (!t && cur.kind == TOK_IDENTIFIER) {
+        const int line = cur.line, col = cur.col;
         QualifiedName *qn = parseQualifiedName();
-        if (qn && qn->parts.size() > 0) {
-            std::string last = qn->parts[qn->parts.size()-1];
+        if (qn && !qn->parts.empty()) {
+            const std::string last = qn->parts[qn->parts.size() - 1];
             delete qn;
-            // the * suffixes reuse the C layer's helper
-            t = parsePointerSuffixes(new ClassType(last));
+            ClassType *ct = new ClassType(last);
+            ct->line = line;
+            ct->col = col;
+            t = parsePointerSuffixes(ct);       // the * suffixes are the C layer's
         } else {
             delete qn;
         }
@@ -152,41 +135,84 @@ cc::Type *Parser::parseType() {
 }
 
 QualifiedName *Parser::parseQualifiedName() {
+    if (cur.kind != TOK_IDENTIFIER) return 0;
     QualifiedName *qn = new QualifiedName();
-    if (cur.kind != TOK_IDENTIFIER) { delete qn; return 0; }
+    qn->line = cur.line;
+    qn->col = cur.col;
     qn->parts.push_back(cur.text);
     advance();
     while (cur.kind == TOK_COLONCOLON) {
         advance();
-        if (cur.kind != TOK_IDENTIFIER) { std::cerr << "Expected identifier after ::\n"; std::exit(1); }
+        if (cur.kind != TOK_IDENTIFIER) {
+            errorAtCurrent("expected an identifier after '::'");
+            return qn;
+        }
         qn->parts.push_back(cur.text);
         advance();
     }
     return qn;
 }
 
-// --- the one overridden extension point -------------------------------
-// C++ primaries are C primaries plus member-access chaining.  Numbers,
-// parenthesised expressions and the whole +-*/ precedence chain come from
-// cc::Parser; only the identifier case is extended here.  Because
-// cc::Parser::parseMulDiv() calls parsePrimary() virtually, an expression
-// such as (a.b + 1) * 2 is parsed by both layers cooperatively.
+// --- overridden extension point: primary expressions ------------------
+// Numbers, identifiers and parentheses are C's.  This layer adds the two
+// primary forms C has no notion of.
 cc::Expr *Parser::parsePrimary() {
-    if (cur.kind == TOK_IDENTIFIER) {
-        cc::Expr *e = new cc::IdentExpr(cur.text);
+    const int line = cur.line, col = cur.col;
+
+    if (cur.kind == TOK_THIS) {
         advance();
-        while (cur.kind == TOK_DOT || cur.kind == TOK_ARROW) {
-            bool arrow = (cur.kind == TOK_ARROW);
-            advance();
-            if (cur.kind != TOK_IDENTIFIER) { std::cerr << "Expected member name\n"; std::exit(1); }
-            std::string mem = cur.text;
-            advance();
-            e = new MemberAccessExpr(e, mem, arrow);
-        }
+        cc::Expr *e = new ThisExpr();
+        e->line = line; e->col = col;
         return e;
     }
-    // everything else is unchanged from C
+
+    if (cur.kind == TOK_NEW) {
+        advance();
+        cc::Type *t = parseType();
+        if (!t) { errorAtCurrent("expected a type after 'new'"); return 0; }
+        NewExpr *ne = new NewExpr(t);
+        ne->line = line; ne->col = col;
+        if (match(TOK_LPAREN)) {                // constructor arguments
+            while (cur.kind != TOK_RPAREN && cur.kind != TOK_EOF) {
+                cc::Expr *a = parseExpression();
+                if (!a) break;
+                ne->args.push_back(a);
+                if (!match(TOK_COMMA)) break;
+            }
+            expect(TOK_RPAREN, "after 'new' arguments");
+        }
+        return ne;
+    }
+
+    if (cur.kind == TOK_DELETE) {
+        advance();
+        cc::Expr *e = new DeleteExpr(parseUnary());
+        e->line = line; e->col = col;
+        return e;
+    }
+
     return cc::Parser::parsePrimary();
+}
+
+// --- overridden extension point: the postfix hook ---------------------
+// The inherited parsePostfix() loop asks this on every turn.  Returning 0 in
+// the C layer and a node here is what lets ONE loop parse  p.getX().y  --
+// alternating between a C form (the call) and a C++ form (the member access)
+// without either layer knowing about the other's suffix.
+cc::Expr *Parser::parseMemberSuffix(cc::Expr *base) {
+    if (cur.kind != TOK_DOT && cur.kind != TOK_ARROW) return 0;
+    const bool arrow = (cur.kind == TOK_ARROW);
+    const int line = cur.line, col = cur.col;
+    advance();
+    if (cur.kind != TOK_IDENTIFIER) {
+        errorAtCurrent("expected a member name after '.' or '->'");
+        return 0;
+    }
+    const std::string member = cur.text;
+    advance();
+    cc::Expr *e = new MemberAccessExpr(base, member, arrow);
+    e->line = line; e->col = col;
+    return e;
 }
 
 } // namespace cxx

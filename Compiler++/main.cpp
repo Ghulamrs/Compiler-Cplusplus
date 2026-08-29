@@ -4,20 +4,24 @@
 //
 //  Created by G. R. Akhtar on 29/08/2026.
 //
-//  Reads a source file, runs it through the layered front end, and reports
-//  what the semantic pass found:
+//  Reads a source file and runs it through the front end:
 //
 //      cc::Parser        -- LAYER 1, the C layer   (base class)
 //      cxx::Parser       -- LAYER 2, the C++ layer (derives from cc::Parser)
 //      SemanticAnalyzer  -- PASS 3, walks the mixed cc:: / cxx:: tree
+//      Diagnostics       -- every complaint, with a file:line:col
 //
-//  Usage:   Compiler++ [source-file]
-//           Compiler++ --demos          run the built-in layering demos instead
+//  Usage:   Compiler++ [options] [source-file]
+//             -ast        print the syntax tree
+//             -q          diagnostics only, no banner
 //
-//  With no argument it reads DEFAULT_INPUT below.  Xcode runs the binary with
-//  its working directory set to the build products folder, not the project
-//  folder, so the default is an absolute path; pass a path on the command line
+//  With no file it reads DEFAULT_INPUT below.  Xcode runs the binary with its
+//  working directory set to the build products folder, not the project folder,
+//  so the default is an absolute path; pass a path on the command line
 //  (Product > Scheme > Edit Scheme > Arguments) to analyse a different file.
+//
+//  Exit status is 0 when the file has no errors, 1 when it has some, and 2
+//  when the file could not be read -- so a test script can just check it.
 //
 //  C++98 only.
 //
@@ -32,6 +36,7 @@
 
 #include "AST.h"
 #include "AST1.h"
+#include "Diagnostics.h"
 #include "Parser.h"
 #include "Parser1.h"
 #include "Semantic.h"
@@ -51,143 +56,54 @@ static bool readFile(const std::string &path, std::string &out) {
     return true;
 }
 
-// ---------------------------------------------------------------------
-// The real job: parse a file with the C++ layer and analyse it
-// ---------------------------------------------------------------------
-static int analyzeFile(const std::string &path) {
-    std::string source;
-    if (!readFile(path, source)) {
-        std::cerr << "Cannot open input file: " << path << std::endl;
-        return EXIT_FAILURE;
-    }
-
-    std::cout << "=== SOURCE: " << path << " ===" << std::endl;
-    std::cout << source << std::endl;
-
-    // LAYERS 1+2.  parseTranslationUnit() is the C++ layer's, but the function
-    // bodies inside it are parsed by cc::Parser::parseBlock() and the whole
-    // +-*/ precedence chain, inherited unchanged from the C layer.
-    std::cout << "=== PARSE (cxx::Parser over cc::Parser) ===" << std::endl;
-    cxx::Parser parser(source);
-    std::vector<cxx::Decl*> unit = parser.parseTranslationUnit();
-    for (std::size_t i = 0; i < unit.size(); ++i) {
-        unit[i]->print(0);
-    }
-    std::cout << std::endl;
-
-    std::cout << "=== SEMANTIC ANALYSIS (SemanticAnalyzer) ===" << std::endl;
-    SemanticAnalyzer sem;
-    sem.analyze(unit);
-
-    int errs = sem.errors();
-    std::cout << std::endl;
-    if (errs > 0) {
-        std::cout << "Semantic analysis found " << errs << " error(s)." << std::endl;
-    } else {
-        std::cout << "Semantic analysis passed with no errors." << std::endl;
-    }
-
-    for (std::size_t i = 0; i < unit.size(); ++i) delete unit[i];
-    return errs > 0 ? EXIT_FAILURE : EXIT_SUCCESS;
-}
-
-// ---------------------------------------------------------------------
-// The built-in demos, kept for what they document about the layering
-// ---------------------------------------------------------------------
-
-// LAYER 1 on its own: plain C, parsed by the base class.
-static void runCLayer() {
-    const std::string source =
-        "int main() {"
-        "    int a = 1 + 2 * 3;"
-        "    int b = (a - 1) / 2;"
-        "    return a + b;"
-        "}";
-
-    std::cout << "=== LAYER 1: C layer (cc::Parser) ===" << std::endl;
-    cc::Parser parser(source);
-    cc::Function *fn = parser.parse();
-    fn->print(0);
-    delete fn;
-    std::cout << std::endl;
-}
-
-// LAYER 2 on its own: C++-only grammar the base class knows nothing about.
-static void runCppLayer() {
-    const std::string source =
-        "class Point {"
-        "public:"
-        "    int getX();"
-        "    int distance(int dx, int dy) { return 0; }"
-        "    int move(Point& target, int* delta) { return 0; }"
-        "private:"
-        "    int x;"
-        "    int y;"
-        "    int* cache;"
-        "    int** grid;"
-        "};"
-        "Point origin;"
-        "Point* current;";
-
-    // Note the types below: int / int* / int** come from cc::Parser::parseType(),
-    // while Point& and Point* come from cxx::Parser::parseType() overriding it.
-    std::cout << "=== LAYER 2: C++ layer (cxx::Parser) ===" << std::endl;
-    cxx::Parser parser(source);
-    std::vector<cxx::Decl*> unit = parser.parseTranslationUnit();
-    for (std::size_t i = 0; i < unit.size(); ++i) {
-        unit[i]->print(0);
-        delete unit[i];
-    }
-    std::cout << std::endl;
-}
-
-// The two layers cooperating, which is the point of the inheritance:
-//
-//   * parseBlock(), parseStatement(), parseDeclTail() and the whole +-*/
-//     precedence chain are INHERITED from cc::Parser -- not one line of that
-//     is repeated in the C++ layer.
-//   * cc::Parser::parseMulDiv() calls parsePrimary() virtually, so it lands in
-//     cxx::Parser::parsePrimary(), which understands  obj.field  and  p->next.
-//   * cc::Parser::parseStatement() calls parseType() virtually, so a C++ type
-//     declares a C statement:  Point p;  and  int &r = p.x;
-//   * The result is ONE tree mixing cc:: and cxx:: nodes, because
-//     cxx::MemberAccessExpr derives from cc::Expr.
-static void runLayeredParse() {
-    const std::string source =
-        "class Point { public: int x; int y; };"
-        "Point origin;"
-        "Point* current;"
-        "int main() {"
-        "    int d = origin.x + current->y * 2;"
-        "    return d;"
-        "}";
-
-    std::cout << "=== LAYERS 1+2: cxx::Parser using the inherited C-layer rules ===" << std::endl;
-    cxx::Parser parser(source);
-    std::vector<cxx::Decl*> unit = parser.parseTranslationUnit();
-    for (std::size_t i = 0; i < unit.size(); ++i) {
-        unit[i]->print(0);
-    }
-
-    SemanticAnalyzer sem;
-    sem.analyze(unit);
-    std::cout << (sem.hadError() ? "  [semantics: FAILED]" : "  [semantics: ok]") << std::endl;
-
-    for (std::size_t i = 0; i < unit.size(); ++i) delete unit[i];
-    std::cout << std::endl;
-}
-
-static void runDemos() {
-    runCLayer();
-    runCppLayer();
-    runLayeredParse();
+// Everything after the last '/' -- diagnostics read better without the path.
+static std::string baseName(const std::string &path) {
+    const std::string::size_type slash = path.find_last_of('/');
+    return (slash == std::string::npos) ? path : path.substr(slash + 1);
 }
 
 int main(int argc, char **argv) {
-    if (argc > 1 && std::string(argv[1]) == "--demos") {
-        runDemos();
-        return EXIT_SUCCESS;
+    bool showAst = false;
+    bool quiet = false;
+    std::string path;
+
+    for (int i = 1; i < argc; ++i) {
+        const std::string arg = argv[i];
+        if      (arg == "-ast") showAst = true;
+        else if (arg == "-q")   quiet = true;
+        else                    path = arg;
     }
-    const std::string path = (argc > 1) ? std::string(argv[1]) : std::string(DEFAULT_INPUT);
-    return analyzeFile(path);
+    if (path.empty()) path = DEFAULT_INPUT;
+
+    std::string source;
+    if (!readFile(path, source)) {
+        std::cerr << "Cannot open input file: " << path << std::endl;
+        return 2;
+    }
+
+    Diagnostics diag(baseName(path));
+
+    // LAYERS 1+2.  parseTranslationUnit() is the C layer's, but every hook it
+    // calls is virtual, so a cxx::Parser instance parses classes, references,
+    // member access, `this` and `new` through the very same loop.
+    cxx::Parser parser(source, diag);
+    std::vector<cc::Decl*> unit = parser.parseTranslationUnit();
+
+    if (showAst) {
+        if (!quiet) std::cout << "=== SYNTAX TREE: " << baseName(path) << " ===" << std::endl;
+        for (std::size_t i = 0; i < unit.size(); ++i) unit[i]->print(0);
+        std::cout << std::endl;
+    }
+
+    // PASS 3.  Analysis runs even after syntax errors: the tree is still worth
+    // walking, and a second round of diagnostics is more useful than silence.
+    {
+        SemanticAnalyzer sem(diag);
+        sem.analyze(unit);
+    }
+
+    if (!quiet) diag.printSummary();
+
+    for (std::size_t i = 0; i < unit.size(); ++i) delete unit[i];
+    return diag.hadError() ? 1 : 0;
 }

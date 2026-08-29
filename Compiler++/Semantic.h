@@ -15,68 +15,87 @@
 //  resolves both.  Node kinds are told apart with dynamic_cast, which works
 //  across the layers because every node derives from cc::ASTNode.
 //
+//  What it checks today:
+//    * every name resolves, and nothing is declared twice in one scope
+//    * a reference initialiser is an lvalue, and an assignment target is one
+//    * types match on initialisation, assignment and arithmetic
+//    * calls match their function's parameter count and types
+//    * a return expression matches the enclosing function's return type
+//    * a private member is not touched from outside its class
+//
 //  C++98 only.
 
 #ifndef SEMANTIC_H
 #define SEMANTIC_H
 
-#include <vector>
+#include <map>
 #include <string>
+#include <vector>
 
-#include "AST.h"       // LAYER 1 nodes: cc::Function, cc::Expr, cc::Stmt, ...
-#include "AST1.h"      // LAYER 2 nodes: cxx::Decl, cxx::ClassDecl, ...
+#include "AST.h"       // LAYER 1 nodes
+#include "AST1.h"      // LAYER 2 nodes
+#include "Diagnostics.h"
 #include "SymbolTable.h"
 
 class SemanticAnalyzer {
 public:
-    SemanticAnalyzer();
+    explicit SemanticAnalyzer(Diagnostics &d);
     ~SemanticAnalyzer();
 
-    // entry point: the C++ layer's translation unit (class and variable decls)
-    void analyze(const std::vector<cxx::Decl*> &units);
-
-    // entry point: a single C layer function body, e.g. from cc::Parser::parse()
-    void analyzeFunction(cc::Function *f);
-
-    // diagnostics
-    bool hadError() const { return errorCount > 0; }
-    int errors() const { return errorCount; }
+    // entry point: a whole translation unit
+    void analyze(const std::vector<cc::Decl*> &units);
 
 private:
     SymbolTable symbols;
-    int errorCount;
+    Diagnostics &diag;
 
-    // types created by the analyzer for expression results; owned here so the
-    // callers never have to work out who deletes a temporary type.
+    // Every class by name, so a member access can find the class a value's
+    // type names.  When single inheritance lands, member lookup becomes a walk
+    // up this map from a class to its base.
+    std::map<std::string, cxx::ClassDecl*> classes;
+
+    // Context for the function currently being analysed.
+    cc::Type *currentReturnType;
+    std::string currentClass;       // empty outside a method body
+    int loopDepth;                  // break/continue legality
+
+    // Types the analyzer creates for expression results.  They belong to no
+    // AST node, so the analyzer owns them and frees them in its destructor.
     std::vector<cc::Type*> ownedTypes;
-    cc::Type *makeInt();
+    cc::Type *makeBuiltin(const std::string &name);
+    // A deep copy, registered for cleanup.  Needed whenever the analyzer forms
+    // a NEW type out of an existing one -- &x is a pointer to x's type, and
+    // that pointer type cannot borrow a subtree the AST will delete.
+    cc::Type *cloneType(cc::Type *t);
+    cc::Type *makePointerTo(cc::Type *t);
 
     // passes
-    void registerClassNames(const std::vector<cxx::Decl*> &units);
-    void registerTopLevel(const std::vector<cxx::Decl*> &units);
-    void registerClassMembers(cxx::ClassDecl *cd);
-    void analyzeDecl(cxx::Decl *d);
+    void collectClasses(const std::vector<cc::Decl*> &units);
+    void declareTopLevel(const std::vector<cc::Decl*> &units);
+    void analyzeDecl(cc::Decl *d);
     void analyzeClass(cxx::ClassDecl *cd);
-    void analyzeVarDecl(cxx::VarDecl *vd);
-    void analyzeFieldDecl(cxx::FieldDecl *fd);
-    void analyzeMethodDecl(cxx::MethodDecl *md);
+    void analyzeFunction(cc::Function *fn);
     void analyzeStmt(cc::Stmt *s);
+    void analyzeBlock(cc::CompoundStmt *block);
+    void analyzeVarDecl(cc::VarDecl *vd, bool declareIt);
     cc::Type *analyzeExpr(cc::Expr *e, bool &isLValue);
 
-    // helpers
-    void error(const std::string &msg);
-    Symbol *lookup(const std::string &name);
+    // member lookup
+    cxx::ClassDecl *findClass(const std::string &name);
+    cc::Decl *findMember(cxx::ClassDecl *cd, const std::string &member);
+    static cxx::Access memberAccess(cc::Decl *m);
+    static cc::Type *memberType(cc::Decl *m);
+    // Pushes a scope holding cd's members, so a method body sees them unqualified.
+    void pushClassScope(cxx::ClassDecl *cd);
 
-    // A reference is not a distinct kind of value: `int &r` names an int
-    // lvalue.  Everything that asks "what type is this expression" wants the
-    // referred-to type, so references are stripped on the way out.
+    // helpers
+    void error(cc::ASTNode *at, const std::string &msg);
     static cc::Type *stripReference(cc::Type *t);
-    // Renders a type for a diagnostic:  int, int*, Point, Point&
     static std::string describe(cc::Type *t);
-    // Structural comparison, ignoring references on either side.
     static bool sameType(cc::Type *a, cc::Type *b);
-    // Every class name mentioned in a type must have been declared.
-    void checkTypeIsKnown(cc::Type *t, const std::string &where);
+    static bool isVoid(cc::Type *t);
+    void checkTypeIsKnown(cc::Type *t, cc::ASTNode *at, const std::string &where);
+    void checkCallArgs(cc::CallExpr *call, cc::Function *fn);
 
     // not copyable (C++98 way: declared private, never defined)
     SemanticAnalyzer(const SemanticAnalyzer &);

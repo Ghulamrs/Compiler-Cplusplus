@@ -6,8 +6,9 @@
 //
 // The authoritative layering model (full AST + parser diagram) lives at the
 // top of AST.h.  This file declares only what C++ ADDS to C: reference and
-// class types, declarations, qualified names, and member-access expressions.
-// Everything else is used directly from namespace cc.
+// class types, classes and their members, qualified names, member access,
+// `this`, and free-store allocation.  Everything else -- variables, functions,
+// statements, the whole expression grammar -- is used directly from cc.
 //
 // C++98 only.
 
@@ -23,11 +24,21 @@
 
 namespace cxx {
 
-// The type system lives in the C layer; pull the names in so this layer can
-// spell them unqualified.  These are the SAME types, not copies.
+// These names are the SAME types as in cc, not copies.  They are pulled in so
+// this layer can spell them unqualified, and so existing code that says
+// cxx::Decl or cxx::VarDecl keeps meaning exactly what it did.
 using cc::Type;
 using cc::BuiltinType;
 using cc::PointerType;
+using cc::Decl;
+using cc::VarDecl;
+using cc::Function;
+
+// Access control is meaningless in C, so the enum belongs to this layer.
+// `protected` differs from `private` only once inheritance exists, which is
+// the next feature to land.
+enum Access { ACC_Public, ACC_Private, ACC_Protected };
+const char *accessText(Access a);
 
 // --- Types added by C++ -----------------------------------------------
 
@@ -46,42 +57,33 @@ struct ClassType : public Type {
     void print(int indent);
 };
 
-// --- Declarations (new in the C++ layer) ------------------------------
-struct Decl : public cc::ASTNode {
-    virtual ~Decl() {}
-};
+// --- Declarations added by C++ ----------------------------------------
 
-struct VarDecl : public Decl {
-    Type *type;
-    std::string name;
-    VarDecl(Type *t, const std::string &n) : type(t), name(n) {}
-    ~VarDecl() { delete type; }
-    void print(int indent);
-};
-
+// A data member.  It is a declaration with an access level and an owning
+// class -- a plain cc::VarDecl knows neither.
 struct FieldDecl : public Decl {
     Type *type;
     std::string name;
-    FieldDecl(Type *t, const std::string &n) : type(t), name(n) {}
+    Access access;
+    std::string ownerClass;
+    FieldDecl(Type *t, const std::string &n, Access a)
+        : type(t), name(n), access(a) {}
     ~FieldDecl() { delete type; }
     void print(int indent);
 };
 
-// A function with a signature and, optionally, a body.  This one node covers
-// both a class member  int getX();  and a free function  int main() { ... }  --
-// they differ only in where they appear, not in what they hold.  The body is a
-// vector of cc::Stmt, so the C layer's statements sit directly inside a C++
-// layer declaration; that is the same tree-sharing that lets cxx::MemberAccessExpr
-// live inside a cc::BinaryExpr.
-struct MethodDecl : public Decl {
-    Type *retType;
-    std::string name;
-    std::vector<VarDecl*> params;
-    std::vector<cc::Stmt*> body;
-    bool hasBody;                       // distinguishes  f();  from  f() {}
-    MethodDecl(Type *r, const std::string &n) : retType(r), name(n), hasBody(false) {}
-    ~MethodDecl();
-    void print(int indent);
+// A member function.  A method IS a function -- same return type, name,
+// parameters and body -- that additionally knows its access, its class, and
+// (once dispatch lands) whether it is virtual.  So it derives from cc::Function
+// instead of restating it.
+struct MethodDecl : public Function {
+    Access access;
+    std::string ownerClass;
+    bool isVirtual;
+    MethodDecl(Type *r, const std::string &n, Access a)
+        : Function(r, n), access(a), isVirtual(false) {}
+    // Only the first printed line differs from a plain function.
+    void printSignature(int indent);
 };
 
 struct ClassDecl : public Decl {
@@ -99,17 +101,42 @@ struct QualifiedName : public cc::ASTNode {
     void print(int indent);
 };
 
-// --- Expressions ------------------------------------------------------
-// NumberExpr, IdentExpr and BinaryExpr are NOT redeclared: this layer uses
-// cc::NumberExpr, cc::IdentExpr and cc::BinaryExpr directly.  Only the new
-// C++ form is added, deriving from cc::Expr so C and C++ expressions share
-// one tree:  (a.b + 1) * 2
+// --- Expressions added by C++ -----------------------------------------
+// NumberExpr, IdentExpr, UnaryExpr, BinaryExpr and CallExpr are NOT
+// redeclared: this layer uses the cc:: forms directly.  Only genuinely new
+// forms appear here, each deriving from cc::Expr so C and C++ expressions
+// share one tree:  (a.b + 1) * 2
+
 struct MemberAccessExpr : public cc::Expr {
     cc::Expr *base;
     std::string member;
     bool isArrow;
-    MemberAccessExpr(cc::Expr *b, const std::string &m, bool arrow) : base(b), member(m), isArrow(arrow) {}
+    MemberAccessExpr(cc::Expr *b, const std::string &m, bool arrow)
+        : base(b), member(m), isArrow(arrow) {}
     ~MemberAccessExpr() { delete base; }
+    void print(int indent);
+};
+
+// `this` inside a method body
+struct ThisExpr : public cc::Expr {
+    void print(int indent);
+};
+
+// new T   -- allocation and construction; the constructor call arrives with
+// the next phase, so the argument list is already here to receive it.
+struct NewExpr : public cc::Expr {
+    Type *allocType;
+    std::vector<cc::Expr*> args;
+    NewExpr(Type *t) : allocType(t) {}
+    ~NewExpr();
+    void print(int indent);
+};
+
+// delete p  -- destruction and release
+struct DeleteExpr : public cc::Expr {
+    cc::Expr *operand;
+    DeleteExpr(cc::Expr *e) : operand(e) {}
+    ~DeleteExpr() { delete operand; }
     void print(int indent);
 };
 

@@ -6,98 +6,233 @@
 
 namespace cc {
 
-// --- Types ---
+// --- operator spelling ---
 
-// BuiltinType
-void BuiltinType::print(int indent) {
-    printIndent(indent);
-    std::cout << "Type " << name << std::endl;
+const char *binaryOpText(BinaryOp op) {
+    switch (op) {
+    case BIN_Add:    return "+";
+    case BIN_Sub:    return "-";
+    case BIN_Mul:    return "*";
+    case BIN_Div:    return "/";
+    case BIN_Mod:    return "%";
+    case BIN_Assign: return "=";
+    case BIN_EQ:     return "==";
+    case BIN_NE:     return "!=";
+    case BIN_LT:     return "<";
+    case BIN_GT:     return ">";
+    case BIN_LE:     return "<=";
+    case BIN_GE:     return ">=";
+    case BIN_LAnd:   return "&&";
+    case BIN_LOr:    return "||";
+    }
+    return "?";
 }
 
-// PointerType
+bool binaryOpIsComparison(BinaryOp op) {
+    return op == BIN_EQ || op == BIN_NE || op == BIN_LT
+        || op == BIN_GT || op == BIN_LE || op == BIN_GE;
+}
+
+bool binaryOpIsLogical(BinaryOp op) {
+    return op == BIN_LAnd || op == BIN_LOr;
+}
+
+const char *unaryOpText(UnaryOp op) {
+    switch (op) {
+    case UN_Neg:    return "-";
+    case UN_Not:    return "!";
+    case UN_Deref:  return "*";
+    case UN_AddrOf: return "&";
+    }
+    return "?";
+}
+
+// --- Types ---
+
+void BuiltinType::print(int indent) {
+    printIndent(indent);
+    std::cout << name << std::endl;
+}
+
 void PointerType::print(int indent) {
     printIndent(indent);
-    std::cout << "Pointer to ";
+    std::cout << "pointer to ";
     base->print(0);
 }
 
 // --- Expressions ---
 
-// NumberExpr
 void NumberExpr::print(int indent) {
     printIndent(indent);
-    std::cout << value;
-    std::cout << std::endl;
+    std::cout << value << std::endl;
 }
 
-// IdentExpr
 void IdentExpr::print(int indent) {
     printIndent(indent);
     std::cout << name << std::endl;
 }
 
-// BinaryExpr
+void UnaryExpr::print(int indent) {
+    printIndent(indent);
+    std::cout << "Unary " << unaryOpText(op) << std::endl;
+    if (operand) operand->print(indent + 1);
+}
+
 BinaryExpr::~BinaryExpr() {
     delete lhs;
     delete rhs;
 }
+
 void BinaryExpr::print(int indent) {
     printIndent(indent);
-    std::cout << "(";
-    // print inline for readability
-    lhs->print(0);
-    std::cout << " " << op << " ";
-    rhs->print(0);
-    std::cout << ")" << std::endl;
+    std::cout << "Binary " << binaryOpText(op) << std::endl;
+    if (lhs) lhs->print(indent + 1);
+    if (rhs) rhs->print(indent + 1);
 }
 
-// DeclStmt
-DeclStmt::~DeclStmt() {
-    delete type;
-    delete init;
+CallExpr::~CallExpr() {
+    delete callee;
+    for (std::size_t i = 0; i < args.size(); ++i) delete args[i];
 }
-void DeclStmt::print(int indent) {
+
+void CallExpr::print(int indent) {
     printIndent(indent);
-    std::cout << "Decl " << name << " : ";
-    if (type) type->print(0);
-    else std::cout << "null" << std::endl;
-    if (init) {
+    std::cout << "Call" << std::endl;
+    if (callee) callee->print(indent + 1);
+    for (std::size_t i = 0; i < args.size(); ++i) {
         printIndent(indent + 1);
-        std::cout << "= ";
-        init->print(0);
+        std::cout << "arg " << i << ":" << std::endl;
+        args[i]->print(indent + 2);
     }
 }
 
-// ExprStmt
-ExprStmt::~ExprStmt() {
-    delete expr;
-}
-void ExprStmt::print(int indent) {
-    printIndent(indent);
-    std::cout << "ExprStmt ";
-    if (expr) expr->print(0);
-    else std::cout << "null" << std::endl;
+// --- Declarations ---
+
+VarDecl::~VarDecl() {
+    delete type;
+    delete init;
 }
 
-// ReturnStmt
-ReturnStmt::~ReturnStmt() {
-    delete expr;
-}
-void ReturnStmt::print(int indent) {
+void VarDecl::print(int indent) {
     printIndent(indent);
-    std::cout << "Return ";
-    if (expr) expr->print(0);
-    else std::cout << "null" << std::endl;
+    std::cout << "Var " << name << " : ";
+    if (type) type->print(0);
+    else std::cout << "<none>" << std::endl;
+    if (init) {
+        printIndent(indent + 1);
+        std::cout << "init:" << std::endl;
+        init->print(indent + 2);
+    }
 }
 
-// Function
 Function::~Function() {
+    delete retType;
+    for (std::size_t i = 0; i < params.size(); ++i) delete params[i];
+    delete body;
+}
+
+// Split out so cxx::MethodDecl can change the first line and reuse the rest.
+void Function::printSignature(int indent) {
+    printIndent(indent);
+    std::cout << "Function " << name << " returns ";
+    if (retType) retType->print(0);
+    else std::cout << "<none>" << std::endl;
+}
+
+void Function::print(int indent) {
+    printSignature(indent);
+    for (std::size_t i = 0; i < params.size(); ++i) {
+        printIndent(indent + 1);
+        std::cout << "param:" << std::endl;
+        params[i]->print(indent + 2);
+    }
+    if (body) body->print(indent + 1);
+}
+
+// --- Statements ---
+
+CompoundStmt::~CompoundStmt() {
     for (std::size_t i = 0; i < body.size(); ++i) delete body[i];
 }
-void Function::print(int indent) {
+
+void CompoundStmt::print(int indent) {
     printIndent(indent);
-    std::cout << "Function " << name << std::endl;
+    std::cout << "Block" << std::endl;
     for (std::size_t i = 0; i < body.size(); ++i) body[i]->print(indent + 1);
+}
+
+void DeclStmt::print(int indent) {
+    if (var) var->print(indent);
+}
+
+void ExprStmt::print(int indent) {
+    printIndent(indent);
+    std::cout << "ExprStmt" << std::endl;
+    if (expr) expr->print(indent + 1);
+}
+
+void ReturnStmt::print(int indent) {
+    printIndent(indent);
+    std::cout << "Return" << std::endl;
+    if (expr) expr->print(indent + 1);
+}
+
+IfStmt::~IfStmt() {
+    delete cond;
+    delete thenBranch;
+    delete elseBranch;
+}
+
+void IfStmt::print(int indent) {
+    printIndent(indent);
+    std::cout << "If" << std::endl;
+    if (cond) cond->print(indent + 1);
+    printIndent(indent);
+    std::cout << "then:" << std::endl;
+    if (thenBranch) thenBranch->print(indent + 1);
+    if (elseBranch) {
+        printIndent(indent);
+        std::cout << "else:" << std::endl;
+        elseBranch->print(indent + 1);
+    }
+}
+
+WhileStmt::~WhileStmt() {
+    delete cond;
+    delete body;
+}
+
+void WhileStmt::print(int indent) {
+    printIndent(indent);
+    std::cout << "While" << std::endl;
+    if (cond) cond->print(indent + 1);
+    if (body) body->print(indent + 1);
+}
+
+ForStmt::~ForStmt() {
+    delete init;
+    delete cond;
+    delete step;
+    delete body;
+}
+
+void ForStmt::print(int indent) {
+    printIndent(indent);
+    std::cout << "For" << std::endl;
+    if (init) init->print(indent + 1);
+    if (cond) cond->print(indent + 1);
+    if (step) step->print(indent + 1);
+    if (body) body->print(indent + 1);
+}
+
+void BreakStmt::print(int indent) {
+    printIndent(indent);
+    std::cout << "Break" << std::endl;
+}
+
+void ContinueStmt::print(int indent) {
+    printIndent(indent);
+    std::cout << "Continue" << std::endl;
 }
 
 } // namespace cc
