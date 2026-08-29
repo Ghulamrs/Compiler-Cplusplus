@@ -31,6 +31,24 @@ cc::Type *SemanticAnalyzer::makeBuiltin(cc::BuiltinKind k) {
     return t;
 }
 
+bool SemanticAnalyzer::isBoolType(cc::Type *t) {
+    return dynamic_cast<cxx::BoolType*>(stripReference(t)) != 0;
+}
+
+cc::Type *SemanticAnalyzer::makeBool() {
+    cc::Type *t = new cxx::BoolType();
+    ownedTypes.push_back(t);
+    return t;
+}
+
+bool SemanticAnalyzer::arithmeticKind(cc::Type *t, cc::BuiltinKind &out) {
+    if (isBoolType(t)) { out = cc::BK_Int; return true; }
+    cc::BuiltinKind k;
+    if (!builtinKindOf(t, k) || !cc::builtinIsArithmetic(k)) return false;
+    out = k;
+    return true;
+}
+
 bool SemanticAnalyzer::builtinKindOf(cc::Type *t, cc::BuiltinKind &out) {
     cc::BuiltinType *bt = dynamic_cast<cc::BuiltinType*>(stripReference(t));
     if (!bt) return false;
@@ -92,6 +110,9 @@ bool SemanticAnalyzer::literalFitsIn(cc::Expr *e, cc::BuiltinKind to) {
 
 void SemanticAnalyzer::warnIfNarrowing(cc::Expr *e, cc::Type *from, cc::Type *to,
                                        cc::ASTNode *at, const std::string &what) {
+    // Converting to bool is a normalisation, not a loss, and bool converts out
+    // as 0 or 1, which fits everywhere.  Neither direction is narrowing.
+    if (isBoolType(from) || isBoolType(to)) return;
     cc::BuiltinKind kf, kt;
     if (!builtinKindOf(from, kf) || !builtinKindOf(to, kt)) return;
     if (!cc::builtinIsArithmetic(kf) || !cc::builtinIsArithmetic(kt)) return;
@@ -123,6 +144,7 @@ cc::Type *SemanticAnalyzer::cloneType(cc::Type *t) {
     if (!t) return 0;
     cc::BuiltinType *bt = dynamic_cast<cc::BuiltinType*>(t);
     if (bt) return new cc::BuiltinType(bt->kind);
+    if (dynamic_cast<cxx::BoolType*>(t)) return new cxx::BoolType();
     cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(t);
     if (ct) return new cxx::ClassType(ct->className);
     cc::PointerType *pt = dynamic_cast<cc::PointerType*>(t);
@@ -159,6 +181,7 @@ cc::Type *SemanticAnalyzer::stripReference(cc::Type *t) {
 
 std::string SemanticAnalyzer::describe(cc::Type *t) {
     if (!t) return "<none>";
+    if (dynamic_cast<cxx::BoolType*>(t)) return "bool";
     cc::BuiltinType *bt = dynamic_cast<cc::BuiltinType*>(t);
     if (bt) return bt->name();
     cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(t);
@@ -191,6 +214,9 @@ bool SemanticAnalyzer::sameType(cc::Type *a, cc::Type *b) {
     a = stripReference(a);
     b = stripReference(b);
     if (!a || !b) return true;          // an earlier error already spoke
+    if (dynamic_cast<cxx::BoolType*>(a) || dynamic_cast<cxx::BoolType*>(b)) {
+        return dynamic_cast<cxx::BoolType*>(a) && dynamic_cast<cxx::BoolType*>(b);
+    }
     cc::BuiltinType *ba = dynamic_cast<cc::BuiltinType*>(a);
     cc::BuiltinType *bb = dynamic_cast<cc::BuiltinType*>(b);
     if (ba && bb) return ba->kind == bb->kind;
@@ -220,12 +246,12 @@ bool SemanticAnalyzer::canConvert(cc::Type *from, cc::Type *to) {
     cc::Type *f = stripReference(from);
     cc::Type *t = stripReference(to);
 
-    // Any arithmetic type converts to any other.  Whether the value survives is
-    // a separate question, answered by isNarrowing() and reported as a warning.
+    // Any arithmetic type converts to any other, and bool is one of them: it
+    // converts from anything as a test against zero, and to anything as 0 or 1.
     cc::BuiltinKind kf, kt;
-    if (builtinKindOf(f, kf) && builtinKindOf(t, kt)) {
-        return cc::builtinIsArithmetic(kf) && cc::builtinIsArithmetic(kt);
-    }
+    if (arithmeticKind(f, kf) && arithmeticKind(t, kt)) return true;
+    // A pointer tests as a bool too:  if (p)
+    if (isBoolType(t) && dynamic_cast<cc::PointerType*>(f)) return true;
 
     // Derived* -> Base*
     cc::PointerType *pf = dynamic_cast<cc::PointerType*>(f);
@@ -1077,7 +1103,7 @@ void SemanticAnalyzer::analyzeSwitch(cc::SwitchStmt *s) {
     bool lv = false;
     cc::Type *ct = analyzeExpr(s->cond, lv);
     cc::BuiltinKind k;
-    if (ct && (!builtinKindOf(ct, k) || !cc::builtinIsInteger(k))) {
+    if (ct && (!arithmeticKind(ct, k) || !cc::builtinIsInteger(k))) {
         error(s, "a switch needs an integer subject, not " + describe(ct));
     }
 
@@ -1315,6 +1341,7 @@ cc::Type *SemanticAnalyzer::analyzeExpr(cc::Expr *e, bool &isLValue) {
         return stripReference(s->type);
     }
 
+    if (dynamic_cast<cxx::BoolExpr*>(e)) return makeBool();
     if (cc::NumberExpr *n = dynamic_cast<cc::NumberExpr*>(e)) return makeBuiltin(n->kind);
     if (cc::FloatExpr *fl = dynamic_cast<cc::FloatExpr*>(e)) return makeBuiltin(fl->kind);
     if (dynamic_cast<cc::StringExpr*>(e)) {
@@ -1391,7 +1418,7 @@ cc::Type *SemanticAnalyzer::analyzeExpr(cc::Expr *e, bool &isLValue) {
                 return 0;
             }
             cc::BuiltinKind k;
-            const bool arith = builtinKindOf(t, k) && cc::builtinIsArithmetic(k);
+            const bool arith = arithmeticKind(t, k);
             if (!arith && !dynamic_cast<cc::PointerType*>(stripReference(t))) {
                 error(ue, std::string("'") + cc::unaryOpText(ue->op)
                           + "' needs an arithmetic or pointer operand, got " + describe(t));
@@ -1403,14 +1430,14 @@ cc::Type *SemanticAnalyzer::analyzeExpr(cc::Expr *e, bool &isLValue) {
         switch (ue->op) {
         case cc::UN_Neg: {
             cc::BuiltinKind k;
-            if (!builtinKindOf(t, k) || !cc::builtinIsArithmetic(k)) {
+            if (!arithmeticKind(t, k)) {
                 error(ue, "unary '-' needs an arithmetic type, got " + describe(t));
                 return 0;
             }
             return makeBuiltin(promote(k));
         }
         case cc::UN_Not:
-            return makeBuiltin(cc::BK_Int);
+            return makeBool();
         case cc::UN_Deref: {
             cc::PointerType *pt = dynamic_cast<cc::PointerType*>(decay(t));
             if (!pt) { error(ue, "unary '*' applied to " + describe(t) + ", which is not a pointer"); return 0; }
@@ -1467,14 +1494,13 @@ cc::Type *SemanticAnalyzer::analyzeExpr(cc::Expr *e, bool &isLValue) {
 
         if (cc::binaryOpIsComparison(be->op) || cc::binaryOpIsLogical(be->op)) {
             cc::BuiltinKind kl, kr;
-            const bool bothArith = builtinKindOf(lt, kl) && builtinKindOf(rt, kr) &&
-                                   cc::builtinIsArithmetic(kl) && cc::builtinIsArithmetic(kr);
+            const bool bothArith = arithmeticKind(lt, kl) && arithmeticKind(rt, kr);
             if (!bothArith && !canConvert(lt, rt) && !canConvert(rt, lt)) {
                 error(be, std::string("cannot compare ") + describe(lt) + " with " + describe(rt));
                 return 0;
             }
-            // A comparison yields int, as in C.
-            return makeBuiltin(cc::BK_Int);
+            // In C++ a comparison yields bool, which this subset now has.
+            return makeBool();
         }
 
         // Pointer arithmetic: p + n and p - n step by whole objects, so the
@@ -1502,8 +1528,7 @@ cc::Type *SemanticAnalyzer::analyzeExpr(cc::Expr *e, bool &isLValue) {
         // Arithmetic: both operands meet in a common type, and that is the
         // type of the result.  % is integers only.
         cc::BuiltinKind kl, kr;
-        if (builtinKindOf(lt, kl) && builtinKindOf(rt, kr) &&
-            cc::builtinIsArithmetic(kl) && cc::builtinIsArithmetic(kr)) {
+        if (arithmeticKind(lt, kl) && arithmeticKind(rt, kr)) {
             if (be->op == cc::BIN_Mod &&
                 (cc::builtinIsFloating(kl) || cc::builtinIsFloating(kr))) {
                 error(be, "'%' needs integer operands, not "

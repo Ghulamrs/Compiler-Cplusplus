@@ -23,6 +23,11 @@ void ReferenceType::print(int indent) {
     base->print(0);
 }
 
+void BoolType::print(int indent) {
+    printIndent(indent);
+    std::cout << "bool" << std::endl;
+}
+
 void ClassType::print(int indent) {
     printIndent(indent);
     std::cout << "class " << className << std::endl;
@@ -108,6 +113,11 @@ void MemberAccessExpr::print(int indent) {
 void ThisExpr::print(int indent) {
     printIndent(indent);
     std::cout << "this" << std::endl;
+}
+
+void BoolExpr::print(int indent) {
+    printIndent(indent);
+    std::cout << (value ? "true" : "false") << std::endl;
 }
 
 NewExpr::~NewExpr() {

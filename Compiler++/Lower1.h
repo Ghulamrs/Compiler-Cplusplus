@@ -48,6 +48,8 @@ private:
     // to no AST node, so this class owns and frees them.
     std::vector<cc::Type*> ownedTypes;
     cc::Type *makePointerToClass(const std::string &className);
+    cc::Type *boolType();
+    cc::Type *cachedBool;
     cc::Type *cloneType(cc::Type *t);
     ClassDecl *classOfType(cc::Type *t) const;  // through one pointer or ref
     const FieldLayout *findField(const std::string &className,
@@ -66,6 +68,7 @@ private:
     virtual IRReg lowerCall(cc::CallExpr *e, bool wantsResult);
     virtual bool isReferenceExpr(cc::Expr *e);
     virtual bool isReferenceType(cc::Type *t);
+    virtual bool isBoolType(cc::Type *t);
     virtual void lowerDecl(cc::Decl *d);
     virtual void emitPrologue(cc::Function *f);
     virtual void emitEpilogue(cc::Function *f);

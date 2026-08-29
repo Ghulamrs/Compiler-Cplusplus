@@ -40,6 +40,17 @@ struct ReferenceType : public Type {
     void print(int indent);
 };
 
+// bool -- C89 has none, so it is C++'s, exactly like T& and class types.
+//
+// It is a node rather than another cc::BuiltinKind because that enum is the C
+// layer's, and adding to it would put a C++ type in C's table.  Nothing is
+// lost by keeping it out: bool promotes to int on entering any arithmetic, so
+// the rank table never needs to name it -- only the edges do, where a value is
+// converted to or from bool.
+struct BoolType : public Type {
+    void print(int indent);
+};
+
 struct ClassType : public Type {
     std::string className;
     ClassType(const std::string &n) : className(n) {}
@@ -137,6 +148,13 @@ struct MemberAccessExpr : public cc::Expr {
 };
 
 struct ThisExpr : public cc::Expr {
+    void print(int indent);
+};
+
+// true and false
+struct BoolExpr : public cc::Expr {
+    bool value;
+    BoolExpr(bool v) : value(v) {}
     void print(int indent);
 };
 

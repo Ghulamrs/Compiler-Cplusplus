@@ -20,6 +20,7 @@ const char *tokenName(TokenKind k) {
     case TOK_INT:        return "int";
     case TOK_CHAR:       return "char";
     case TOK_VOID:       return "void";
+    case TOK_BOOL:       return "bool";
     case TOK_SHORT:      return "short";
     case TOK_LONG:       return "long";
     case TOK_SIGNED:     return "signed";
@@ -43,6 +44,8 @@ const char *tokenName(TokenKind k) {
     case TOK_NEW:        return "new";
     case TOK_DELETE:     return "delete";
     case TOK_THIS:       return "this";
+    case TOK_TRUE:       return "true";
+    case TOK_FALSE:      return "false";
     case TOK_SEMI:       return "';'";
     case TOK_LPAREN:     return "'('";
     case TOK_RPAREN:     return "')'";
@@ -175,6 +178,7 @@ Token Lexer::nextToken() {
         if      (id == "int")       tok.kind = TOK_INT;
         else if (id == "char")      tok.kind = TOK_CHAR;
         else if (id == "void")      tok.kind = TOK_VOID;
+        else if (id == "bool")      tok.kind = TOK_BOOL;
         else if (id == "short")     tok.kind = TOK_SHORT;
         else if (id == "long")      tok.kind = TOK_LONG;
         else if (id == "signed")    tok.kind = TOK_SIGNED;
@@ -202,6 +206,8 @@ Token Lexer::nextToken() {
         else if (id == "new")       tok.kind = TOK_NEW;
         else if (id == "delete")    tok.kind = TOK_DELETE;
         else if (id == "this")      tok.kind = TOK_THIS;
+        else if (id == "true")      tok.kind = TOK_TRUE;
+        else if (id == "false")     tok.kind = TOK_FALSE;
         else                        tok.text = id;
         return tok;
     }

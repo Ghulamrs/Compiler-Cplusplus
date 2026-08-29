@@ -83,8 +83,10 @@ struct Type : public ASTNode {
 // of them.  Sizes are this compiler's model, not the host's: `long` is 8 bytes
 // here, as on Linux and macOS, even when targeting Windows.
 //
-// There is no `bool`.  C89 has none, and layer 1 is C89, so a truth value is
-// an int -- which is also what every comparison in this language yields.
+// There is no `bool` here.  C89 has none, so it belongs to the C++ layer --
+// see cxx::BoolType in AST1.h.  Nothing in this table needs an entry for it,
+// because bool promotes to int the moment it enters arithmetic and never
+// survives as the type of a computation.
 enum BuiltinKind {
     BK_Void,
     BK_Char, BK_SChar, BK_UChar,

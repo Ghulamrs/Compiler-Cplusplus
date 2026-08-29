@@ -10,12 +10,20 @@ namespace cxx {
 
 Lowering::Lowering(IRModule &module, const Layout &l, Diagnostics &d,
                    const std::map<std::string, ClassDecl*> &cls)
-    : cc::Lowering(module, l, d), classes(cls) {}
+    : cc::Lowering(module, l, d), classes(cls), cachedBool(0) {}
 
 // --- Looking things up ---
 
 Lowering::~Lowering() {
     for (std::size_t i = 0; i < ownedTypes.size(); ++i) delete ownedTypes[i];
+}
+
+cc::Type *Lowering::boolType() {
+    if (!cachedBool) {
+        cachedBool = new BoolType();
+        ownedTypes.push_back(cachedBool);
+    }
+    return cachedBool;
 }
 
 cc::Type *Lowering::makePointerToClass(const std::string &className) {
@@ -175,6 +183,11 @@ bool Lowering::lowerLayerValue(cc::Expr *e, IRReg &out) {
         return true;
     }
 
+    if (BoolExpr *b = dynamic_cast<BoolExpr*>(e)) {
+        out = fn->emitConst(b->value ? 1 : 0, e->line);
+        return true;
+    }
+
     if (MemberAccessExpr *ma = dynamic_cast<MemberAccessExpr*>(e)) {
         IRReg addr = IR_NoReg;
         if (!lowerLayerAddress(e, addr)) return false;
@@ -222,6 +235,17 @@ bool Lowering::lowerLayerValue(cc::Expr *e, IRReg &out) {
 // Member access, calls, `new` and `this` need the class table.
 cc::Type *Lowering::typeOf(cc::Expr *e) {
     if (!e) return 0;
+
+    if (dynamic_cast<BoolExpr*>(e)) return boolType();
+    // A comparison yields bool, so a value stored from one is one byte wide.
+    if (cc::BinaryExpr *be = dynamic_cast<cc::BinaryExpr*>(e)) {
+        if (cc::binaryOpIsComparison(be->op) || cc::binaryOpIsLogical(be->op)) {
+            return boolType();
+        }
+    }
+    if (cc::UnaryExpr *ue = dynamic_cast<cc::UnaryExpr*>(e)) {
+        if (ue->op == cc::UN_Not) return boolType();
+    }
 
     if (dynamic_cast<ThisExpr*>(e)) {
         if (currentClass.empty()) return 0;
@@ -298,6 +322,10 @@ cc::Type *Lowering::cloneForeignType(cc::Type *t) {
 
 bool Lowering::isReferenceType(cc::Type *t) {
     return dynamic_cast<ReferenceType*>(t) != 0;
+}
+
+bool Lowering::isBoolType(cc::Type *t) {
+    return dynamic_cast<BoolType*>(t) != 0;
 }
 
 // --- Calls, including the one that matters ---

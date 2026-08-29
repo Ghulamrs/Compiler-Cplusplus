@@ -118,6 +118,29 @@ bool Lowering::arithKind(Type *t, BuiltinKind &out) {
 // on most machines.  Emitting them explicitly is what stops a size mismatch
 // slipping silently into the code generator.
 IRReg Lowering::convert(IRReg value, Type *from, Type *to, int line) {
+    // Converting TO bool is a test against zero, whatever the source -- an
+    // integer, a floating value or a pointer.  That is the one conversion in
+    // the language that is a comparison rather than a resize.
+    if (isBoolType(to)) {
+        if (isBoolType(from)) return value;
+        if (isFloatType(from)) {
+            const IRReg zero = fn->emitFConst(0.0, line);
+            return fn->emitBinary(IR_FCmpNE, value, zero, line);
+        }
+        const IRReg zero = fn->emitConst(0, line);
+        return fn->emitBinary(IR_CmpNE, value, zero, line);
+    }
+    // Converting FROM bool: the value is already 0 or 1, so only its width
+    // may need adjusting.
+    if (isBoolType(from)) {
+        BuiltinKind k;
+        if (!arithKind(to, k)) return value;
+        if (builtinIsFloating(k)) {
+            return fn->emitConvert(IR_IntToFloat, value, 1, IR_NoReg, line);
+        }
+        return fn->emitConvert(IR_IntResize, value, builtinSize(k), 0, line);
+    }
+
     BuiltinKind kf, kt;
     if (!arithKind(from, kf) || !arithKind(to, kt)) return value;
     if (kf == kt) return value;

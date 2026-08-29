@@ -19,6 +19,7 @@ enum TokenKind {
     TOK_INT,
     TOK_CHAR,
     TOK_VOID,
+    TOK_BOOL,
     TOK_SHORT,
     TOK_LONG,
     TOK_SIGNED,
@@ -48,6 +49,8 @@ enum TokenKind {
     TOK_NEW,
     TOK_DELETE,
     TOK_THIS,
+    TOK_TRUE,
+    TOK_FALSE,
 
     // --- punctuation ---
     TOK_SEMI,

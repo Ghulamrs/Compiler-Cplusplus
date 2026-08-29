@@ -121,6 +121,12 @@ private:
     static bool isVoid(cc::Type *t);
     // The builtin kind a type names, or BK_Void when it names none.
     static bool builtinKindOf(cc::Type *t, cc::BuiltinKind &out);
+    static bool isBoolType(cc::Type *t);
+    // The kind a type contributes to arithmetic.  bool answers BK_Int, because
+    // that is what it promotes to -- which is why the C layer's kind table
+    // needs no entry for a C++ type.
+    static bool arithmeticKind(cc::Type *t, cc::BuiltinKind &out);
+    cc::Type *makeBool();
     // Integral promotion: anything of rank below int becomes int.
     static cc::BuiltinKind promote(cc::BuiltinKind k);
     // The usual arithmetic conversions -- the common type two operands meet in.

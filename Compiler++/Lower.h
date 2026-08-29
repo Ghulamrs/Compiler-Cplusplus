@@ -90,6 +90,9 @@ protected:
     // An array's VALUE is the address of its first element -- there is no
     // load, because an array is not something a register can hold.
     static bool isArrayType(Type *t);
+    // bool lives in the C++ layer, so recognising and producing it are that
+    // layer's job; the C layer only needs to ask.
+    virtual bool isBoolType(Type *t) { (void)t; return false; }
     static BuiltinKind commonKind(BuiltinKind a, BuiltinKind b);
     Type *literalType(BuiltinKind k);
     Type *decayType(Type *t);

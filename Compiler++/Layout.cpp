@@ -30,6 +30,8 @@ int Layout::sizeOf(cc::Type *t) const {
     if (cc::ArrayType *at = dynamic_cast<cc::ArrayType*>(t)) {
         return static_cast<int>(at->count) * sizeOf(at->element);
     }
+    // bool is the C++ layer's, so the C layer's size table does not name it.
+    if (dynamic_cast<cxx::BoolType*>(t)) return 1;
     // The type model owns every builtin's size; Layout does not restate them.
     cc::BuiltinType *bt = dynamic_cast<cc::BuiltinType*>(t);
     if (bt) return cc::builtinSize(bt->kind);

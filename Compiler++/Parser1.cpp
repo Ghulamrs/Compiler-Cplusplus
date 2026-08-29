@@ -259,7 +259,17 @@ Decl *Parser::parseMemberDecl(const std::string &className, Access access) {
 // C types plus class names and references; the builtin and pointer forms come
 // from cc::Parser.
 cc::Type *Parser::parseType() {
-    cc::Type *t = cc::Parser::parseType();      // int, char, void, bool, and T*
+    // bool is C++'s, so the C layer's specifier soup knows nothing about it.
+    if (cur.kind == TOK_BOOL) {
+        const int line = cur.line, col = cur.col;
+        advance();
+        cc::Type *b = new BoolType();
+        b->line = line;
+        b->col = col;
+        return parsePointerSuffixes(b);
+    }
+
+    cc::Type *t = cc::Parser::parseType();      // int, char, void, and T*
 
     // a qualified / class name like A::B -- new in C++
     if (!t && cur.kind == TOK_IDENTIFIER) {
@@ -361,6 +371,14 @@ QualifiedName *Parser::parseQualifiedName() {
 // Numbers, identifiers and parentheses are C's; these are not.
 cc::Expr *Parser::parsePrimary() {
     const int line = cur.line, col = cur.col;
+
+    if (cur.kind == TOK_TRUE || cur.kind == TOK_FALSE) {
+        const bool v = (cur.kind == TOK_TRUE);
+        advance();
+        cc::Expr *e = new BoolExpr(v);
+        e->line = line; e->col = col;
+        return e;
+    }
 
     if (cur.kind == TOK_THIS) {
         advance();

@@ -94,6 +94,7 @@ static std::string typeCode(cc::Type *t) {
         case cc::BK_Double: return "d";
         }
     }
+    if (dynamic_cast<cxx::BoolType*>(t)) return "b";
     if (cxx::ReferenceType *rt = dynamic_cast<cxx::ReferenceType*>(t)) {
         return "R" + typeCode(rt->base);
     }
