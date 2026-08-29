@@ -180,6 +180,7 @@ Type *Lowering::typeOf(Expr *e) {
         return 0;
     }
     if (UnaryExpr *u = dynamic_cast<UnaryExpr*>(e)) {
+        if (u->op == UN_Neg) return typeOf(u->operand);
         if (u->op == UN_Deref) {
             Type *base = decayType(typeOf(u->operand));
             if (PointerType *pt = dynamic_cast<PointerType*>(base)) return pt->base;
@@ -188,6 +189,16 @@ Type *Lowering::typeOf(Expr *e) {
         return 0;
     }
     if (CastExpr *c = dynamic_cast<CastExpr*>(e)) return c->type;
+    // A call has the type its function returns.  Without this a double-valued
+    // function handed to an int parameter arrives as raw bits.
+    if (CallExpr *call = dynamic_cast<CallExpr*>(e)) {
+        if (call->resolved) return call->resolved->retType;
+        if (IdentExpr *cid = dynamic_cast<IdentExpr*>(call->callee)) {
+            std::map<std::string, Function*>::const_iterator it = functions.find(cid->name);
+            if (it != functions.end()) return it->second->retType;
+        }
+        return 0;
+    }
     if (UnaryExpr *u2 = dynamic_cast<UnaryExpr*>(e)) {
         if (unaryOpIsIncDec(u2->op)) return typeOf(u2->operand);
     }
@@ -200,6 +211,15 @@ Type *Lowering::typeOf(Expr *e) {
             if (dynamic_cast<PointerType*>(lt)) return lt;
             Type *rt = decayType(typeOf(b->rhs));
             if (b->op == BIN_Add && dynamic_cast<PointerType*>(rt)) return rt;
+        }
+        // Arithmetic yields the type its operands met in.  Without this a
+        // nested expression loses its type and the next operator falls back to
+        // integer -- so 3.14 * r * r would multiply with the wrong opcode.
+        if (!binaryOpIsComparison(b->op) && !binaryOpIsLogical(b->op)) {
+            BuiltinKind kl, kr;
+            if (arithKind(typeOf(b->lhs), kl) && arithKind(typeOf(b->rhs), kr)) {
+                return literalType(commonKind(kl, kr));
+            }
         }
         return 0;
     }

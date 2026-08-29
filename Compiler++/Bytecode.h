@@ -112,6 +112,17 @@ struct Image {
     Image() : entry(-1) {}
 
     void disassemble() const;
+
+    // --- the object file -------------------------------------------------
+    // A compiled program has to outlive the process that made it, so the
+    // image is written whole to a .cxb file: a magic word, a version, the
+    // static data, then every function.  Little-endian and fixed-width
+    // throughout, so a file written on one machine loads on another.
+    bool write(const std::string &path, std::string &error) const;
+    bool read(const std::string &path, std::string &error);
+
+    static const unsigned long Magic   = 0x31425843UL;  // "CXB1"
+    static const unsigned long Version = 1;
 };
 
 // Functions the VM supplies.  A program gets them by DECLARING one without a

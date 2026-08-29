@@ -5,7 +5,10 @@
 #include "Bytecode.h"
 
 #include <cstddef>
+#include <cstring>
+#include <fstream>
 #include <iostream>
+#include <sstream>
 
 const char *opCodeName(OpCode op) {
     switch (op) {
@@ -95,6 +98,172 @@ int nativeArgCount(NativeId id) {
     return (id == NAT_PrintLine) ? 0 : 1;
 }
 
+// --- the object file ---------------------------------------------------
+//
+// Everything is written little-endian and fixed-width.  A variable-length
+// encoding would make the file smaller and the reader harder to follow, and
+// the file is not the interesting part of this compiler.
+
+namespace {
+
+void putU(std::string &out, unsigned long v, int bytes) {
+    for (int i = 0; i < bytes; ++i) out += static_cast<char>((v >> (i * 8)) & 0xFF);
+}
+
+void putI64(std::string &out, long v) {
+    putU(out, static_cast<unsigned long>(v), 8);
+}
+
+void putF64(std::string &out, double v) {
+    // The bit pattern, so the value survives the trip exactly.
+    unsigned char buf[8];
+    std::memcpy(buf, &v, 8);
+    for (int i = 0; i < 8; ++i) out += static_cast<char>(buf[i]);
+}
+
+void putStr(std::string &out, const std::string &s) {
+    putU(out, static_cast<unsigned long>(s.size()), 4);
+    out += s;
+}
+
+struct Reader {
+    const std::string &data;
+    std::size_t at;
+    bool ok;
+    Reader(const std::string &d) : data(d), at(0), ok(true) {}
+
+    bool need(std::size_t n) {
+        if (!ok || at + n > data.size()) { ok = false; return false; }
+        return true;
+    }
+    unsigned long getU(int bytes) {
+        if (!need(static_cast<std::size_t>(bytes))) return 0;
+        unsigned long v = 0;
+        for (int i = bytes - 1; i >= 0; --i) {
+            v = (v << 8) | static_cast<unsigned char>(data[at + i]);
+        }
+        at += bytes;
+        return v;
+    }
+    long getI64() { return static_cast<long>(getU(8)); }
+    double getF64() {
+        if (!need(8)) return 0.0;
+        double v = 0.0;
+        std::memcpy(&v, &data[at], 8);
+        at += 8;
+        return v;
+    }
+    std::string getStr() {
+        const unsigned long n = getU(4);
+        if (!need(n)) return std::string();
+        const std::string s = data.substr(at, n);
+        at += n;
+        return s;
+    }
+};
+
+} // namespace
+
+bool Image::write(const std::string &path, std::string &error) const {
+    std::string out;
+    putU(out, Magic, 4);
+    putU(out, Version, 4);
+    putI64(out, entry);
+
+    putU(out, static_cast<unsigned long>(staticData.size()), 4);
+    for (std::size_t i = 0; i < staticData.size(); ++i) {
+        out += static_cast<char>(staticData[i]);
+    }
+
+    putU(out, static_cast<unsigned long>(functions.size()), 4);
+    for (std::size_t f = 0; f < functions.size(); ++f) {
+        const FuncImage &fi = functions[f];
+        putStr(out, fi.name);
+        putI64(out, fi.paramCount);
+        putI64(out, fi.frameSize);
+        putI64(out, fi.registerCount);
+
+        putU(out, static_cast<unsigned long>(fi.localOffset.size()), 4);
+        for (std::size_t i = 0; i < fi.localOffset.size(); ++i) putI64(out, fi.localOffset[i]);
+        putU(out, static_cast<unsigned long>(fi.localSize.size()), 4);
+        for (std::size_t i = 0; i < fi.localSize.size(); ++i) putI64(out, fi.localSize[i]);
+
+        putU(out, static_cast<unsigned long>(fi.code.size()), 4);
+        for (std::size_t i = 0; i < fi.code.size(); ++i) {
+            const Instr &n = fi.code[i];
+            putU(out, static_cast<unsigned long>(n.op), 1);
+            putI64(out, n.imm);
+            putI64(out, n.b);
+            putF64(out, n.fimm);
+            putI64(out, n.line);
+        }
+    }
+
+    std::ofstream file(path.c_str(), std::ios::binary);
+    if (!file) { error = "cannot open '" + path + "' for writing"; return false; }
+    file.write(out.data(), static_cast<std::streamsize>(out.size()));
+    if (!file) { error = "failed while writing '" + path + "'"; return false; }
+    return true;
+}
+
+bool Image::read(const std::string &path, std::string &error) {
+    std::ifstream file(path.c_str(), std::ios::binary);
+    if (!file) { error = "cannot open '" + path + "'"; return false; }
+    std::ostringstream ss;
+    ss << file.rdbuf();
+    const std::string data = ss.str();
+
+    Reader r(data);
+    if (r.getU(4) != Magic) { error = "'" + path + "' is not a Compiler++ image"; return false; }
+    const unsigned long ver = r.getU(4);
+    if (ver != Version) {
+        std::ostringstream m;
+        m << "'" << path << "' is version " << ver << ", this build reads version " << Version;
+        error = m.str();
+        return false;
+    }
+    entry = static_cast<int>(r.getI64());
+
+    const unsigned long dataLen = r.getU(4);
+    staticData.clear();
+    if (!r.need(dataLen)) { error = "'" + path + "' is truncated"; return false; }
+    staticData.reserve(dataLen);
+    for (unsigned long i = 0; i < dataLen; ++i) {
+        staticData.push_back(static_cast<unsigned char>(data[r.at + i]));
+    }
+    r.at += dataLen;
+
+    const unsigned long funcCount = r.getU(4);
+    functions.clear();
+    for (unsigned long f = 0; f < funcCount && r.ok; ++f) {
+        FuncImage fi;
+        fi.name = r.getStr();
+        fi.paramCount = static_cast<int>(r.getI64());
+        fi.frameSize = static_cast<int>(r.getI64());
+        fi.registerCount = static_cast<int>(r.getI64());
+
+        unsigned long n = r.getU(4);
+        for (unsigned long i = 0; i < n && r.ok; ++i) fi.localOffset.push_back(static_cast<int>(r.getI64()));
+        n = r.getU(4);
+        for (unsigned long i = 0; i < n && r.ok; ++i) fi.localSize.push_back(static_cast<int>(r.getI64()));
+
+        n = r.getU(4);
+        for (unsigned long i = 0; i < n && r.ok; ++i) {
+            Instr in;
+            in.op = static_cast<OpCode>(r.getU(1));
+            in.imm = r.getI64();
+            in.b = r.getI64();
+            in.fimm = r.getF64();
+            in.line = static_cast<int>(r.getI64());
+            fi.code.push_back(in);
+        }
+        functions.push_back(fi);
+    }
+
+    if (!r.ok) { error = "'" + path + "' is truncated or malformed"; return false; }
+    return true;
+}
+
 void Image::disassemble() const {
     std::cout << "static data: " << staticData.size() << " bytes" << std::endl << std::endl;
     for (std::size_t f = 0; f < functions.size(); ++f) {
@@ -112,7 +281,9 @@ void Image::disassemble() const {
                 break;
             case OP_Load:
             case OP_Store:
-                std::cout << " :" << n.imm << (n.b ? " signed" : "");
+                std::cout << " :" << n.imm;
+                if (n.b & 2)      std::cout << " float";
+                else if (n.b & 1) std::cout << " signed";
                 break;
             case OP_IntResize:
                 std::cout << " :" << n.imm << (n.b ? " signed" : " unsigned");

@@ -276,7 +276,8 @@ cc::Type *Lowering::typeOf(cc::Expr *e) {
         if (MemberAccessExpr *cma = dynamic_cast<MemberAccessExpr*>(call->callee)) {
             return typeOf(cma);
         }
-        return 0;
+        // A plain call is the C layer's to answer.
+        return cc::Lowering::typeOf(e);
     }
     // An unqualified field name inside a method.
     if (cc::IdentExpr *id = dynamic_cast<cc::IdentExpr*>(e)) {
