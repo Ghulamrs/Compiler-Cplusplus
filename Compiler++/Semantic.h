@@ -47,10 +47,9 @@ private:
     // Context for the function being analysed.
     cc::Type *currentReturnType;
     std::string currentClass;       // empty outside a method body
-    // The function being analysed, by name.  Access control needs it: a
-    // friend is named, and the only way to know whether we are inside one is
-    // to know which function we are inside.
-    std::string currentFunction;
+    // The function being analysed.  Access control needs it: a friend is
+    // granted by name AND signature, so knowing the name is not enough.
+    cc::Function *currentFunction;
     bool isFriendOf(cxx::ClassDecl *owner) const;
     // A ctor/dtor has no return type at all, which is not the same as void.
     bool currentIsCtorOrDtor;

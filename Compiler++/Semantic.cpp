@@ -13,7 +13,7 @@
 #include <sstream>
 
 SemanticAnalyzer::SemanticAnalyzer(Diagnostics &d)
-    : diag(d), currentReturnType(0), currentIsCtorOrDtor(false), loopDepth(0),
+    : diag(d), currentReturnType(0), currentFunction(0), currentIsCtorOrDtor(false), loopDepth(0),
       switchDepth(0) {}
 
 SemanticAnalyzer::~SemanticAnalyzer() {
@@ -487,9 +487,10 @@ bool SemanticAnalyzer::isDerivedFrom(cxx::ClassDecl *derived, cxx::ClassDecl *ba
 // A friend is granted access by name, so the question is simply whether the
 // function we are inside is one the class named.
 bool SemanticAnalyzer::isFriendOf(cxx::ClassDecl *owner) const {
-    if (!owner || currentFunction.empty()) return false;
+    if (!owner || !currentFunction) return false;
     for (std::size_t i = 0; i < owner->friends.size(); ++i) {
-        if (owner->friends[i] == currentFunction) return true;
+        cc::Function *f = owner->friends[i];
+        if (f->name == currentFunction->name && sameParams(f, currentFunction)) return true;
     }
     return false;
 }
@@ -1051,11 +1052,11 @@ void SemanticAnalyzer::analyzeFunction(cc::Function *fn) {
 
     cc::Type *savedReturn = currentReturnType;
     const std::string savedClass = currentClass;
-    const std::string savedFunction = currentFunction;
+    cc::Function *const savedFunction = currentFunction;
     const bool savedCtorDtor = currentIsCtorOrDtor;
     currentReturnType = fn->retType;
     currentClass = md ? md->ownerClass : std::string();
-    currentFunction = fn->name;
+    currentFunction = fn;
     currentIsCtorOrDtor = md && (md->isConstructor || md->isDestructor);
 
     if (md) pushClassScope(findClass(md->ownerClass));

@@ -81,6 +81,8 @@ void MethodDecl::printBodyPrefix(int indent) {
 
 ClassDecl::~ClassDecl() {
     for (std::size_t i = 0; i < members.size(); ++i) delete members[i];
+    // Only the prototypes with no definition elsewhere belong to this class.
+    for (std::size_t i = 0; i < friendProtos.size(); ++i) delete friendProtos[i];
 }
 
 void ClassDecl::print(int indent) {

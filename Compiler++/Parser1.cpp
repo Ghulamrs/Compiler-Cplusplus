@@ -355,18 +355,24 @@ void Parser::parseFriend() {
         return;
     }
 
-    if (classBeingParsed) classBeingParsed->friends.push_back(name);
-
     cc::Function *fn = new cc::Function(ret, name);
     fn->line = line;
     fn->col = col;
     parseFunctionParamsAndBody(fn);             // handles both ';' and '{'
 
-    // A body makes this the definition, and a definition belongs at file
-    // scope.  Without one the grant stands alone and the function is defined
-    // somewhere else, so there is nothing to hoist.
-    if (fn->body) pending.push_back(fn);
-    else delete fn;
+    // The grant records the whole signature, so an overload of the same name
+    // is a different function and is granted nothing.
+    if (classBeingParsed) {
+        classBeingParsed->friends.push_back(fn);
+        // A body makes this the definition, and a definition belongs at file
+        // scope -- which then owns it.  Without one, the prototype has nowhere
+        // else to live, so the class keeps it.
+        if (fn->body) pending.push_back(fn);
+        else          classBeingParsed->friendProtos.push_back(fn);
+    } else {
+        if (fn->body) pending.push_back(fn);
+        else delete fn;
+    }
 }
 
 // The token(s) after `operator`, as the member's name: "operator+".  An
