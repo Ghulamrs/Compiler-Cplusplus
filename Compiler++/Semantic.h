@@ -53,6 +53,8 @@ private:
     bool isFriendOf(cxx::ClassDecl *owner) const;
     // A ctor/dtor has no return type at all, which is not the same as void.
     bool currentIsCtorOrDtor;
+    // Inside a const member function every field is const, because *this is.
+    bool currentMethodIsConst;
     int loopDepth;                  // break/continue legality
     int switchDepth;                // `break` is legal inside a switch too
 
@@ -117,8 +119,8 @@ private:
     // object is const too, which is what stops  a.x = 1  through a const A&.
     bool isConstExpr(cc::Expr *e);
     bool objectIsConst(cxx::MemberAccessExpr *ma);
-    // Inside a const member function every field is const, because *this is.
-    bool currentMethodIsConst;
+    // Const may be added by a conversion, never removed.
+    bool constQualificationOk(cc::Type *from, cc::Type *to);
     // Walks the base chain, most derived first -- which IS name hiding.
     // `foundIn` receives the class it was found in, for the diagnostic.
     cc::Decl *findMember(cxx::ClassDecl *cd, const std::string &member,

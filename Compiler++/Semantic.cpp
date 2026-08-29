@@ -13,8 +13,8 @@
 #include <sstream>
 
 SemanticAnalyzer::SemanticAnalyzer(Diagnostics &d)
-    : diag(d), currentReturnType(0), currentFunction(0), currentMethodIsConst(false),
-      currentIsCtorOrDtor(false), loopDepth(0),
+    : diag(d), currentReturnType(0), currentFunction(0), currentIsCtorOrDtor(false),
+      currentMethodIsConst(false), loopDepth(0),
       switchDepth(0) {}
 
 SemanticAnalyzer::~SemanticAnalyzer() {
@@ -207,13 +207,16 @@ cc::Type *SemanticAnalyzer::stripReference(cc::Type *t) {
 
 std::string SemanticAnalyzer::describe(cc::Type *t) {
     if (!t) return "<none>";
-    if (dynamic_cast<cxx::BoolType*>(t)) return "bool";
+    // const reads before a value and after a star, exactly as it is written:
+    // `const int*` is a pointer to const, `int* const` a const pointer.
+    const std::string lead = t->isConst ? "const " : "";
+    if (dynamic_cast<cxx::BoolType*>(t)) return lead + "bool";
     cc::BuiltinType *bt = dynamic_cast<cc::BuiltinType*>(t);
-    if (bt) return bt->name();
+    if (bt) return lead + bt->name();
     cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(t);
-    if (ct) return ct->className;
+    if (ct) return lead + ct->className;
     cc::PointerType *pt = dynamic_cast<cc::PointerType*>(t);
-    if (pt) return describe(pt->base) + "*";
+    if (pt) return describe(pt->base) + "*" + (t->isConst ? " const" : "");
     cc::ArrayType *at = dynamic_cast<cc::ArrayType*>(t);
     if (at) {
         std::ostringstream ss;
@@ -304,12 +307,35 @@ bool SemanticAnalyzer::isNullPointerConstant(cc::Expr *e) {
     return n && n->value == 0;
 }
 
-bool SemanticAnalyzer::convertible(cc::Expr *fromExpr, cc::Type *from, cc::Type *to) {
-    if (canConvert(from, to)) return true;
-    if (dynamic_cast<cc::PointerType*>(stripReference(to)) && isNullPointerConstant(fromExpr)) {
-        return true;
+// Const may be ADDED on the way in, never taken away: a const int* may not
+// become an int*, or every check above it could be sidestepped by one
+// assignment.  The other direction is always safe.
+bool SemanticAnalyzer::constQualificationOk(cc::Type *from, cc::Type *to) {
+    cc::Type *f = stripReference(from);
+    cc::Type *t = stripReference(to);
+    for (;;) {
+        cc::PointerType *pf = dynamic_cast<cc::PointerType*>(f);
+        cc::PointerType *pt = dynamic_cast<cc::PointerType*>(t);
+        if (!pf || !pt) return true;            // not both pointers: nothing to compare
+        f = pf->base;
+        t = pt->base;
+        if (!f || !t) return true;
+        if (f->isConst && !t->isConst) return false;
     }
-    return false;
+}
+
+bool SemanticAnalyzer::convertible(cc::Expr *fromExpr, cc::Type *from, cc::Type *to) {
+    if (dynamic_cast<cc::PointerType*>(stripReference(to)) && isNullPointerConstant(fromExpr)) {
+        return true;                            // 0 is any pointer type
+    }
+    if (!constQualificationOk(from, to)) return false;
+    // Binding a T& to a const object would lose the const just as surely.
+    if (cxx::ReferenceType *rt = dynamic_cast<cxx::ReferenceType*>(to)) {
+        if (rt->base && !rt->base->isConst && from && stripReference(from)->isConst) {
+            return false;
+        }
+    }
+    return canConvert(from, to);
 }
 
 // int, int*, int** need no resolution; a class name does.
@@ -1747,7 +1773,7 @@ cc::Type *SemanticAnalyzer::analyzeExprImpl(cc::Expr *e, bool &isLValue) {
             }
             if (isConstExpr(ue->operand)) {
                 error(ue, std::string("cannot apply '") + cc::unaryOpText(ue->op)
-                          + "' to a const " + describe(t));
+                          + "' to " + describe(t));
                 return 0;
             }
             cc::BuiltinKind k;
@@ -1869,7 +1895,12 @@ cc::Type *SemanticAnalyzer::analyzeExprImpl(cc::Expr *e, bool &isLValue) {
             // The other half of lvalue-ness: only an object can be assigned to.
             if (!lL) { error(be, "left side of assignment is not an lvalue"); return 0; }
             if (isConstExpr(be->lhs)) {
-                error(be, "cannot assign to a const " + describe(lt));
+                // The const may be on the type itself, or inherited from the
+                // object it belongs to -- and saying which is the difference
+                // between a useful message and a puzzling one.
+                cc::Type *slt = stripReference(lt);
+                if (slt && slt->isConst) error(be, "cannot assign to " + describe(lt));
+                else                     error(be, "cannot modify a const object");
                 return 0;
             }
 
