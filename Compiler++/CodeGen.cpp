@@ -275,6 +275,9 @@ void CodeGen::generateFunction(const IRFunction &fn, FuncImage &out) {
             case IR_Mod: op = OP_Mod; break;
             case IR_UDiv: op = OP_UDiv; break;
             case IR_UMod: op = OP_UMod; break;
+            case IR_Shl:  op = OP_Shl;  break;
+            case IR_Shr:  op = OP_Shr;  break;
+            case IR_UShr: op = OP_UShr; break;
             case IR_FAdd: op = OP_FAdd; break;
             case IR_FSub: op = OP_FSub; break;
             case IR_FMul: op = OP_FMul; break;

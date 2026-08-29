@@ -405,24 +405,9 @@ std::string Parser::operatorMemberName() {
         { TOK_LT, "<" }, { TOK_GT, ">" }, { TOK_LE, "<=" }, { TOK_GE, ">=" },
         { TOK_ASSIGN, "=" },
         { TOK_PLUSEQ, "+=" }, { TOK_MINUSEQ, "-=" }, { TOK_STAREQ, "*=" },
-        { TOK_SLASHEQ, "/=" }, { TOK_PERCENTEQ, "%=" }
+        { TOK_SLASHEQ, "/=" }, { TOK_PERCENTEQ, "%=" },
+        { TOK_SHL, "<<" }, { TOK_SHR, ">>" }
     };
-    // '<<' and '>>' are two tokens here -- this version has no shift operator --
-    // so the pair is tested before the single, or `operator<<` would be read as
-    // `operator<` with a stray '<' after it.
-    if (cur.kind == TOK_LT || cur.kind == TOK_GT) {
-        const State probe = save();
-        const TokenKind first = cur.kind;
-        advance();
-        const bool doubled = (cur.kind == first);
-        restore(probe);
-        if (doubled) {
-            errorAtCurrent(std::string("operator") + (first == TOK_LT ? "<<" : ">>")
-                           + " is not supported in this version");
-            return std::string();
-        }
-    }
-
     const int count = static_cast<int>(sizeof(table) / sizeof(table[0]));
     for (int i = 0; i < count; ++i) {
         if (cur.kind == table[i].kind) {
@@ -431,11 +416,17 @@ std::string Parser::operatorMemberName() {
         }
     }
     if (cur.kind == TOK_LBRACKET) {
-        errorAtCurrent("operator[] is not supported in this version");
-        return std::string();
+        advance();
+        if (!expect(TOK_RBRACKET, "after 'operator['")) return std::string();
+        return "operator[]";
     }
+    // operator()  -- an empty pair, with the parameter list after it.
     if (cur.kind == TOK_LPAREN) {
-        errorAtCurrent("operator() is not supported in this version");
+        const State probe = save();
+        advance();
+        if (cur.kind == TOK_RPAREN) { advance(); return "operator()"; }
+        restore(probe);
+        errorAtCurrent("expected an operator after 'operator'");
         return std::string();
     }
     errorAtCurrent(std::string("this operator cannot be overloaded in this version"));

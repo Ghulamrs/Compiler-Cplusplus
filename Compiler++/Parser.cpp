@@ -723,8 +723,27 @@ Expr *Parser::parseEquality() {
     return left;
 }
 
-Expr *Parser::parseRelational() {
+// Shift binds tighter than a comparison and looser than + and -, exactly as
+// in C -- so  a << b + c  is  a << (b + c).
+Expr *Parser::parseShift() {
     for (Expr *left = parseAddSub(); ; ) {
+        BinaryOp op;
+        switch (cur.kind) {
+        case TOK_SHL: op = BIN_Shl; break;
+        case TOK_SHR: op = BIN_Shr; break;
+        default: return left;
+        }
+        if (!left) return left;
+        const int line = cur.line, col = cur.col;
+        advance();
+        Expr *e = new BinaryExpr(op, left, parseAddSub());
+        e->line = line; e->col = col;
+        left = e;
+    }
+}
+
+Expr *Parser::parseRelational() {
+    for (Expr *left = parseShift(); ; ) {
         BinaryOp op;
         switch (cur.kind) {
         case TOK_LT: op = BIN_LT; break;
@@ -736,7 +755,7 @@ Expr *Parser::parseRelational() {
         if (!left) return left;
         const int line = cur.line, col = cur.col;
         advance();
-        Expr *e = new BinaryExpr(op, left, parseAddSub());
+        Expr *e = new BinaryExpr(op, left, parseShift());
         e->line = line; e->col = col;
         left = e;
     }
@@ -838,11 +857,9 @@ Expr *Parser::parseIndexSuffix(Expr *base) {
     Expr *index = parseExpression();
     expect(TOK_RBRACKET, "after a subscript");
     if (!index) return base;
-    Expr *sum = new BinaryExpr(BIN_Add, base, index);
-    sum->line = line; sum->col = col;
-    Expr *deref = new UnaryExpr(UN_Deref, sum);
-    deref->line = line; deref->col = col;
-    return deref;
+    Expr *e = new IndexExpr(base, index);
+    e->line = line; e->col = col;
+    return e;
 }
 
 Expr *Parser::parsePrimary() {

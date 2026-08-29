@@ -30,11 +30,17 @@ public:
     // them is worse than silence.  Counting continues; printing stops.
     static const int MaxReported = 20;
 
+    // Lines of prelude prepended before the user's own first line.  Subtracted
+    // from every report, so a program that includes <iostream> still sees its
+    // own line numbers.
+    void setLineOffset(int n) { lineOffset = n; }
+
 private:
     std::string name;
     int errors;
     int warnings;
     bool capped;
+    int lineOffset;
 
     void report(const char *level, int line, int col, const std::string &msg);
 

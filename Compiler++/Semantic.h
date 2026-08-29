@@ -104,6 +104,9 @@ private:
     cc::Function *findOperator(cc::Expr *lhs, cc::Type *lt,
                                cc::Expr *rhs, cc::Type *rt,
                                cc::BinaryOp op, cc::ASTNode *at);
+    cxx::MethodDecl *findCallOperator(cc::Type *ot, cc::CallExpr *call);
+    cxx::MethodDecl *findIndexOperator(cxx::ClassDecl *cd, cc::Expr *index,
+                                       cc::Type *it, cc::ASTNode *at);
     cxx::MethodDecl *findMemberOperator(cc::Type *lt, cc::BinaryOp op,
                                         cc::Expr *rhs, cc::Type *rt, cc::ASTNode *at);
     cc::Function *findFreeOperator(cc::Expr *lhs, cc::Type *lt,

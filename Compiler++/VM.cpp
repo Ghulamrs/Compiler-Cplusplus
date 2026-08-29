@@ -297,6 +297,27 @@ long VM::run(const Image &image, bool &ok) {
             break;
         }
 
+        // A shift by a silly amount is undefined in C++, so the VM defines it:
+        // out of range yields 0 rather than whatever the host would do.
+        case OP_Shl: {
+            long b = pop().i, a = pop().i;
+            push((b < 0 || b > 63) ? 0 : static_cast<long>(
+                     static_cast<unsigned long>(a) << b));
+            break;
+        }
+        case OP_Shr: {
+            long b = pop().i, a = pop().i;
+            if (b < 0 || b > 63) { push(a < 0 ? -1 : 0); break; }
+            push(a >> b);                       // arithmetic: the sign is kept
+            break;
+        }
+        case OP_UShr: {
+            long b = pop().i, a = pop().i;
+            push((b < 0 || b > 63) ? 0 : static_cast<long>(
+                     static_cast<unsigned long>(a) >> b));
+            break;
+        }
+
         case OP_Add: { long b = pop().i, a = pop().i; push(a + b); break; }
         case OP_Sub: { long b = pop().i, a = pop().i; push(a - b); break; }
         case OP_Mul: { long b = pop().i, a = pop().i; push(a * b); break; }

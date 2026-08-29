@@ -100,6 +100,7 @@ protected:
     Expr *parseLogicalAnd();
     Expr *parseEquality();
     Expr *parseRelational();
+    Expr *parseShift();
     Expr *parseAddSub();
     Expr *parseMulDiv();
     Expr *parseUnary();

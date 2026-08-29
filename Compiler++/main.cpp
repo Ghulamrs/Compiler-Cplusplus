@@ -128,6 +128,16 @@ int main(int argc, char **argv) {
 
     // parseTranslationUnit() is the C layer's, but every hook it calls is
     // virtual, so a cxx::Parser parses the C++ forms through the same loop.
+    // <iostream> is written in this language, so "including" it is prepending
+    // it.  The lines it occupies are subtracted from every diagnostic, so the
+    // user still sees their own numbering.
+    int preludeLines = 0;
+    const std::string prelude = preludeFor(source, preludeLines);
+    if (!prelude.empty()) {
+        source = prelude + source;
+        diag.setLineOffset(preludeLines);
+    }
+
     // #define is a textual substitution, so it happens before the first token.
     source = expandDefines(source, diag);
 
@@ -143,7 +153,12 @@ int main(int argc, char **argv) {
 
         if (showAst) {
             if (!quiet) std::cout << "=== SYNTAX TREE: " << baseName(path) << " ===" << std::endl;
-            for (std::size_t i = 0; i < unit.size(); ++i) unit[i]->print(0);
+            // The prelude is compiler-supplied, so a dump of "the program"
+            // means the user's own declarations, not <iostream>'s.
+            for (std::size_t i = 0; i < unit.size(); ++i) {
+                if (unit[i]->line <= preludeLines) continue;
+                unit[i]->print(0);
+            }
             std::cout << std::endl;
         }
 

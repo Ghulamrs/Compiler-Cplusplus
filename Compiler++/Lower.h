@@ -90,6 +90,13 @@ protected:
     IRReg lowerValue(Expr *e);
     IRReg lowerAddress(Expr *e);
     IRReg lowerBinary(BinaryExpr *e);
+    // a[i]: the element's address, or the call when a class overloads it.
+    IRReg lowerIndexAddress(IndexExpr *e);
+    // What a[i] yields, taken from the BASE rather than from the analysis:
+    // Semantic decays the inner array of g[1][2] to a pointer, and lowering
+    // has to know it is still an array before it decides whether to load.
+    Type *elementTypeOf(IndexExpr *e);
+    virtual IRReg lowerIndexOperator(IndexExpr *e);      // 0 unless overloaded
     // Emits whatever machine operation the conversion needs, or nothing when
     // the two types already agree.  Every implicit conversion the semantic
     // pass allowed becomes a real instruction here.

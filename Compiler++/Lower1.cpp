@@ -490,6 +490,24 @@ IRReg Lowering::lowerOperandFor(cc::Type *want, cc::Expr *e, int line) {
     return v;
 }
 
+// a[i] on a class is a method call: the object is `this`, the index the one
+// argument.  A reference return makes the RESULT an address, which is what
+// lets  t[1] = 42;  assign through it.
+IRReg Lowering::lowerIndexOperator(cc::IndexExpr *e) {
+    MethodDecl *op = dynamic_cast<MethodDecl*>(e->resolvedOperator);
+    if (!op) {
+        diag.error(e->line, e->col, "internal: operator[] was not resolved");
+        return fn->emitConst(0, e->line);
+    }
+    std::vector<IRReg> args;
+    args.push_back(lowerObjectValue(e->base));
+    if (returnsObject(op)) args.push_back(allocReturnSlot(op, e->line));
+    args.push_back(lowerOperandFor(op->params.empty() ? 0 : op->params[0]->type,
+                                   e->index, e->line));
+    return fn->emitCall(mangleOverload(op->ownerClass, op->name, op->params),
+                        args, true, e->line);
+}
+
 // A member operator is a method call on the left operand.  A non-member is an
 // ordinary two-argument call -- and the only form that can take a class on the
 // RIGHT, which is what makes  3 * v  work.
@@ -517,6 +535,24 @@ IRReg Lowering::emitOperatorCall(cc::Function *op, cc::Expr *lhsExpr,
 
 IRReg Lowering::lowerCall(cc::CallExpr *e, bool wantsResult) {
     MemberAccessExpr *ma = dynamic_cast<MemberAccessExpr*>(e->callee);
+
+    // obj(args) -- the callee is an OBJECT, and the analysis resolved the call
+    // to its operator().  The object is `this`; everything else is an ordinary
+    // method call.
+    if (!ma) {
+        MethodDecl *callOp = dynamic_cast<MethodDecl*>(e->resolved);
+        if (callOp && callOp->name == "operator()") {
+            std::vector<IRReg> args;
+            args.push_back(lowerObjectValue(e->callee));
+            if (returnsObject(callOp)) args.push_back(allocReturnSlot(callOp, e->line));
+            const std::vector<IRReg> rest = lowerArgs(e, callOp, 0);
+            args.insert(args.end(), rest.begin(), rest.end());
+            return fn->emitCall(mangleOverload(callOp->ownerClass, callOp->name,
+                                               callOp->params),
+                                args, wantsResult, e->line);
+        }
+    }
+
     if (!ma) {
         // A bare name inside a method may still be a method call on `this`.
         cc::IdentExpr *id = dynamic_cast<cc::IdentExpr*>(e->callee);

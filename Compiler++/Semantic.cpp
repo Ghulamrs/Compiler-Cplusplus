@@ -430,6 +430,49 @@ cc::Function *SemanticAnalyzer::findFreeOperator(cc::Expr *lhs, cc::Type *lt,
 // An operator may be overloaded like any other member -- operator+(V) beside
 // operator+(int) -- so the RIGHT operand chooses which.  Taking the first by
 // name would reject `v + 5` for having the wrong argument type.
+// obj(args) selects among the class's operator() overloads by the arguments,
+// exactly as an ordinary call does.
+cxx::MethodDecl *SemanticAnalyzer::findCallOperator(cc::Type *ot, cc::CallExpr *call) {
+    cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(stripReference(ot));
+    if (!ct) return 0;
+    cxx::ClassDecl *cd = findClass(ct->className);
+    if (!cd) return 0;
+    const std::vector<cc::Function*> cands = findMethods(cd, "operator()");
+    if (cands.empty()) return 0;
+    cc::Function *chosen = resolveOverload(cands, call, "operator()");
+    cxx::MethodDecl *m = dynamic_cast<cxx::MethodDecl*>(chosen);
+    if (!m) return 0;
+    cxx::ClassDecl *owner = findClass(m->ownerClass);
+    if (!memberIsAccessible(m, owner)) {
+        error(call, std::string("'operator()' is ") + cxx::accessText(memberAccess(m))
+                    + " in class '" + (owner ? owner->name : cd->name) + "'");
+    }
+    return m;
+}
+
+// operator[] takes one argument, so the index picks the overload.
+cxx::MethodDecl *SemanticAnalyzer::findIndexOperator(cxx::ClassDecl *cd, cc::Expr *index,
+                                                     cc::Type *it, cc::ASTNode *at) {
+    if (!cd) return 0;
+    const std::vector<cc::Function*> cands = findMethods(cd, "operator[]");
+    cxx::MethodDecl *exact = 0, *viable = 0;
+    for (std::size_t i = 0; i < cands.size(); ++i) {
+        cxx::MethodDecl *m = dynamic_cast<cxx::MethodDecl*>(cands[i]);
+        if (!m || m->params.size() != 1) continue;
+        cc::Type *want = m->params[0]->type;
+        if (it && sameType(it, stripReference(want))) { if (!exact) exact = m; continue; }
+        if (convertible(index, it, want))             { if (!viable) viable = m; }
+    }
+    cxx::MethodDecl *chosen = exact ? exact : viable;
+    if (!chosen) return 0;
+    cxx::ClassDecl *owner = findClass(chosen->ownerClass);
+    if (!memberIsAccessible(chosen, owner)) {
+        error(at, std::string("'operator[]' is ") + cxx::accessText(memberAccess(chosen))
+                  + " in class '" + (owner ? owner->name : cd->name) + "'");
+    }
+    return chosen;
+}
+
 cxx::MethodDecl *SemanticAnalyzer::findMemberOperator(cc::Type *lt, cc::BinaryOp op,
                                                       cc::Expr *rhs, cc::Type *rt,
                                                       cc::ASTNode *at) {
@@ -1564,6 +1607,18 @@ cc::Type *SemanticAnalyzer::analyzeExprImpl(cc::Expr *e, bool &isLValue) {
                 Symbol *s = symbols.lookup(cid->name);
                 if (!s) { error(cid, "undeclared function '" + cid->name + "'"); return 0; }
                 fn = dynamic_cast<cc::Function*>(s->decl);
+                // obj(args) -- not a function at all, but an object whose
+                // class overloads the call operator.
+                if (!fn && s->type && isClassType(s->type)) {
+                    if (cxx::MethodDecl *op = findCallOperator(s->type, call)) {
+                        call->resolved = op;
+                        checkCallArgs(call, op);
+                        if (dynamic_cast<cxx::ReferenceType*>(op->retType)) isLValue = true;
+                        return stripReference(op->retType);
+                    }
+                    error(call, "class '" + describe(s->type) + "' has no operator()");
+                    return 0;
+                }
                 if (!fn) { error(call, "'" + cid->name + "' is not a function"); return 0; }
             }
         } else {
@@ -1598,6 +1653,9 @@ cc::Type *SemanticAnalyzer::analyzeExprImpl(cc::Expr *e, bool &isLValue) {
         // Recorded so lowering does not resolve the call a second time.
         call->resolved = fn;
         checkCallArgs(call, fn);
+        // A function returning T& names an object, so its result may be
+        // assigned to.
+        if (dynamic_cast<cxx::ReferenceType*>(fn->retType)) isLValue = true;
         return stripReference(fn->retType);
     }
 
@@ -1675,6 +1733,45 @@ cc::Type *SemanticAnalyzer::analyzeExprImpl(cc::Expr *e, bool &isLValue) {
         return ce->type;
     }
 
+    // a[i] -- a class overloads it, everything else is pointer arithmetic.
+    cc::IndexExpr *ie = dynamic_cast<cc::IndexExpr*>(e);
+    if (ie) {
+        bool baseLV = false, idxLV = false;
+        cc::Type *bt = analyzeExpr(ie->base, baseLV);
+        cc::Type *it = analyzeExpr(ie->index, idxLV);
+        if (!bt) return 0;
+
+        if (isClassType(bt)) {
+            cxx::ClassDecl *cd = findClass(
+                dynamic_cast<cxx::ClassType*>(stripReference(bt))->className);
+            if (cxx::MethodDecl *op = findIndexOperator(cd, ie->index, it, ie)) {
+                ie->resolvedOperator = op;
+                // T& out means the subscript names an object, so it may be
+                // assigned to -- which is the whole point of  s[i] = 'x'.
+                cxx::ReferenceType *rt = dynamic_cast<cxx::ReferenceType*>(op->retType);
+                isLValue = (rt != 0);
+                return rt ? rt->base : op->retType;
+            }
+            error(ie, "class '" + cd->name + "' has no operator[]");
+            return 0;
+        }
+
+        cc::BuiltinKind ik;
+        if (it && (!arithmeticKind(it, ik) || !cc::builtinIsInteger(ik))) {
+            error(ie, "a subscript must be an integer, not " + describe(it));
+        }
+        cc::PointerType *pt = dynamic_cast<cc::PointerType*>(decay(bt));
+        if (!pt) { error(ie, describe(bt) + " cannot be subscripted"); return 0; }
+        // An array of arrays yields an array, which decays in turn -- that is
+        // what makes g[1][2] reach the right element.
+        if (dynamic_cast<cc::ArrayType*>(pt->base)) {
+            isLValue = false;
+            return decay(pt->base);
+        }
+        isLValue = true;
+        return pt->base;
+    }
+
     cc::BinaryExpr *be = dynamic_cast<cc::BinaryExpr*>(e);
     if (be) {
         bool lL = false, lR = false;
@@ -1724,6 +1821,20 @@ cc::Type *SemanticAnalyzer::analyzeExprImpl(cc::Expr *e, bool &isLValue) {
                 return 0;
             }
             return makeBool();
+        }
+
+        // Shift is not the usual arithmetic conversion: the result has the
+        // LEFT operand's type, and the right one only says how far.
+        if (be->op == cc::BIN_Shl || be->op == cc::BIN_Shr) {
+            cc::BuiltinKind kl, kr;
+            if (!arithmeticKind(lt, kl) || !cc::builtinIsInteger(kl) ||
+                !arithmeticKind(rt, kr) || !cc::builtinIsInteger(kr)) {
+                error(be, std::string("'") + cc::binaryOpText(be->op)
+                          + "' needs integer operands, not "
+                          + describe(lt) + " and " + describe(rt));
+                return 0;
+            }
+            return makeBuiltin(promote(kl));
         }
 
         if (cc::binaryOpIsComparison(be->op)) {

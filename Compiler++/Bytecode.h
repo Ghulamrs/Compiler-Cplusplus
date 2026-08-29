@@ -45,6 +45,7 @@ enum OpCode {
 
     // --- integer arithmetic ---
     OP_Add, OP_Sub, OP_Mul, OP_Div, OP_Mod, OP_UDiv, OP_UMod,
+    OP_Shl, OP_Shr, OP_UShr,
     OP_Neg, OP_Not,
 
     // --- floating arithmetic ---

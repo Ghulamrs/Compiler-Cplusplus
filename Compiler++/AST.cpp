@@ -29,6 +29,8 @@ const char *binaryOpText(BinaryOp op) {
     case BIN_GE:     return ">=";
     case BIN_LAnd:   return "&&";
     case BIN_LOr:    return "||";
+    case BIN_Shl:    return "<<";
+    case BIN_Shr:    return ">>";
     }
     return "?";
 }
@@ -203,6 +205,18 @@ void UnaryExpr::print(int indent) {
     printIndent(indent);
     std::cout << "Unary " << unaryOpText(op) << std::endl;
     if (operand) operand->print(indent + 1);
+}
+
+IndexExpr::~IndexExpr() {
+    delete base;
+    delete index;
+}
+
+void IndexExpr::print(int indent) {
+    printIndent(indent);
+    std::cout << "Index" << std::endl;
+    if (base) base->print(indent + 1);
+    if (index) index->print(indent + 1);
 }
 
 BinaryExpr::~BinaryExpr() {

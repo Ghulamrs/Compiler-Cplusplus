@@ -81,6 +81,7 @@ private:
     // An overloaded operator, lowered as the method call it is.
     IRReg emitOperatorCall(cc::Function *op, cc::Expr *lhsExpr, cc::Expr *rhsExpr, int line);
     IRReg lowerOperandFor(cc::Type *want, cc::Expr *e, int line);
+    virtual IRReg lowerIndexOperator(cc::IndexExpr *e);
     // Construct or destroy `count` objects laid end to end from `base`.
     void emitArrayConstruct(ClassDecl *cd, IRReg base, long count, int elemSize, int line);
     void emitArrayDestruct(ClassDecl *cd, IRReg base, long count, int elemSize, int line);

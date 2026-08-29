@@ -55,4 +55,13 @@ Lexer *createLexer(const std::string &s);
 class Diagnostics;
 std::string expandDefines(const std::string &src, Diagnostics &diag);
 
+// <iostream>, written in this language and prepended when a program includes
+// it.  There is no library to link, so the header IS its implementation --
+// which is also a fair test of whether the language can express one.
+//
+// Returns the prelude text, or an empty string when the source includes no
+// header that needs it.  `lines` receives how many lines it occupies, so
+// diagnostics can subtract them and still point at the user's own line.
+std::string preludeFor(const std::string &src, int &lines);
+
 #endif

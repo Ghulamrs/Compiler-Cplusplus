@@ -61,6 +61,8 @@ const char *tokenName(TokenKind k) {
     case TOK_COLONCOLON: return "'::'";
     case TOK_DOT:        return "'.'";
     case TOK_ELLIPSIS:   return "'...'";
+    case TOK_SHL:        return "'<<'";
+    case TOK_SHR:        return "'>>'";
     case TOK_HASH:       return "'#'";
     case TOK_ARROW:      return "'->'";
     case TOK_TILDE:      return "'~'";
@@ -392,11 +394,13 @@ Token Lexer::nextToken() {
         else kind = TOK_NOT;
         break;
     case '<':
-        if (peek() == '=') { get(); kind = TOK_LE; }
+        if (peek() == '=')      { get(); kind = TOK_LE; }
+        else if (peek() == '<') { get(); kind = TOK_SHL; }
         else kind = TOK_LT;
         break;
     case '>':
-        if (peek() == '=') { get(); kind = TOK_GE; }
+        if (peek() == '=')      { get(); kind = TOK_GE; }
+        else if (peek() == '>') { get(); kind = TOK_SHR; }
         else kind = TOK_GT;
         break;
     case '&':
@@ -563,4 +567,67 @@ std::string expandDefines(const std::string &src, Diagnostics &diag) {
         ++i;
     }
     return out;
+}
+
+
+// --- <iostream>, in the language itself --------------------------------------
+//
+// ostream holds nothing: every one of its operators forwards to a native and
+// returns *this, which is what makes  cout << a << b  chain.  endl is an
+// object of its own class, so that `cout << endl` picks an overload rather
+// than needing a special rule.
+
+namespace {
+
+const char *IOStreamPrelude =
+    "class __endl_t { public: int _; __endl_t() { _ = 0; } };"
+    " __endl_t endl;"
+    " class ostream {"
+    " public: int _;"
+    " ostream() { _ = 0; }"
+    " ostream operator<<(int n)      { print_int(n); return *this; }"
+    " ostream operator<<(long n)     { print_int((int)n); return *this; }"
+    " ostream operator<<(short n)    { print_int(n); return *this; }"
+    " ostream operator<<(double d)   { print_double(d); return *this; }"
+    " ostream operator<<(float f)    { print_double(f); return *this; }"
+    " ostream operator<<(char c)     { print_char(c); return *this; }"
+    " ostream operator<<(char* s)    { print_string(s); return *this; }"
+    " ostream operator<<(bool b)     { print_int(b); return *this; }"
+    " ostream operator<<(__endl_t e) { print_line(); return *this; }"
+    " };"
+    " ostream cout;"
+    " ostream cerr;";
+
+// The natives the prelude leans on.  Declaring them here means a program that
+// includes <iostream> need not declare them itself.
+const char *IOStreamNatives =
+    "void print_int(int n);"
+    " void print_char(int c);"
+    " void print_double(double d);"
+    " void print_string(char* s);"
+    " void print_line();";
+
+// Does the source include the named header?  Only the spelling matters --
+// there is no file to look for.
+bool includesHeader(const std::string &src, const std::string &name) {
+    std::size_t at = 0;
+    for (;;) {
+        at = src.find("#include", at);
+        if (at == std::string::npos) return false;
+        const std::size_t eol = src.find('\n', at);
+        const std::string line = src.substr(at, (eol == std::string::npos ? src.size() : eol) - at);
+        if (line.find(name) != std::string::npos) return true;
+        if (eol == std::string::npos) return false;
+        at = eol + 1;
+    }
+}
+
+} // namespace
+
+std::string preludeFor(const std::string &src, int &lines) {
+    lines = 0;
+    if (!includesHeader(src, "iostream")) return std::string();
+    // One line, so every diagnostic below it shifts by exactly one.
+    lines = 1;
+    return std::string(IOStreamNatives) + " " + IOStreamPrelude + "\n";
 }

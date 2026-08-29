@@ -142,7 +142,8 @@ enum BinaryOp {
     // a = a + b, which would evaluate a twice.
     BIN_AddAssign, BIN_SubAssign, BIN_MulAssign, BIN_DivAssign, BIN_ModAssign,
     BIN_EQ, BIN_NE, BIN_LT, BIN_GT, BIN_LE, BIN_GE,
-    BIN_LAnd, BIN_LOr
+    BIN_LAnd, BIN_LOr,
+    BIN_Shl, BIN_Shr
 };
 const char *binaryOpText(BinaryOp op);
 bool binaryOpIsComparison(BinaryOp op);
@@ -209,6 +210,18 @@ struct UnaryExpr : public Expr {
     Function *resolvedOperator;         // an overloaded unary '-'; not owned
     UnaryExpr(UnaryOp o, Expr *e) : op(o), operand(e), resolvedOperator(0) {}
     ~UnaryExpr() { delete operand; }
+    void print(int indent);
+};
+
+// a[i].  Kept as a node rather than desugared to *(a+i) in the parser,
+// because a class may overload it and the parser does not know types.  For a
+// pointer or an array it lowers to exactly that sum, so nothing else changes.
+struct IndexExpr : public Expr {
+    Expr *base;
+    Expr *index;
+    Function *resolvedOperator;     // a class's operator[]; 0 otherwise
+    IndexExpr(Expr *b, Expr *i) : base(b), index(i), resolvedOperator(0) {}
+    ~IndexExpr();
     void print(int indent);
 };
 

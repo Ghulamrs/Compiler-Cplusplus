@@ -31,6 +31,9 @@ const char *opCodeName(OpCode op) {
     case OP_Mod:          return "mod";
     case OP_UDiv:         return "udiv";
     case OP_UMod:         return "umod";
+    case OP_Shl:          return "shl";
+    case OP_Shr:          return "shr";
+    case OP_UShr:         return "ushr";
     case OP_Neg:          return "neg";
     case OP_Not:          return "not";
     case OP_FAdd:         return "fadd";

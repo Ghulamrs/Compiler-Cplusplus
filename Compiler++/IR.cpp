@@ -28,6 +28,9 @@ const char *irOpName(IROp op) {
     case IR_FMul:         return "fmul";
     case IR_FDiv:         return "fdiv";
     case IR_FNeg:         return "fneg";
+    case IR_Shl:          return "shl";
+    case IR_Shr:          return "shr";
+    case IR_UShr:         return "ushr";
     case IR_Neg:          return "neg";
     case IR_LogicalNot:   return "not";
     case IR_CmpEQ:        return "cmp.eq";

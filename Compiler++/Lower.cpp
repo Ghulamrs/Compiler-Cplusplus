@@ -464,6 +464,10 @@ void Lowering::lowerStmt(Stmt *s) {
                                 sizeOfType(currentReturnType), rs->line);
                 v = dest;
             }
+        } else if (rs->expr && isReferenceType(currentReturnType)) {
+            // T& hands back the ADDRESS of what it names -- that is the whole
+            // of what a reference return is, and what makes  t[1] = 42;  work.
+            v = lowerAddress(rs->expr);
         } else if (rs->expr) {
             v = lowerValue(rs->expr);
             v = convert(v, typeOf(rs->expr), currentReturnType, rs->line);
@@ -683,11 +687,18 @@ IRReg Lowering::lowerAddress(Expr *e) {
         if (u->op == UN_Deref) return lowerValue(u->operand);   // *p: p's value
     }
 
+    if (IndexExpr *ix = dynamic_cast<IndexExpr*>(e)) return lowerIndexAddress(ix);
+
     // A call, or an overloaded operator, whose result is an object: it has no
     // name, but it does have a place -- the slot the caller supplied for it.
     // That is what makes  (a + b).x  addressable.
     if (CallExpr *c = dynamic_cast<CallExpr*>(e)) {
-        if (c->resolved && isObjectType(c->resolved->retType)) return lowerValue(e);
+        // A call returning T& already yields an address; one returning an
+        // object yields the slot the caller supplied for it.
+        if (c->resolved && (isObjectType(c->resolved->retType) ||
+                            isReferenceType(c->resolved->retType))) {
+            return lowerValue(e);
+        }
     }
     if (BinaryExpr *bo = dynamic_cast<BinaryExpr*>(e)) {
         if (bo->resolvedOperator && isObjectType(bo->resolvedOperator->retType)) {
@@ -730,6 +741,21 @@ IRReg Lowering::lowerValue(Expr *e) {
                             isFloatType(t), e->line);
     }
 
+    if (IndexExpr *ix = dynamic_cast<IndexExpr*>(e)) {
+        // An overload that returns by VALUE has no address to load from.
+        if (ix->resolvedOperator && !isReferenceType(ix->resolvedOperator->retType)) {
+            return lowerIndexOperator(ix);
+        }
+        const IRReg addr = lowerIndexAddress(ix);
+        Type *t = ix->resolvedOperator ? referentType(typeOf(e)) : elementTypeOf(ix);
+        if (!t) t = referentType(typeOf(e));
+        // An array element that is itself an array, or an object, has no value
+        // to load: its address IS the value.
+        if (isArrayType(t) || isObjectType(t)) return addr;
+        return fn->emitLoad(addr, t ? sizeOfType(t) : Layout::IntSize,
+                            isFloatType(t), e->line);
+    }
+
     if (CastExpr *ce = dynamic_cast<CastExpr*>(e)) {
         // A cast is an explicit conversion; the same machinery serves.
         const IRReg v = lowerValue(ce->expr);
@@ -740,6 +766,36 @@ IRReg Lowering::lowerValue(Expr *e) {
     if (BinaryExpr *b = dynamic_cast<BinaryExpr*>(e)) return lowerBinary(b);
 
     diag.error(e->line, e->col, "internal: unhandled expression in lowering");
+    return fn->emitConst(0, e->line);
+}
+
+// a[i] is base + i * sizeof(element) -- the same arithmetic the desugared
+// *(a + i) used to produce, so the emitted IR is unchanged.  A class that
+// overloads it takes the other branch, and the call IS the address when the
+// overload returns a reference.
+Type *Lowering::elementTypeOf(IndexExpr *e) {
+    Type *bt = decayType(referentType(typeOf(e->base)));
+    PointerType *pt = dynamic_cast<PointerType*>(bt);
+    return pt ? pt->base : 0;
+}
+
+IRReg Lowering::lowerIndexAddress(IndexExpr *e) {
+    if (e->resolvedOperator) return lowerIndexOperator(e);
+
+    Type *bt = decayType(referentType(typeOf(e->base)));
+    const IRReg base = lowerValue(e->base);
+    IRReg index = lowerValue(e->index);
+
+    PointerType *pt = dynamic_cast<PointerType*>(bt);
+    const int step = pt ? sizeOfType(pt->base) : 1;
+    if (step > 1) {
+        index = fn->emitBinary(IR_Mul, index, fn->emitConst(step, e->line), e->line);
+    }
+    return fn->emitBinary(IR_Add, base, index, e->line);
+}
+
+IRReg Lowering::lowerIndexOperator(IndexExpr *e) {
+    diag.error(e->line, e->col, "internal: operator[] outside the C++ layer");
     return fn->emitConst(0, e->line);
 }
 
@@ -835,6 +891,15 @@ IRReg Lowering::lowerBinary(BinaryExpr *e) {
             index = fn->emitBinary(IR_Mul, index, by, e->line);
         }
         return fn->emitBinary(e->op == BIN_Add ? IR_Add : IR_Sub, a, b, e->line);
+    }
+
+    // Shift takes its type from the LEFT operand alone; the right one is a
+    // count, not something to meet it in a common type.
+    if (e->op == BIN_Shl || e->op == BIN_Shr) {
+        BuiltinKind k;
+        const bool uns = arithKind(lt, k) && !builtinIsSigned(k);
+        const IROp op = (e->op == BIN_Shl) ? IR_Shl : (uns ? IR_UShr : IR_Shr);
+        return fn->emitBinary(op, a, b, e->line);
     }
 
     BuiltinKind kl, kr;

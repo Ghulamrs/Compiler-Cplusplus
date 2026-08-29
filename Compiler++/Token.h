@@ -94,6 +94,8 @@ enum TokenKind {
     TOK_OROR,       // ||
     TOK_NOT,        // !
     TOK_AMP,        // &
+    TOK_SHL,        // <<
+    TOK_SHR,        // >>
 
     // A keyword of real C++ that this subset leaves out.  It is lexed rather
     // than left as an identifier so the parser can say WHICH feature is

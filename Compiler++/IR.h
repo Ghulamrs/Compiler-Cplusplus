@@ -37,6 +37,8 @@ enum IROp {
     // --- integer arithmetic -------------------------------------------
     IR_Add, IR_Sub, IR_Mul, IR_Div, IR_Mod,
     IR_UDiv, IR_UMod,       // unsigned division differs from signed
+    IR_Shl, IR_Shr,  // dest = a << b, a >> b  (>> is arithmetic when signed)
+    IR_UShr,         // logical shift right, for an unsigned left operand
     IR_Neg,          // dest = -a
     IR_LogicalNot,   // dest = (a == 0)
 
