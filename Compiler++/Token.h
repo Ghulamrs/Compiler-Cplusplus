@@ -1,4 +1,6 @@
 // Token.h
+//
+// C++98 only. No feature from C++11 or later is used anywhere in this project.
 
 #ifndef TOKEN_H
 #define TOKEN_H
@@ -33,6 +35,7 @@ enum TokenKind {
     TOK_DOT,        // .
     TOK_ARROW,      // ->
     TOK_AMP,        // &
+    TOK_COMMA,      // ,   (needed by the C++ layer's parameter lists)
 
     TOK_UNKNOWN
 };

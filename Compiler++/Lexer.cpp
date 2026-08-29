@@ -1,7 +1,10 @@
 // Lexer.cpp
+//
+// C++98 only.
 
 #include "Lexer.h"
 #include <cctype>
+#include <cstdlib>
 #include <iostream>
 #include <string>
 
@@ -11,9 +14,9 @@ Token Lexer::nextToken() {
     char c = peek();
     if (c == '\0') { tok.kind = TOK_EOF; return tok; }
 
-    if (std::isalpha(c) || c == '_') {
+    if (std::isalpha(static_cast<unsigned char>(c)) || c == '_') {
         std::string id;
-        while (std::isalnum(peek()) || peek() == '_') id += get();
+        while (std::isalnum(static_cast<unsigned char>(peek())) || peek() == '_') id += get();
         if      (id == "int") tok.kind = TOK_INT;
         else if (id == "return") tok.kind = TOK_RETURN;
         else if (id == "class") tok.kind = TOK_CLASS;
@@ -25,21 +28,23 @@ Token Lexer::nextToken() {
         return tok;
     }
 
-    if (std::isdigit(c)) {
+    if (std::isdigit(static_cast<unsigned char>(c))) {
         std::string num;
-        while (std::isdigit(peek())) num += get();
+        while (std::isdigit(static_cast<unsigned char>(peek()))) num += get();
         tok.kind = TOK_NUMBER;
         tok.text = num;
         tok.numberValue = std::atoi(num.c_str());
         return tok;
     }
 
-    switch (get()) {
+    char punct = get();
+    switch (punct) {
     case ';': tok.kind = TOK_SEMI; break;
     case '(': tok.kind = TOK_LPAREN; break;
     case ')': tok.kind = TOK_RPAREN; break;
     case '{': tok.kind = TOK_LBRACE; break;
     case '}': tok.kind = TOK_RBRACE; break;
+    case ',': tok.kind = TOK_COMMA; break;
     case '+': tok.kind = TOK_PLUS; break;
     case '-':
             if (peek() == '>') { get(); tok.kind = TOK_ARROW; }
@@ -56,13 +61,13 @@ Token Lexer::nextToken() {
             break;
     default:
         tok.kind = TOK_UNKNOWN;
-        tok.text = std::string(1, peek());
+        tok.text = std::string(1, punct);
         break;
     }
     return tok;
 }
 
-// Provide a simple factory function for main to use
+// Provide a simple factory function for the parsers to use
 Lexer *createLexer(const std::string &s) {
     return new Lexer(s);
 }

@@ -1,38 +1,37 @@
 // AST1.h
+//
+// LAYER 2 -- the C++ layer, namespace `cxx`.
+//
+//     cxx::X : public cc::X
+//
+// The authoritative layering model (full AST + parser diagram) lives at the
+// top of AST.h.  This file declares only what C++ ADDS to C: reference and
+// class types, declarations, qualified names, and member-access expressions.
+// Everything else is used directly from namespace cc.
+//
+// C++98 only.
 
-#ifndef AST_H
-#define AST_H
+#ifndef AST1_H
+#define AST1_H
 
+#include <cstddef>
 #include <string>
 #include <vector>
 #include <iostream>
 
-struct ASTNode {
-    virtual ~ASTNode() {}
-    virtual void print(int indent = 0) = 0;
-protected:
-    void printIndent(int n) {
-        for (int i = 0; i < n; ++i) std::cout << "  ";
-    }
-};
+#include "AST.h"
 
-// --- Types ---
-struct Type : public ASTNode {
-    virtual ~Type() {}
-};
+namespace cxx {
 
-struct BuiltinType : public Type {
-    std::string name;
-    BuiltinType(const std::string &n) : name(n) {}
-    void print(int indent);
-};
+// The type system lives in the C layer; pull the names in so this layer can
+// spell them unqualified.  These are the SAME types, not copies.
+using cc::Type;
+using cc::BuiltinType;
+using cc::PointerType;
 
-struct ClassType : public Type {
-    std::string className;
-    ClassType(const std::string &n) : className(n) {}
-    void print(int indent);
-};
+// --- Types added by C++ -----------------------------------------------
 
+// Reference type T&  -- does not exist in C
 struct ReferenceType : public Type {
     Type *base;
     ReferenceType(Type *b) : base(b) {}
@@ -40,8 +39,15 @@ struct ReferenceType : public Type {
     void print(int indent);
 };
 
-// --- Declarations ---
-struct Decl : public ASTNode {
+// A class / user-defined type name -- does not exist in C
+struct ClassType : public Type {
+    std::string className;
+    ClassType(const std::string &n) : className(n) {}
+    void print(int indent);
+};
+
+// --- Declarations (new in the C++ layer) ------------------------------
+struct Decl : public cc::ASTNode {
     virtual ~Decl() {}
 };
 
@@ -61,11 +67,19 @@ struct FieldDecl : public Decl {
     void print(int indent);
 };
 
+// A function with a signature and, optionally, a body.  This one node covers
+// both a class member  int getX();  and a free function  int main() { ... }  --
+// they differ only in where they appear, not in what they hold.  The body is a
+// vector of cc::Stmt, so the C layer's statements sit directly inside a C++
+// layer declaration; that is the same tree-sharing that lets cxx::MemberAccessExpr
+// live inside a cc::BinaryExpr.
 struct MethodDecl : public Decl {
     Type *retType;
     std::string name;
     std::vector<VarDecl*> params;
-    MethodDecl(Type *r, const std::string &n) : retType(r), name(n) {}
+    std::vector<cc::Stmt*> body;
+    bool hasBody;                       // distinguishes  f();  from  f() {}
+    MethodDecl(Type *r, const std::string &n) : retType(r), name(n), hasBody(false) {}
     ~MethodDecl();
     void print(int indent);
 };
@@ -78,31 +92,27 @@ struct ClassDecl : public Decl {
     void print(int indent);
 };
 
-// --- Qualified name ---
-struct QualifiedName : public ASTNode {
+// --- Qualified name  A::B ---------------------------------------------
+struct QualifiedName : public cc::ASTNode {
     std::vector<std::string> parts;
     QualifiedName() {}
     void print(int indent);
 };
 
-// --- Expressions ---
-struct Expr : public ASTNode {};
-
-struct IdentExpr : public Expr {
-    std::string name;
-    IdentExpr(const std::string &n) : name(n) {}
-    void print(int indent);
-};
-
-struct MemberAccessExpr : public Expr {
-    Expr *base;
+// --- Expressions ------------------------------------------------------
+// NumberExpr, IdentExpr and BinaryExpr are NOT redeclared: this layer uses
+// cc::NumberExpr, cc::IdentExpr and cc::BinaryExpr directly.  Only the new
+// C++ form is added, deriving from cc::Expr so C and C++ expressions share
+// one tree:  (a.b + 1) * 2
+struct MemberAccessExpr : public cc::Expr {
+    cc::Expr *base;
     std::string member;
     bool isArrow;
-    MemberAccessExpr(Expr *b, const std::string &m, bool arrow) : base(b), member(m), isArrow(arrow) {}
+    MemberAccessExpr(cc::Expr *b, const std::string &m, bool arrow) : base(b), member(m), isArrow(arrow) {}
     ~MemberAccessExpr() { delete base; }
     void print(int indent);
 };
 
-// reuse NumberExpr, BinaryExpr from your existing AST if present
+} // namespace cxx
 
 #endif
