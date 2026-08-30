@@ -1,0 +1,11 @@
+# Shell scripts must stay LF: CRLF makes them fail to run on macOS and Linux,
+# which is where run_tests.sh and run_exec.sh are actually used.
+*.sh text eol=lf
+
+# The test corpus is compared byte for byte; let Git normalise it in the repo
+# and check it out with the platform's own endings.
+*.cpp text
+*.h   text
+*.txt text
+*.cmake text
+CMakeLists.txt text

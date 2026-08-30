@@ -24,6 +24,27 @@
 #include <string>
 #include <vector>
 
+// The VM's machine word.
+//
+// This compiler's type model fixes `long` at 8 bytes -- see the note on the
+// builtin table in AST.h -- and the VM's memory, addresses and operand stack
+// are all defined in those terms.  The HOST's `long` is not the same thing:
+// it is 8 bytes on macOS and Linux (LP64) but 4 on Windows (LLP64), and using
+// it here silently gave the VM a 32-bit word on MSVC.  Every value wider than
+// 32 bits was then truncated -- doubles through a register lost half their
+// bit pattern, and `(1UL << 32) - 1` became 0, so every 4-byte integer resize
+// masked its value away to nothing.
+//
+// C++98 has no <cstdint>, so the width is pinned per compiler.  Both spellings
+// are pre-C++11 extensions their compilers have always accepted.
+#if defined(_MSC_VER)
+typedef __int64          vmword;
+typedef unsigned __int64 uvmword;
+#else
+typedef long long          vmword;
+typedef unsigned long long uvmword;
+#endif
+
 enum OpCode {
     // --- operand stack ---
     OP_PushConst,       // push imm
@@ -84,8 +105,8 @@ const char *opCodeName(OpCode op);
 
 struct Instr {
     OpCode op;
-    long imm;
-    long b;
+    vmword imm;
+    vmword b;
     double fimm;
     int line;
     Instr(OpCode o = OP_Halt) : op(o), imm(0), b(0), fimm(0.0), line(0) {}

@@ -114,7 +114,7 @@ int main(int argc, char **argv) {
         if (!doRun) return 0;
         VM vm;
         bool ok = false;
-        const long result = vm.run(image, ok);
+        const vmword result = vm.run(image, ok);
         std::cout.flush();
         if (!ok) {
             std::cerr << baseName(path) << ": runtime error: " << vm.errorMessage() << std::endl;
@@ -207,7 +207,7 @@ int main(int argc, char **argv) {
                     if (!quiet) std::cout << "=== RUN: " << baseName(path) << " ===" << std::endl;
                     VM vm;
                     bool ok = false;
-                    const long result = vm.run(image, ok);
+                    const vmword result = vm.run(image, ok);
                     if (!ok) {
                         std::cout.flush();
                         std::cerr << baseName(path) << ": runtime error: "

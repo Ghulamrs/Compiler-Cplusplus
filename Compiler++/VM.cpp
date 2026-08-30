@@ -11,9 +11,9 @@
 #include <sstream>
 
 namespace {
-const long MemorySize   = 4L * 1024 * 1024;
-const long StackSize    = 1L * 1024 * 1024;
-const long MaxSteps     = 50L * 1000 * 1000;   // a runaway program stops itself
+const vmword MemorySize   = 4L * 1024 * 1024;
+const vmword StackSize    = 1L * 1024 * 1024;
+const vmword MaxSteps     = 50L * 1000 * 1000;   // a runaway program stops itself
 const int  HeaderSize   = 16;                  // [size][next] before each block
 }
 
@@ -24,7 +24,7 @@ void VM::trap(const std::string &msg) {
     if (error.empty()) error = msg;
 }
 
-void VM::push(long v)    { Value x; x.i = v; stack.push_back(x); }
+void VM::push(vmword v)    { Value x; x.i = v; stack.push_back(x); }
 void VM::pushD(double v) { Value x; x.d = v; stack.push_back(x); }
 
 VM::Value VM::pop() {
@@ -39,39 +39,39 @@ VM::Value VM::pop() {
 
 // --- memory ---
 
-long VM::readInt(long addr, int size, bool isSigned) {
-    if (addr <= 0 || addr + size > static_cast<long>(mem.size())) {
+vmword VM::readInt(vmword addr, int size, bool isSigned) {
+    if (addr <= 0 || addr + size > static_cast<vmword>(mem.size())) {
         std::ostringstream ss;
         ss << "read of " << size << " bytes at invalid address " << addr;
         trap(ss.str());
         return 0;
     }
-    unsigned long raw = 0;
+    uvmword raw = 0;
     for (int i = size - 1; i >= 0; --i) {
         raw = (raw << 8) | mem[addr + i];
     }
     if (isSigned && size < 8) {
-        const unsigned long signBit = 1UL << (size * 8 - 1);
-        if (raw & signBit) raw |= ~((1UL << (size * 8)) - 1);
+        const uvmword signBit = static_cast<uvmword>(1) << (size * 8 - 1);
+        if (raw & signBit) raw |= ~((static_cast<uvmword>(1) << (size * 8)) - 1);
     }
-    return static_cast<long>(raw);
+    return static_cast<vmword>(raw);
 }
 
-void VM::writeInt(long addr, int size, long value) {
-    if (addr <= 0 || addr + size > static_cast<long>(mem.size())) {
+void VM::writeInt(vmword addr, int size, vmword value) {
+    if (addr <= 0 || addr + size > static_cast<vmword>(mem.size())) {
         std::ostringstream ss;
         ss << "write of " << size << " bytes at invalid address " << addr;
         trap(ss.str());
         return;
     }
-    unsigned long raw = static_cast<unsigned long>(value);
+    uvmword raw = static_cast<uvmword>(value);
     for (int i = 0; i < size; ++i) {
         mem[addr + i] = static_cast<unsigned char>((raw >> (i * 8)) & 0xFF);
     }
 }
 
-double VM::readFloat(long addr, int size) {
-    if (addr <= 0 || addr + size > static_cast<long>(mem.size())) {
+double VM::readFloat(vmword addr, int size) {
+    if (addr <= 0 || addr + size > static_cast<vmword>(mem.size())) {
         trap("floating read at an invalid address");
         return 0.0;
     }
@@ -85,8 +85,8 @@ double VM::readFloat(long addr, int size) {
     return d;
 }
 
-void VM::writeFloat(long addr, int size, double value) {
-    if (addr <= 0 || addr + size > static_cast<long>(mem.size())) {
+void VM::writeFloat(vmword addr, int size, double value) {
+    if (addr <= 0 || addr + size > static_cast<vmword>(mem.size())) {
         trap("floating write at an invalid address");
         return;
     }
@@ -101,14 +101,14 @@ void VM::writeFloat(long addr, int size, double value) {
 // A block carries its size, so `delete` knows how much it is releasing, and a
 // next pointer, so a released block can be reused.  First fit, because the
 // simplest allocator that reuses memory is enough to run a loop.
-long VM::allocate(long bytes) {
+vmword VM::allocate(vmword bytes) {
     if (bytes <= 0) bytes = 1;
     if (bytes % 8) bytes += 8 - (bytes % 8);
 
-    long prev = 0;
-    for (long b = freeList; b != 0; ) {
-        const long size = readInt(b, 8, true);
-        const long next = readInt(b + 8, 8, true);
+    vmword prev = 0;
+    for (vmword b = freeList; b != 0; ) {
+        const vmword size = readInt(b, 8, true);
+        const vmword next = readInt(b + 8, 8, true);
         if (size >= bytes) {
             if (prev) writeInt(prev + 8, 8, next);
             else      freeList = next;
@@ -118,20 +118,20 @@ long VM::allocate(long bytes) {
         b = next;
     }
 
-    if (heapTop + HeaderSize + bytes > static_cast<long>(mem.size())) {
+    if (heapTop + HeaderSize + bytes > static_cast<vmword>(mem.size())) {
         trap("out of heap memory");
         return 0;
     }
-    const long block = heapTop;
+    const vmword block = heapTop;
     heapTop += HeaderSize + bytes;
     writeInt(block, 8, bytes);
     writeInt(block + 8, 8, 0);
     return block + HeaderSize;
 }
 
-void VM::release(long addr) {
+void VM::release(vmword addr) {
     if (addr == 0) return;                      // deleting null is harmless
-    const long block = addr - HeaderSize;
+    const vmword block = addr - HeaderSize;
     if (block < heapBase || block >= heapTop) {
         trap("delete of a pointer that did not come from new");
         return;
@@ -159,8 +159,8 @@ void VM::callNative(NativeId id, int argc) {
     case NAT_PrintDouble: std::cout << a[0].d; break;
     case NAT_PrintLine:   std::cout << std::endl; break;
     case NAT_PrintString: {
-        long p = a[0].i;
-        while (p > 0 && p < static_cast<long>(mem.size()) && mem[p]) {
+        vmword p = a[0].i;
+        while (p > 0 && p < static_cast<vmword>(mem.size()) && mem[p]) {
             std::cout << static_cast<char>(mem[p]);
             ++p;
         }
@@ -173,8 +173,8 @@ void VM::callNative(NativeId id, int argc) {
     case NAT_ErrDouble: std::cerr << a[0].d; break;
     case NAT_ErrLine:   std::cerr << std::endl; break;
     case NAT_ErrString: {
-        long p = a[0].i;
-        while (p > 0 && p < static_cast<long>(mem.size()) && mem[p]) {
+        vmword p = a[0].i;
+        while (p > 0 && p < static_cast<vmword>(mem.size()) && mem[p]) {
             std::cerr << static_cast<char>(mem[p]);
             ++p;
         }
@@ -207,7 +207,7 @@ void VM::callNative(NativeId id, int argc) {
 
 // --- the loop ---
 
-long VM::run(const Image &image, bool &ok) {
+vmword VM::run(const Image &image, bool &ok) {
     ok = false;
     error.clear();
     steps = 0;
@@ -230,7 +230,7 @@ long VM::run(const Image &image, bool &ok) {
     mem.assign(MemorySize, 0);
     std::copy(image.staticData.begin(), image.staticData.end(), mem.begin());
 
-    stackBase = static_cast<long>(image.staticData.size());
+    stackBase = static_cast<vmword>(image.staticData.size());
     if (stackBase % 8) stackBase += 8 - (stackBase % 8);
     stackTop = stackBase;
     heapBase = stackBase + StackSize;
@@ -247,7 +247,7 @@ long VM::run(const Image &image, bool &ok) {
     stackTop += image.functions[image.entry].frameSize;
     frames.push_back(top);
 
-    long result = 0;
+    vmword result = 0;
     bool finiDone = false;
 
     while (!frames.empty() && !failed()) {
@@ -274,7 +274,7 @@ long VM::run(const Image &image, bool &ok) {
             break;
 
         case OP_LocalAddr:
-            if (in.imm < 0 || in.imm >= static_cast<long>(fi.localOffset.size()) - 1) {
+            if (in.imm < 0 || in.imm >= static_cast<vmword>(fi.localOffset.size()) - 1) {
                 trap("local slot out of range");
                 break;
             }
@@ -285,26 +285,26 @@ long VM::run(const Image &image, bool &ok) {
         case OP_FieldAddr:  push(pop().i + in.imm); break;
 
         case OP_Load: {
-            const long addr = pop().i;
+            const vmword addr = pop().i;
             if (in.b & 2) pushD(readFloat(addr, static_cast<int>(in.imm)));
             else          push(readInt(addr, static_cast<int>(in.imm), (in.b & 1) != 0));
             break;
         }
         case OP_Store: {
             const Value v = pop();
-            const long addr = pop().i;
+            const vmword addr = pop().i;
             if (in.b & 2) writeFloat(addr, static_cast<int>(in.imm), v.d);
             else          writeInt(addr, static_cast<int>(in.imm), v.i);
             break;
         }
 
         case OP_MemCopy: {
-            const long src = pop().i;
-            const long dst = pop().i;
-            const long n   = in.imm;
+            const vmword src = pop().i;
+            const vmword dst = pop().i;
+            const vmword n   = in.imm;
             if (src <= 0 || dst <= 0 || n < 0 ||
-                src + n > static_cast<long>(mem.size()) ||
-                dst + n > static_cast<long>(mem.size())) {
+                src + n > static_cast<vmword>(mem.size()) ||
+                dst + n > static_cast<vmword>(mem.size())) {
                 trap("object copy at an invalid address");
                 break;
             }
@@ -315,51 +315,51 @@ long VM::run(const Image &image, bool &ok) {
         // A shift by a silly amount is undefined in C++, so the VM defines it:
         // out of range yields 0 rather than whatever the host would do.
         case OP_Shl: {
-            long b = pop().i, a = pop().i;
-            push((b < 0 || b > 63) ? 0 : static_cast<long>(
-                     static_cast<unsigned long>(a) << b));
+            vmword b = pop().i, a = pop().i;
+            push((b < 0 || b > 63) ? 0 : static_cast<vmword>(
+                     static_cast<uvmword>(a) << b));
             break;
         }
         case OP_Shr: {
-            long b = pop().i, a = pop().i;
+            vmword b = pop().i, a = pop().i;
             if (b < 0 || b > 63) { push(a < 0 ? -1 : 0); break; }
             push(a >> b);                       // arithmetic: the sign is kept
             break;
         }
         case OP_UShr: {
-            long b = pop().i, a = pop().i;
-            push((b < 0 || b > 63) ? 0 : static_cast<long>(
-                     static_cast<unsigned long>(a) >> b));
+            vmword b = pop().i, a = pop().i;
+            push((b < 0 || b > 63) ? 0 : static_cast<vmword>(
+                     static_cast<uvmword>(a) >> b));
             break;
         }
 
-        case OP_Add: { long b = pop().i, a = pop().i; push(a + b); break; }
-        case OP_Sub: { long b = pop().i, a = pop().i; push(a - b); break; }
-        case OP_Mul: { long b = pop().i, a = pop().i; push(a * b); break; }
+        case OP_Add: { vmword b = pop().i, a = pop().i; push(a + b); break; }
+        case OP_Sub: { vmword b = pop().i, a = pop().i; push(a - b); break; }
+        case OP_Mul: { vmword b = pop().i, a = pop().i; push(a * b); break; }
         case OP_Div: {
-            long b = pop().i, a = pop().i;
+            vmword b = pop().i, a = pop().i;
             if (b == 0) { trap("division by zero"); break; }
             push(a / b);
             break;
         }
         case OP_Mod: {
-            long b = pop().i, a = pop().i;
+            vmword b = pop().i, a = pop().i;
             if (b == 0) { trap("remainder by zero"); break; }
             push(a % b);
             break;
         }
         case OP_UDiv: {
-            unsigned long b = static_cast<unsigned long>(pop().i);
-            unsigned long a = static_cast<unsigned long>(pop().i);
+            uvmword b = static_cast<uvmword>(pop().i);
+            uvmword a = static_cast<uvmword>(pop().i);
             if (b == 0) { trap("division by zero"); break; }
-            push(static_cast<long>(a / b));
+            push(static_cast<vmword>(a / b));
             break;
         }
         case OP_UMod: {
-            unsigned long b = static_cast<unsigned long>(pop().i);
-            unsigned long a = static_cast<unsigned long>(pop().i);
+            uvmword b = static_cast<uvmword>(pop().i);
+            uvmword a = static_cast<uvmword>(pop().i);
             if (b == 0) { trap("remainder by zero"); break; }
-            push(static_cast<long>(a % b));
+            push(static_cast<vmword>(a % b));
             break;
         }
         case OP_Neg: push(-pop().i); break;
@@ -371,16 +371,16 @@ long VM::run(const Image &image, bool &ok) {
         case OP_FDiv: { double b = pop().d, a = pop().d; pushD(a / b); break; }
         case OP_FNeg: pushD(-pop().d); break;
 
-        case OP_CmpEQ: { long b = pop().i, a = pop().i; push(a == b); break; }
-        case OP_CmpNE: { long b = pop().i, a = pop().i; push(a != b); break; }
-        case OP_CmpLT: { long b = pop().i, a = pop().i; push(a <  b); break; }
-        case OP_CmpGT: { long b = pop().i, a = pop().i; push(a >  b); break; }
-        case OP_CmpLE: { long b = pop().i, a = pop().i; push(a <= b); break; }
-        case OP_CmpGE: { long b = pop().i, a = pop().i; push(a >= b); break; }
-        case OP_UCmpLT: { unsigned long b = pop().i, a = pop().i; push(a <  b); break; }
-        case OP_UCmpGT: { unsigned long b = pop().i, a = pop().i; push(a >  b); break; }
-        case OP_UCmpLE: { unsigned long b = pop().i, a = pop().i; push(a <= b); break; }
-        case OP_UCmpGE: { unsigned long b = pop().i, a = pop().i; push(a >= b); break; }
+        case OP_CmpEQ: { vmword b = pop().i, a = pop().i; push(a == b); break; }
+        case OP_CmpNE: { vmword b = pop().i, a = pop().i; push(a != b); break; }
+        case OP_CmpLT: { vmword b = pop().i, a = pop().i; push(a <  b); break; }
+        case OP_CmpGT: { vmword b = pop().i, a = pop().i; push(a >  b); break; }
+        case OP_CmpLE: { vmword b = pop().i, a = pop().i; push(a <= b); break; }
+        case OP_CmpGE: { vmword b = pop().i, a = pop().i; push(a >= b); break; }
+        case OP_UCmpLT: { uvmword b = pop().i, a = pop().i; push(a <  b); break; }
+        case OP_UCmpGT: { uvmword b = pop().i, a = pop().i; push(a >  b); break; }
+        case OP_UCmpLE: { uvmword b = pop().i, a = pop().i; push(a <= b); break; }
+        case OP_UCmpGE: { uvmword b = pop().i, a = pop().i; push(a >= b); break; }
         case OP_FCmpEQ: { double b = pop().d, a = pop().d; push(a == b); break; }
         case OP_FCmpNE: { double b = pop().d, a = pop().d; push(a != b); break; }
         case OP_FCmpLT: { double b = pop().d, a = pop().d; push(a <  b); break; }
@@ -389,27 +389,27 @@ long VM::run(const Image &image, bool &ok) {
         case OP_FCmpGE: { double b = pop().d, a = pop().d; push(a >= b); break; }
 
         case OP_IntToFloat: {
-            const long v = pop().i;
-            pushD(in.imm ? static_cast<double>(static_cast<unsigned long>(v))
+            const vmword v = pop().i;
+            pushD(in.imm ? static_cast<double>(static_cast<uvmword>(v))
                          : static_cast<double>(v));
             break;
         }
-        case OP_FloatToInt: push(static_cast<long>(pop().d)); break;
+        case OP_FloatToInt: push(static_cast<vmword>(pop().d)); break;
         case OP_FloatResize: {
             const double v = pop().d;
             pushD(in.imm == 4 ? static_cast<double>(static_cast<float>(v)) : v);
             break;
         }
         case OP_IntResize: {
-            const long v = pop().i;
+            const vmword v = pop().i;
             const int size = static_cast<int>(in.imm);
             if (size >= 8) { push(v); break; }
-            unsigned long masked = static_cast<unsigned long>(v) & ((1UL << (size * 8)) - 1);
+            uvmword masked = static_cast<uvmword>(v) & ((static_cast<uvmword>(1) << (size * 8)) - 1);
             if (in.b) {
-                const unsigned long signBit = 1UL << (size * 8 - 1);
-                if (masked & signBit) masked |= ~((1UL << (size * 8)) - 1);
+                const uvmword signBit = static_cast<uvmword>(1) << (size * 8 - 1);
+                if (masked & signBit) masked |= ~((static_cast<uvmword>(1) << (size * 8)) - 1);
             }
-            push(static_cast<long>(masked));
+            push(static_cast<vmword>(masked));
             break;
         }
 
@@ -418,8 +418,8 @@ long VM::run(const Image &image, bool &ok) {
         case OP_BranchNZ:   if (pop().i != 0) fr.pc = static_cast<int>(in.imm); break;
 
         case OP_VTableLoad: {
-            const long obj = pop().i;
-            const long vtable = readInt(obj, 8, true);
+            const vmword obj = pop().i;
+            const vmword vtable = readInt(obj, 8, true);
             push(readInt(vtable + in.imm * 8, 8, true));
             break;
         }
@@ -430,12 +430,12 @@ long VM::run(const Image &image, bool &ok) {
         case OP_Call:
         case OP_CallIndirect: {
             const int argc = static_cast<int>(in.b);
-            long target = in.imm;
+            vmword target = in.imm;
             std::vector<Value> args(argc);
             for (int k = argc - 1; k >= 0; --k) args[k] = pop();
             if (in.op == OP_CallIndirect) target = pop().i;
 
-            if (target < 0 || target >= static_cast<long>(image.functions.size())) {
+            if (target < 0 || target >= static_cast<vmword>(image.functions.size())) {
                 trap("call to an undefined function");
                 break;
             }
@@ -461,11 +461,11 @@ long VM::run(const Image &image, bool &ok) {
                 if (obj) {
                     // By value: the argument is the source address, and the
                     // parameter's own slot is the copy the callee owns.
-                    const long src = args[k].i;
-                    const long dst = nf.base + callee.localOffset[k];
-                    const long n = callee.localSize[k];
-                    if (src <= 0 || n < 0 || src + n > static_cast<long>(mem.size()) ||
-                        dst + n > static_cast<long>(mem.size())) {
+                    const vmword src = args[k].i;
+                    const vmword dst = nf.base + callee.localOffset[k];
+                    const vmword n = callee.localSize[k];
+                    if (src <= 0 || n < 0 || src + n > static_cast<vmword>(mem.size()) ||
+                        dst + n > static_cast<vmword>(mem.size())) {
                         trap("object argument at an invalid address");
                         break;
                     }

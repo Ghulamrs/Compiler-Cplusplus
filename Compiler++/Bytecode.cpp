@@ -146,12 +146,12 @@ bool nativeReturnsFloat(NativeId id) {
 
 namespace {
 
-void putU(std::string &out, unsigned long v, int bytes) {
+void putU(std::string &out, uvmword v, int bytes) {
     for (int i = 0; i < bytes; ++i) out += static_cast<char>((v >> (i * 8)) & 0xFF);
 }
 
-void putI64(std::string &out, long v) {
-    putU(out, static_cast<unsigned long>(v), 8);
+void putI64(std::string &out, vmword v) {
+    putU(out, static_cast<uvmword>(v), 8);
 }
 
 void putF64(std::string &out, double v) {
@@ -176,16 +176,16 @@ struct Reader {
         if (!ok || at + n > data.size()) { ok = false; return false; }
         return true;
     }
-    unsigned long getU(int bytes) {
+    uvmword getU(int bytes) {
         if (!need(static_cast<std::size_t>(bytes))) return 0;
-        unsigned long v = 0;
+        uvmword v = 0;
         for (int i = bytes - 1; i >= 0; --i) {
             v = (v << 8) | static_cast<unsigned char>(data[at + i]);
         }
         at += bytes;
         return v;
     }
-    long getI64() { return static_cast<long>(getU(8)); }
+    vmword getI64() { return static_cast<vmword>(getU(8)); }
     double getF64() {
         if (!need(8)) return 0.0;
         double v = 0.0;
@@ -194,7 +194,7 @@ struct Reader {
         return v;
     }
     std::string getStr() {
-        const unsigned long n = getU(4);
+        const uvmword n = getU(4);
         if (!need(n)) return std::string();
         const std::string s = data.substr(at, n);
         at += n;
@@ -211,12 +211,12 @@ bool Image::write(const std::string &path, std::string &error) const {
     putI64(out, entry);
     putI64(out, fini);
 
-    putU(out, static_cast<unsigned long>(staticData.size()), 4);
+    putU(out, static_cast<uvmword>(staticData.size()), 4);
     for (std::size_t i = 0; i < staticData.size(); ++i) {
         out += static_cast<char>(staticData[i]);
     }
 
-    putU(out, static_cast<unsigned long>(functions.size()), 4);
+    putU(out, static_cast<uvmword>(functions.size()), 4);
     for (std::size_t f = 0; f < functions.size(); ++f) {
         const FuncImage &fi = functions[f];
         putStr(out, fi.name);
@@ -224,19 +224,19 @@ bool Image::write(const std::string &path, std::string &error) const {
         putI64(out, fi.frameSize);
         putI64(out, fi.registerCount);
 
-        putU(out, static_cast<unsigned long>(fi.localOffset.size()), 4);
+        putU(out, static_cast<uvmword>(fi.localOffset.size()), 4);
         for (std::size_t i = 0; i < fi.localOffset.size(); ++i) putI64(out, fi.localOffset[i]);
-        putU(out, static_cast<unsigned long>(fi.localSize.size()), 4);
+        putU(out, static_cast<uvmword>(fi.localSize.size()), 4);
         for (std::size_t i = 0; i < fi.localSize.size(); ++i) putI64(out, fi.localSize[i]);
-        putU(out, static_cast<unsigned long>(fi.localFloat.size()), 4);
+        putU(out, static_cast<uvmword>(fi.localFloat.size()), 4);
         for (std::size_t i = 0; i < fi.localFloat.size(); ++i) putU(out, fi.localFloat[i], 1);
-        putU(out, static_cast<unsigned long>(fi.localObject.size()), 4);
+        putU(out, static_cast<uvmword>(fi.localObject.size()), 4);
         for (std::size_t i = 0; i < fi.localObject.size(); ++i) putU(out, fi.localObject[i], 1);
 
-        putU(out, static_cast<unsigned long>(fi.code.size()), 4);
+        putU(out, static_cast<uvmword>(fi.code.size()), 4);
         for (std::size_t i = 0; i < fi.code.size(); ++i) {
             const Instr &n = fi.code[i];
-            putU(out, static_cast<unsigned long>(n.op), 1);
+            putU(out, static_cast<uvmword>(n.op), 1);
             putI64(out, n.imm);
             putI64(out, n.b);
             putF64(out, n.fimm);
@@ -260,7 +260,7 @@ bool Image::read(const std::string &path, std::string &error) {
 
     Reader r(data);
     if (r.getU(4) != Magic) { error = "'" + path + "' is not a Compiler++ image"; return false; }
-    const unsigned long ver = r.getU(4);
+    const uvmword ver = r.getU(4);
     if (ver != Version) {
         std::ostringstream m;
         m << "'" << path << "' is version " << ver << ", this build reads version " << Version;
@@ -270,37 +270,37 @@ bool Image::read(const std::string &path, std::string &error) {
     entry = static_cast<int>(r.getI64());
     fini  = static_cast<int>(r.getI64());
 
-    const unsigned long dataLen = r.getU(4);
+    const uvmword dataLen = r.getU(4);
     staticData.clear();
     if (!r.need(dataLen)) { error = "'" + path + "' is truncated"; return false; }
     staticData.reserve(dataLen);
-    for (unsigned long i = 0; i < dataLen; ++i) {
+    for (uvmword i = 0; i < dataLen; ++i) {
         staticData.push_back(static_cast<unsigned char>(data[r.at + i]));
     }
     r.at += dataLen;
 
-    const unsigned long funcCount = r.getU(4);
+    const uvmword funcCount = r.getU(4);
     functions.clear();
-    for (unsigned long f = 0; f < funcCount && r.ok; ++f) {
+    for (uvmword f = 0; f < funcCount && r.ok; ++f) {
         FuncImage fi;
         fi.name = r.getStr();
         fi.paramCount = static_cast<int>(r.getI64());
         fi.frameSize = static_cast<int>(r.getI64());
         fi.registerCount = static_cast<int>(r.getI64());
 
-        unsigned long n = r.getU(4);
-        for (unsigned long i = 0; i < n && r.ok; ++i) fi.localOffset.push_back(static_cast<int>(r.getI64()));
+        uvmword n = r.getU(4);
+        for (uvmword i = 0; i < n && r.ok; ++i) fi.localOffset.push_back(static_cast<int>(r.getI64()));
         n = r.getU(4);
-        for (unsigned long i = 0; i < n && r.ok; ++i) fi.localSize.push_back(static_cast<int>(r.getI64()));
+        for (uvmword i = 0; i < n && r.ok; ++i) fi.localSize.push_back(static_cast<int>(r.getI64()));
         n = r.getU(4);
-        for (unsigned long i = 0; i < n && r.ok; ++i)
+        for (uvmword i = 0; i < n && r.ok; ++i)
             fi.localFloat.push_back(static_cast<unsigned char>(r.getU(1)));
         n = r.getU(4);
-        for (unsigned long i = 0; i < n && r.ok; ++i)
+        for (uvmword i = 0; i < n && r.ok; ++i)
             fi.localObject.push_back(static_cast<unsigned char>(r.getU(1)));
 
         n = r.getU(4);
-        for (unsigned long i = 0; i < n && r.ok; ++i) {
+        for (uvmword i = 0; i < n && r.ok; ++i) {
             Instr in;
             in.op = static_cast<OpCode>(r.getU(1));
             in.imm = r.getI64();

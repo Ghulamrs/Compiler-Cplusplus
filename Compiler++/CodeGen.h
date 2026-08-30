@@ -47,7 +47,7 @@ private:
 
     // IR labels are ids; bytecode branches are instruction offsets.
     void resolveLabels(const IRFunction &fn, FuncImage &out,
-                       const std::map<long, int> &labelAt);
+                       const std::map<vmword, int> &labelAt);
 
     CodeGen(const CodeGen &);
     CodeGen &operator=(const CodeGen &);

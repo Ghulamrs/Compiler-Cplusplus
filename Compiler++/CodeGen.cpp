@@ -11,13 +11,13 @@ namespace {
 // Every value on the operand stack is 8 bytes, so a register slot is too.
 const int RegSize = 8;
 
-void put64(std::vector<unsigned char> &mem, std::size_t at, long value) {
+void put64(std::vector<unsigned char> &mem, std::size_t at, vmword value) {
     for (int i = 0; i < 8; ++i) {
         mem[at + i] = static_cast<unsigned char>((value >> (i * 8)) & 0xFF);
     }
 }
 
-Instr make(OpCode op, long imm = 0, long b = 0, int line = 0) {
+Instr make(OpCode op, vmword imm = 0, vmword b = 0, int line = 0) {
     Instr n(op);
     n.imm = imm;
     n.b = b;
@@ -118,7 +118,7 @@ void CodeGen::generateFunction(const IRFunction &fn, FuncImage &out) {
     // recorded here rather than folded into every instruction.
     out.localOffset.push_back(regBase);         // sentinel: where registers start
 
-    std::map<long, int> labelAt;                // IR label id -> instruction index
+    std::map<vmword, int> labelAt;                // IR label id -> instruction index
 
     for (std::size_t i = 0; i < fn.code.size(); ++i) {
         const IRInstr &in = fn.code[i];
@@ -326,11 +326,11 @@ void CodeGen::generateFunction(const IRFunction &fn, FuncImage &out) {
 
 // IR labels are ids that mean nothing to the VM; branches need offsets.
 void CodeGen::resolveLabels(const IRFunction &, FuncImage &out,
-                            const std::map<long, int> &labelAt) {
+                            const std::map<vmword, int> &labelAt) {
     for (std::size_t i = 0; i < out.code.size(); ++i) {
         Instr &n = out.code[i];
         if (n.op != OP_Jump && n.op != OP_BranchZero && n.op != OP_BranchNZ) continue;
-        std::map<long, int>::const_iterator it = labelAt.find(n.imm);
+        std::map<vmword, int>::const_iterator it = labelAt.find(n.imm);
         if (it == labelAt.end()) {
             diag.error(n.line, 0, "internal: branch to an unplaced label");
             n.imm = static_cast<long>(out.code.size() - 1);

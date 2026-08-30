@@ -44,12 +44,23 @@ foreach(case_path ${TEST_CASES})
     if(case_name MATCHES "err_")
         set_tests_properties(${case_name} PROPERTIES WILL_FAIL TRUE)
     else()
-        # A case that runs must also RUN: a VM trap is a failure even though
-        # the program compiled.  Byte-exact output is checked by
-        # tests/run_exec.sh, which needs a POSIX shell; this half does not.
+        # A case that runs must also RUN, and must print the RIGHT thing: a
+        # compiler can emit the wrong opcode, exit 0, and print nonsense.
+        # Checking only the exit status let exactly that through on MSVC, so
+        # the byte-exact comparison from tests/run_exec.sh is expressed in
+        # CMake here and runs on every platform, not only where a POSIX shell
+        # exists.  run_exec.sh remains the place to RECORD an expectation
+        # (--accept); this is the place that enforces it.
         if(case_name MATCHES "run_")
             add_test(NAME ${case_name}_exec
-                     COMMAND compilerpp -run -q "${case_path}")
+                     COMMAND ${CMAKE_COMMAND}
+                             -DEXE=$<TARGET_FILE:compilerpp>
+                             -DSRC=${case_path}
+                             -DEXPECT=${CMAKE_CURRENT_SOURCE_DIR}/tests/expected_run/${case_name}.txt
+                             -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/compare_run.cmake)
+            # A defect in the VM can outlast its own step limit -- a corrupted
+            # free list spins inside allocate(), where nothing counts steps.
+            set_tests_properties(${case_name}_exec PROPERTIES TIMEOUT 60)
         endif()
     endif()
 endforeach()
