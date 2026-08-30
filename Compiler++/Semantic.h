@@ -88,6 +88,14 @@ private:
     // A class that owns something destructible gets a destructor whether or
     // not one was written -- otherwise nothing runs its members' destructors.
     void synthesiseDestructors();
+    // The copy constructor a class declares, or 0.
+    cxx::MethodDecl *copyConstructorOf(cxx::ClassDecl *cd);
+    // A copy is memberwise: the base is copied by ITS copy constructor and so
+    // is every member that has one.  A class that declares none of its own
+    // still needs one when anything it is made of has one, or the copy is
+    // done with memcpy and those constructors never run.
+    bool needsCopyConstructor(cxx::ClassDecl *cd);
+    void synthesiseCopyConstructors();
     void declareTopLevel(const std::vector<cc::Decl*> &units);
     void analyzeDecl(cc::Decl *d);
     void analyzeClass(cxx::ClassDecl *cd);

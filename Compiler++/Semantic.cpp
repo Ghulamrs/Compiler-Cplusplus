@@ -820,6 +820,134 @@ bool SemanticAnalyzer::needsDestructor(cxx::ClassDecl *cd) {
     return false;
 }
 
+cxx::MethodDecl *SemanticAnalyzer::copyConstructorOf(cxx::ClassDecl *cd) {
+    if (!cd) return 0;
+    for (std::size_t i = 0; i < cd->ctors.size(); ++i) {
+        cxx::MethodDecl *c = cd->ctors[i];
+        if (!c || c->params.size() != 1) continue;
+        // By reference, necessarily: taking the argument by value would need
+        // the very copy being defined.
+        cxx::ReferenceType *rt = dynamic_cast<cxx::ReferenceType*>(c->params[0]->type);
+        if (!rt) continue;
+        cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(rt->base);
+        if (ct && ct->className == cd->name) return c;
+    }
+    return 0;
+}
+
+bool SemanticAnalyzer::needsCopyConstructor(cxx::ClassDecl *cd) {
+    if (!cd || copyConstructorOf(cd)) return false;
+
+    // An array member cannot be written in an initialiser list, and a member
+    // the list leaves out is default-constructed -- or, for an array of
+    // scalars, left as it lies.  Either way the source's elements would not
+    // arrive, so a synthesised constructor would copy this class WORSE than
+    // the byte copy it already gets.  Such a class keeps that byte copy: it
+    // still does not run its members' copy constructors, which is the same
+    // gap as before rather than a new one.
+    for (std::size_t i = 0; i < cd->members.size(); ++i) {
+        cxx::FieldDecl *fd = dynamic_cast<cxx::FieldDecl*>(cd->members[i]);
+        if (fd && dynamic_cast<cc::ArrayType*>(fd->type)) return false;
+    }
+
+    for (cxx::ClassDecl *b = cd->base; b; b = b->base) {
+        if (copyConstructorOf(b)) return true;
+    }
+    for (std::size_t i = 0; i < cd->members.size(); ++i) {
+        cxx::FieldDecl *fd = dynamic_cast<cxx::FieldDecl*>(cd->members[i]);
+        if (!fd) continue;
+        if (copyConstructorOf(classOf(fd->type))) return true;
+    }
+    return false;
+}
+
+// The copy constructor the language says exists whether or not it is written.
+// Without it a derived object was copied with memcpy, so a base that counted
+// its copies never saw one -- the same silent wrong answer a declared copy
+// constructor was added to prevent, one level up.
+//
+// It is built as the initialiser list a reader would have written:
+//
+//     Derived(const Derived &__o) : Base(__o), extra(__o.extra) { }
+//
+// so nothing downstream needs to know it was generated.  selectConstructor
+// picks the base's and each member's copy constructor exactly as it would for
+// a written one, and Lowering::copyConstructorOf finds it in cd->ctors.
+void SemanticAnalyzer::synthesiseCopyConstructors() {
+    // Repeat until nothing changes: giving one class a copy constructor can
+    // make a class that holds one need its own.
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        std::map<std::string, cxx::ClassDecl*>::iterator it;
+        for (it = classes.begin(); it != classes.end(); ++it) {
+            cxx::ClassDecl *cd = it->second;
+            if (!cd || !needsCopyConstructor(cd)) continue;
+
+            cxx::MethodDecl *c = new cxx::MethodDecl(0, cd->name, cxx::ACC_Public);
+            c->ownerClass = cd->name;
+            c->isConstructor = true;
+            c->isImplicit = true;
+            c->line = cd->line;
+            c->col = cd->col;
+
+            // const T &__o -- the const rides on the referenced type, which is
+            // where every check looks for it.
+            cxx::ClassType *arg = new cxx::ClassType(cd->name);
+            arg->isConst = true;
+            arg->line = cd->line;
+            arg->col = cd->col;
+            cxx::ReferenceType *ref = new cxx::ReferenceType(arg);
+            ref->line = cd->line;
+            ref->col = cd->col;
+            cc::VarDecl *param = new cc::VarDecl(ref, "__o", 0);
+            param->line = cd->line;
+            param->col = cd->col;
+            c->params.push_back(param);
+
+            // : Base(__o)
+            if (cd->base) {
+                cxx::MemberInit bi;
+                bi.name = cd->base->name;
+                bi.line = cd->line;
+                bi.col = cd->col;
+                cc::IdentExpr *src = new cc::IdentExpr("__o");
+                src->line = cd->line;
+                src->col = cd->col;
+                bi.args.push_back(src);
+                c->memberInits.push_back(bi);
+            }
+
+            // , each member as  m(__o.m)
+            for (std::size_t m = 0; m < cd->members.size(); ++m) {
+                cxx::FieldDecl *fd = dynamic_cast<cxx::FieldDecl*>(cd->members[m]);
+                if (!fd) continue;
+                cxx::MemberInit mi;
+                mi.name = fd->name;
+                mi.line = cd->line;
+                mi.col = cd->col;
+                cc::IdentExpr *base = new cc::IdentExpr("__o");
+                base->line = cd->line;
+                base->col = cd->col;
+                cxx::MemberAccessExpr *acc =
+                    new cxx::MemberAccessExpr(base, fd->name, false);
+                acc->line = cd->line;
+                acc->col = cd->col;
+                mi.args.push_back(acc);
+                c->memberInits.push_back(mi);
+            }
+
+            c->body = new cc::CompoundStmt();    // the list is the whole of it
+            c->body->line = cd->line;
+            c->body->col = cd->col;
+
+            cd->members.push_back(c);
+            cd->ctors.push_back(c);
+            changed = true;
+        }
+    }
+}
+
 void SemanticAnalyzer::synthesiseDestructors() {
     // Repeat until nothing changes: giving one class a destructor can make a
     // class that holds one need its own.
@@ -1085,6 +1213,11 @@ void SemanticAnalyzer::analyze(const std::vector<cc::Decl*> &units) {
     //     destructor of its own, whether or not one was written.  Without it
     //     emitEpilogue never runs and those members are never destroyed.
     synthesiseDestructors();
+    // 2d) and a class whose base or whose members have a copy constructor
+    //     needs one of its own, or copying it is a memcpy and those
+    //     constructors never run.  After the destructors, because both walk
+    //     the same members and neither depends on the other.
+    synthesiseCopyConstructors();
     // 3) work out which methods override which, so virtualness is known before
     //    any body is analysed
     for (std::size_t i = 0; i < units.size(); ++i) {
