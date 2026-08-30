@@ -28,7 +28,7 @@ vmword negate(vmword v) {
 
 VM::VM()
     : steps(0), stackBase(0), stackTop(0), heapBase(0), heapTop(0), freeList(0),
-      inputGood(true) {}
+      img(0), inputGood(true) {}
 
 void VM::trap(const std::string &msg) {
     if (error.empty()) error = msg;
@@ -204,6 +204,26 @@ bool VM::isOnFreeList(vmword block) {
 
 // The same question arrayCount asks, without the trap: a pointer that is not a
 // heap block is a legitimate answer here, not an error.
+// The array a `char buf[32]` names has decayed to a pointer by the time it
+// reaches a native, and the type went with it.  The SLOT is still described,
+// though, by the frame table of whichever function declared it -- so the
+// machine looks the address up in the frames it has pushed and answers how
+// much room is left from there to the end of that slot.
+bool VM::frameCapacity(vmword addr, vmword &cap) {
+    if (!img || addr <= 0) return false;
+    for (std::size_t f = frames.size(); f-- > 0; ) {
+        const Frame &fr = frames[f];
+        if (fr.func < 0 || fr.func >= static_cast<int>(img->functions.size())) continue;
+        const FuncImage &fi = img->functions[fr.func];
+        for (std::size_t k = 0; k < fi.localSize.size(); ++k) {
+            const vmword start = fr.base + fi.localOffset[k];
+            const vmword end   = start + fi.localSize[k];
+            if (addr >= start && addr < end) { cap = end - addr; return cap > 0; }
+        }
+    }
+    return false;
+}
+
 bool VM::heapCapacity(vmword addr, vmword &cap) {
     if (addr <= 0) return false;
     const vmword block = addr - HeaderSize;
@@ -405,7 +425,7 @@ void VM::callNative(NativeId id, int argc) {
             // machine knows how long it is; otherwise nothing does, and a read
             // into a buffer of unknown length is the overflow this VM refuses
             // everywhere else.
-            if (!heapCapacity(a[0].i, cap)) {
+            if (!heapCapacity(a[0].i, cap) && !frameCapacity(a[0].i, cap)) {
                 trap("reading a word into a buffer of unknown size; "
                      "use cin.getline(buffer, size)");
                 push(0);
@@ -420,7 +440,7 @@ void VM::callNative(NativeId id, int argc) {
         std::string l;
         inputGood = std::getline(std::cin, l) ? true : false;
         vmword cap = a[1].i;
-        if (cap <= 0 && !heapCapacity(a[0].i, cap)) {
+        if (cap <= 0 && !heapCapacity(a[0].i, cap) && !frameCapacity(a[0].i, cap)) {
             trap("reading a line into a buffer of unknown size; "
                  "give cin.getline a size");
             push(0);
@@ -489,6 +509,7 @@ vmword VM::run(const Image &image, bool &ok) {
         trap("static data does not fit in this machine's memory");
         return 0;
     }
+    img = &image;                   // the frame tables, for frameCapacity
     mem.assign(MemorySize, 0);
     std::copy(image.staticData.begin(), image.staticData.end(), mem.begin());
 

@@ -56,6 +56,7 @@ private:
         bool wantsResult;
     };
     std::vector<Frame> frames;
+    const Image *img;               // what is running, for the frame tables
 
     void trap(const std::string &msg);
     bool failed() const { return !error.empty(); }
@@ -82,6 +83,10 @@ private:
     // address is not a heap block at all.  Input uses it to refuse a read into
     // a buffer whose size nothing knows.
     bool heapCapacity(vmword addr, vmword &cap);
+    // The same question of a local: the machine knows the layout of every
+    // frame it has pushed, so an address inside one has a known amount of room
+    // after it even though the array that owns it has decayed to a pointer.
+    bool frameCapacity(vmword addr, vmword &cap);
     // Copy a string into the machine's memory, NUL-terminated, never writing
     // more than `cap` bytes.
     void writeCString(vmword addr, const std::string &s, vmword cap);

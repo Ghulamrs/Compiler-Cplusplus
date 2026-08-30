@@ -1,3 +1,4 @@
+Var shared : array[8] of char
 Function main returns int
   Block
     Var sized : pointer to char
@@ -21,11 +22,25 @@ Function main returns int
     ExprStmt
       Delete[]
         sized
-    Var plain : array[32] of char
+    Var local : array[8] of char
     ExprStmt
       Binary >>
         cin
-        plain
+        local
+    ExprStmt
+      Binary <<
+        Binary <<
+          Binary <<
+            Binary <<
+              cout
+              "["
+            local
+          "]"
+        endl
+    ExprStmt
+      Binary >>
+        cin
+        shared
     ExprStmt
       Binary <<
         Binary <<
@@ -63,6 +78,7 @@ global endl  4 bytes
 global cout  4 bytes
 global cin  4 bytes
 global cerr  4 bytes
+global shared  8 bytes
 
 function __endl_t__ctor$v   ; __endl_t::__endl_t
   #0 this  8 bytes  (param)
@@ -595,10 +611,15 @@ function main
   #3 $result  4 bytes
   #4 $result  4 bytes
   #5 $result  4 bytes
-  #6 plain  32 bytes
+  #6 local  8 bytes
   #7 $result  4 bytes
   #8 $result  4 bytes
   #9 $result  4 bytes
+  #10 $result  4 bytes
+  #11 $result  4 bytes
+  #12 $result  4 bytes
+  #13 $result  4 bytes
+  #14 $result  4 bytes
             call __global_init()
     %0 = const 8
     %1 = const 8
@@ -633,13 +654,30 @@ function main
     %28 = call istream__operator>>$Pc(%25, %26, %27)
     %29 = global cout
     %30 = local #8
-    %31 = straddr str2
+    %31 = straddr str0
     %32 = call ostream__operator<<$Pc(%29, %30, %31)
     %33 = local #9
-    %34 = global endl
-    %35 = call ostream__operator<<$8__endl_t(%32, %33, %34)
-    %36 = const 0
-            ret %36
+    %34 = local #6
+    %35 = call ostream__operator<<$Pc(%32, %33, %34)
+    %36 = local #10
+    %37 = straddr str1
+    %38 = call ostream__operator<<$Pc(%35, %36, %37)
+    %39 = local #11
+    %40 = global endl
+    %41 = call ostream__operator<<$8__endl_t(%38, %39, %40)
+    %42 = global cin
+    %43 = local #12
+    %44 = global shared
+    %45 = call istream__operator>>$Pc(%42, %43, %44)
+    %46 = global cout
+    %47 = local #13
+    %48 = straddr str2
+    %49 = call ostream__operator<<$Pc(%46, %47, %48)
+    %50 = local #14
+    %51 = global endl
+    %52 = call ostream__operator<<$8__endl_t(%49, %50, %51)
+    %53 = const 0
+            ret %53
 
 function __global_init
     %0 = global endl
@@ -650,6 +688,7 @@ function __global_init
             call istream__ctor$v(%2)
     %3 = global cerr
             call errstream__ctor$v(%3)
+    %4 = global shared
             ret
 
 function __global_fini
