@@ -384,7 +384,7 @@ function make$i   ; make
     %3 = local #0
     %4 = load [%3] :8
     %5 = local #2
-            memcpy [%4] <- [%5] :4
+            call T__ctor$RK1T(%4, %5)
     %6 = local #2
             call T__dtor(%6)
             ret %4
@@ -393,9 +393,8 @@ function main
   #0 a  4 bytes
   #1 $arg  4 bytes
   #2 b  4 bytes
-  #3 $result  4 bytes
-  #4 h  16 bytes
-  #5 arr  12 bytes
+  #3 h  16 bytes
+  #4 arr  12 bytes
             call __global_init()
     %0 = straddr str0
             call print_string(%0)
@@ -425,75 +424,73 @@ function main
             call print_int(%13)
             call print_line()
     %14 = local #2
-    %15 = local #3
-    %16 = const 7
-    %17 = call make$i(%15, %16)
-            call T__ctor$RK1T(%14, %17)
-    %18 = straddr str3
-            call print_string(%18)
-    %19 = local #2
-    %20 = field %19 +0
-    %21 = load [%20] :4
-            call print_int(%21)
+    %15 = const 7
+    %16 = call make$i(%14, %15)
+    %17 = straddr str3
+            call print_string(%17)
+    %18 = local #2
+    %19 = field %18 +0
+    %20 = load [%19] :4
+            call print_int(%20)
             call print_line()
-    %22 = local #2
-            call T__dtor(%22)
-    %23 = straddr str2
-            call print_string(%23)
-    %24 = global live
-    %25 = load [%24] :4
-            call print_int(%25)
+    %21 = local #2
+            call T__dtor(%21)
+    %22 = straddr str2
+            call print_string(%22)
+    %23 = global live
+    %24 = load [%23] :4
+            call print_int(%24)
             call print_line()
-    %26 = local #4
-            call Holder__ctor$v(%26)
-    %27 = straddr str4
-            call print_string(%27)
-    %28 = local #4
-    %29 = field %28 +12
-    %30 = load [%29] :4
-            call print_int(%30)
+    %25 = local #3
+            call Holder__ctor$v(%25)
+    %26 = straddr str4
+            call print_string(%26)
+    %27 = local #3
+    %28 = field %27 +12
+    %29 = load [%28] :4
+            call print_int(%29)
             call print_line()
-    %31 = local #4
-            call Holder__dtor(%31)
-    %32 = straddr str2
-            call print_string(%32)
-    %33 = global live
-    %34 = load [%33] :4
-            call print_int(%34)
+    %30 = local #3
+            call Holder__dtor(%30)
+    %31 = straddr str2
+            call print_string(%31)
+    %32 = global live
+    %33 = load [%32] :4
+            call print_int(%33)
             call print_line()
-    %35 = local #5
-    %36 = field %35 +0
+    %34 = local #4
+    %35 = field %34 +0
+            call T__ctor$v(%35)
+    %36 = field %34 +4
             call T__ctor$v(%36)
-    %37 = field %35 +4
+    %37 = field %34 +8
             call T__ctor$v(%37)
-    %38 = field %35 +8
-            call T__ctor$v(%38)
-    %39 = straddr str5
-            call print_string(%39)
-    %40 = local #5
-    %41 = const 0
-    %42 = const 4
-    %43 = mul %41, %42
-    %44 = add %40, %43
-    %45 = field %44 +0
-    %46 = load [%45] :4
-            call print_int(%46)
+    %38 = straddr str5
+            call print_string(%38)
+    %39 = local #4
+    %40 = const 0
+    %41 = const 4
+    %42 = mul %40, %41
+    %43 = add %39, %42
+    %44 = field %43 +0
+    %45 = load [%44] :4
+            call print_int(%45)
             call print_line()
-    %47 = local #5
-    %48 = field %47 +8
+    %46 = local #4
+    %47 = field %46 +8
+            call T__dtor(%47)
+    %48 = field %46 +4
             call T__dtor(%48)
-    %49 = field %47 +4
+    %49 = field %46 +0
             call T__dtor(%49)
-    %50 = field %47 +0
-            call T__dtor(%50)
-    %51 = straddr str2
-            call print_string(%51)
-    %52 = global live
-    %53 = load [%52] :4
-            call print_int(%53)
+    %50 = straddr str2
+            call print_string(%50)
+    %51 = global live
+    %52 = load [%51] :4
+            call print_int(%52)
             call print_line()
-    %54 = const 0
-            ret %54
+    %53 = const 0
+            ret %53
 
 function __global_init
     %0 = global live

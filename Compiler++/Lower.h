@@ -190,14 +190,29 @@ protected:
     // An object passed BY VALUE: the callee gets a copy, and if the class
     // wrote a copy constructor that constructor is what makes it.
     virtual IRReg lowerByValueObject(Type *want, Expr *e, int line);
+    // `return obj;` -- the same copy, into the slot the caller supplied.  Here
+    // it is the bytes; the C++ layer overrides it to run the constructor.
+    virtual void emitReturnObject(IRReg dest, Expr *e, int line);
     // A by-value argument that a copy constructor built lives in a temporary
     // of the caller's, and dies at the end of the expression that made it.
     // Nesting works because each call destroys only what it added.
     struct ArgTemp { int slot; Type *type; };
     std::vector<ArgTemp> argTemps;
     virtual void destroyArgTempsDownTo(std::size_t mark, int line);
+    // Where an object-valued expression should be BUILT, when whoever asked
+    // for it already has the space -- a variable being initialised from a
+    // call, say.  Set it, lower the expression, and the outermost thing that
+    // needed space takes it instead of declaring a temporary; anything nested
+    // inside makes its own, as usual.  IR_NoReg means "make your own".
+    // Taken at the TOP of whatever lowers a call, before its receiver and its
+    // arguments -- those are nested expressions, and the destination belongs
+    // to the outermost one.  Taking it later let  d = (a + b) * 2  give the
+    // inner addition the slot meant for the multiplication.
+    IRReg objectDest;
+    IRReg takeObjectDest();
     // Space for a call's object result, and the address the callee fills in.
-    IRReg allocReturnSlot(Function *target, int line);
+    // `given` is a destination already claimed by the caller, or IR_NoReg.
+    IRReg allocReturnSlot(Function *target, int line, IRReg given = IR_NoReg);
     int findSlot(const std::string &name) const;
     virtual bool isReferenceExpr(Expr *e);  // its slot holds an address
     // A reference binds to an object, so it is passed and stored as that

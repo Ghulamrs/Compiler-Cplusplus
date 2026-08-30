@@ -458,13 +458,11 @@ function main
   #0 a  16 bytes
   #1 b  16 bytes
   #2 c  16 bytes
-  #3 $result  16 bytes
-  #4 d  16 bytes
-  #5 $result  16 bytes
-  #6 $result  16 bytes
-  #7 circles  72 bytes
-  #8 i  4 bytes
-  #9 i  4 bytes
+  #3 d  16 bytes
+  #4 $result  16 bytes
+  #5 circles  72 bytes
+  #6 i  4 bytes
+  #7 i  4 bytes
             call __global_init()
     %0 = local #0
             call Vec__ctor$v(%0)
@@ -490,127 +488,123 @@ function main
     %15 = call Vec__length$v(%14)
             call print_double(%15)
             call print_line()
-    %16 = local #0
-    %17 = local #3
+    %16 = local #2
+    %17 = local #0
     %18 = local #1
-    %19 = call Vec__operator+$3Vec(%16, %17, %18)
+    %19 = call Vec__operator+$3Vec(%17, %16, %18)
     %20 = local #2
-            memcpy [%20] <- [%19] :16
-    %21 = local #2
-    %22 = field %21 +0
-    %23 = load [%22] :8f
-            call print_double(%23)
-    %24 = local #2
-    %25 = field %24 +8
-    %26 = load [%25] :8f
-            call print_double(%26)
+    %21 = field %20 +0
+    %22 = load [%21] :8f
+            call print_double(%22)
+    %23 = local #2
+    %24 = field %23 +8
+    %25 = load [%24] :8f
+            call print_double(%25)
             call print_line()
+    %26 = local #3
     %27 = local #0
-    %28 = local #5
+    %28 = local #4
     %29 = local #1
     %30 = call Vec__operator+$3Vec(%27, %28, %29)
-    %31 = local #6
-    %32 = fconst 2
-    %33 = call Vec__operator*$d(%30, %31, %32)
-    %34 = local #4
-            memcpy [%34] <- [%33] :16
-    %35 = local #4
-    %36 = field %35 +0
-    %37 = load [%36] :8f
-            call print_double(%37)
-    %38 = local #4
-    %39 = field %38 +8
-    %40 = load [%39] :8f
-            call print_double(%40)
+    %31 = fconst 2
+    %32 = call Vec__operator*$d(%30, %26, %31)
+    %33 = local #3
+    %34 = field %33 +0
+    %35 = load [%34] :8f
+            call print_double(%35)
+    %36 = local #3
+    %37 = field %36 +8
+    %38 = load [%37] :8f
+            call print_double(%38)
             call print_line()
-    %41 = local #0
-    %42 = local #1
-    %43 = call Vec__operator==$3Vec(%41, %42)
-    %44 = iresize %43 :4 unsigned
-            call print_int(%44)
+    %39 = local #0
+    %40 = local #1
+    %41 = call Vec__operator==$3Vec(%39, %40)
+    %42 = iresize %41 :4 unsigned
+            call print_int(%42)
             call print_line()
-    %45 = local #7
-    %46 = field %45 +0
+    %43 = local #5
+    %44 = field %43 +0
+            call Circle__ctor$v(%44)
+    %45 = field %43 +24
+            call Circle__ctor$v(%45)
+    %46 = field %43 +48
             call Circle__ctor$v(%46)
-    %47 = field %45 +24
-            call Circle__ctor$v(%47)
-    %48 = field %45 +48
-            call Circle__ctor$v(%48)
-    %49 = const 0
-    %50 = local #8
-            store [%50] <- %49 :4
+    %47 = const 0
+    %48 = local #6
+            store [%48] <- %47 :4
     L0:
-    %51 = local #8
-    %52 = load [%51] :4
-    %53 = const 3
-    %54 = cmp.lt %52, %53
-            brz %54 L2
-    %55 = local #8
-    %56 = load [%55] :4
-    %57 = const 1
-    %58 = add %56, %57
-    %59 = itof %58
-    %60 = local #7
-    %61 = local #8
-    %62 = load [%61] :4
-    %63 = const 24
-    %64 = mul %62, %63
-    %65 = add %60, %64
-    %66 = field %65 +16
-            store [%66] <- %59 :8f
+    %49 = local #6
+    %50 = load [%49] :4
+    %51 = const 3
+    %52 = cmp.lt %50, %51
+            brz %52 L2
+    %53 = local #6
+    %54 = load [%53] :4
+    %55 = const 1
+    %56 = add %54, %55
+    %57 = itof %56
+    %58 = local #5
+    %59 = local #6
+    %60 = load [%59] :4
+    %61 = const 24
+    %62 = mul %60, %61
+    %63 = add %58, %62
+    %64 = field %63 +16
+            store [%64] <- %57 :8f
     L1:
-    %67 = local #8
-    %68 = load [%67] :4
-    %69 = const 1
-    %70 = add %68, %69
-            store [%67] <- %70 :4
+    %65 = local #6
+    %66 = load [%65] :4
+    %67 = const 1
+    %68 = add %66, %67
+            store [%65] <- %68 :4
             jump L0
     L2:
-    %71 = const 0
-    %72 = local #9
-            store [%72] <- %71 :4
+    %69 = const 0
+    %70 = local #7
+            store [%70] <- %69 :4
     L3:
-    %73 = local #9
-    %74 = load [%73] :4
-    %75 = const 3
-    %76 = cmp.lt %74, %75
-            brz %76 L5
-    %77 = local #7
-    %78 = local #9
-    %79 = load [%78] :4
-    %80 = const 24
-    %81 = mul %79, %80
-    %82 = add %77, %81
-    %83 = call Circle__area$v(%82)
-            call print_double(%83)
+    %71 = local #7
+    %72 = load [%71] :4
+    %73 = const 3
+    %74 = cmp.lt %72, %73
+            brz %74 L5
+    %75 = local #5
+    %76 = local #7
+    %77 = load [%76] :4
+    %78 = const 24
+    %79 = mul %77, %78
+    %80 = add %75, %79
+    %81 = call Circle__area$v(%80)
+            call print_double(%81)
             call print_line()
     L4:
-    %84 = local #9
-    %85 = load [%84] :4
-    %86 = const 1
-    %87 = add %85, %86
-            store [%84] <- %87 :4
+    %82 = local #7
+    %83 = load [%82] :4
+    %84 = const 1
+    %85 = add %83, %84
+            store [%82] <- %85 :4
             jump L3
     L5:
-    %88 = local #0
-    %89 = local #7
-    %90 = const 1
-    %91 = const 24
-    %92 = mul %90, %91
-    %93 = add %89, %92
-    %94 = field %93 +0
-            memcpy [%94] <- [%88] :16
-    %95 = local #7
-    %96 = const 1
-    %97 = const 24
-    %98 = mul %96, %97
-    %99 = add %95, %98
-    %100 = field %99 +0
-    %101 = call Vec__length$v(%100)
-            call print_double(%101)
+    %86 = local #0
+    %87 = local #5
+    %88 = const 1
+    %89 = const 24
+    %90 = mul %88, %89
+    %91 = add %87, %90
+    %92 = field %91 +0
+            memcpy [%92] <- [%86] :16
+    %93 = local #5
+    %94 = const 1
+    %95 = const 24
+    %96 = mul %94, %95
+    %97 = add %93, %96
+    %98 = field %97 +0
+    %99 = call Vec__length$v(%98)
+            call print_double(%99)
             call print_line()
-    %102 = const 0
-            ret %102
+    %100 = const 0
+            ret %100
 
 function __global_init
             ret

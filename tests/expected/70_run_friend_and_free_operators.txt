@@ -303,14 +303,10 @@ function main
   #0 a  4 bytes
   #1 b  4 bytes
   #2 c  4 bytes
-  #3 $result  4 bytes
-  #4 d  4 bytes
-  #5 $result  4 bytes
-  #6 e  4 bytes
-  #7 $result  4 bytes
-  #8 f  4 bytes
-  #9 $result  4 bytes
-  #10 $result  4 bytes
+  #3 d  4 bytes
+  #4 e  4 bytes
+  #5 f  4 bytes
+  #6 $result  4 bytes
             call __global_init()
     %0 = local #0
             call Money__ctor$v(%0)
@@ -322,62 +318,54 @@ function main
     %4 = local #1
     %5 = const 250
             call Money__set$i(%4, %5)
-    %6 = local #0
-    %7 = local #3
+    %6 = local #2
+    %7 = local #0
     %8 = local #1
-    %9 = call Money__operator+$5Money(%6, %7, %8)
+    %9 = call Money__operator+$5Money(%7, %6, %8)
     %10 = local #2
-            memcpy [%10] <- [%9] :4
-    %11 = local #2
-    %12 = call Money__get$v(%11)
-            call print_int(%12)
+    %11 = call Money__get$v(%10)
+            call print_int(%11)
             call print_line()
-    %13 = local #5
-    %14 = const 3
-    %15 = local #0
-    %16 = call operator*$i5Money(%13, %14, %15)
-    %17 = local #4
-            memcpy [%17] <- [%16] :4
+    %12 = local #3
+    %13 = const 3
+    %14 = local #0
+    %15 = call operator*$i5Money(%12, %13, %14)
+    %16 = local #3
+    %17 = call Money__get$v(%16)
+            call print_int(%17)
+            call print_line()
     %18 = local #4
-    %19 = call Money__get$v(%18)
-            call print_int(%19)
+    %19 = local #0
+    %20 = const 4
+    %21 = call operator*$5Moneyi(%18, %19, %20)
+    %22 = local #4
+    %23 = call Money__get$v(%22)
+            call print_int(%23)
             call print_line()
-    %20 = local #7
-    %21 = local #0
-    %22 = const 4
-    %23 = call operator*$5Moneyi(%20, %21, %22)
-    %24 = local #6
-            memcpy [%24] <- [%23] :4
-    %25 = local #6
-    %26 = call Money__get$v(%25)
-            call print_int(%26)
-            call print_line()
-    %27 = local #0
+    %24 = local #0
+    %25 = local #1
+    %26 = call operator<$5Money5Money(%24, %25)
+    %27 = iresize %26 :4 unsigned
+            call print_int(%27)
     %28 = local #1
-    %29 = call operator<$5Money5Money(%27, %28)
-    %30 = iresize %29 :4 unsigned
-            call print_int(%30)
-    %31 = local #1
-    %32 = local #0
-    %33 = call operator<$5Money5Money(%31, %32)
-    %34 = iresize %33 :4 unsigned
-            call print_int(%34)
+    %29 = local #0
+    %30 = call operator<$5Money5Money(%28, %29)
+    %31 = iresize %30 :4 unsigned
+            call print_int(%31)
             call print_line()
-    %35 = local #9
-    %36 = const 2
-    %37 = local #0
-    %38 = call operator*$i5Money(%35, %36, %37)
-    %39 = local #10
-    %40 = local #1
-    %41 = call Money__operator+$5Money(%38, %39, %40)
-    %42 = local #8
-            memcpy [%42] <- [%41] :4
-    %43 = local #8
-    %44 = call Money__get$v(%43)
-            call print_int(%44)
+    %32 = local #5
+    %33 = local #6
+    %34 = const 2
+    %35 = local #0
+    %36 = call operator*$i5Money(%33, %34, %35)
+    %37 = local #1
+    %38 = call Money__operator+$5Money(%36, %32, %37)
+    %39 = local #5
+    %40 = call Money__get$v(%39)
+            call print_int(%40)
             call print_line()
-    %45 = const 0
-            ret %45
+    %41 = const 0
+            ret %41
 
 function __global_init
             ret

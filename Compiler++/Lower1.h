@@ -84,6 +84,7 @@ private:
     IRReg emitOperatorCall(cc::Function *op, cc::Expr *lhsExpr, cc::Expr *rhsExpr, int line);
     IRReg lowerOperandFor(cc::Type *want, cc::Expr *e, int line);
     virtual IRReg lowerByValueObject(cc::Type *want, cc::Expr *e, int line);
+    virtual void emitReturnObject(IRReg dest, cc::Expr *e, int line);
     virtual void destroyArgTempsDownTo(std::size_t mark, int line);
     virtual IRReg lowerIndexOperator(cc::IndexExpr *e);
     // Construct or destroy `count` objects laid end to end from `base`.

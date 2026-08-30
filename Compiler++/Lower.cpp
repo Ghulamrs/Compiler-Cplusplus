@@ -9,7 +9,8 @@
 namespace cc {
 
 Lowering::Lowering(IRModule &module, const Layout &l, Diagnostics &d)
-    : mod(module), layout(l), diag(d), fn(0), currentReturnType(0) {}
+    : mod(module), layout(l), diag(d), fn(0), objectDest(IR_NoReg),
+      currentReturnType(0) {}
 
 Lowering::~Lowering() {
     for (std::map<int, Type*>::iterator it = builtinCache.begin();
@@ -287,10 +288,25 @@ bool Lowering::returnsObject(Function *f) {
     return f && isObjectType(f->retType);
 }
 
-IRReg Lowering::allocReturnSlot(Function *target, int line) {
+IRReg Lowering::takeObjectDest() {
+    const IRReg d = objectDest;
+    objectDest = IR_NoReg;      // at most once: the outermost expression gets it
+    return d;
+}
+
+IRReg Lowering::allocReturnSlot(Function *target, int line, IRReg given) {
+    // Given a destination, the callee writes the result straight into it: no
+    // temporary to copy out of, and none to destroy afterwards.
+    if (given != IR_NoReg) return given;
+
     const int size = sizeOfType(target->retType);
     const int slot = declareLocal("$result", size > 0 ? size : Layout::PointerSize, false);
     return fn->emitLocalAddr(slot, line);
+}
+
+// The C layer has no constructors: a returned object is its bytes.
+void Lowering::emitReturnObject(IRReg dest, Expr *e, int line) {
+    fn->emitMemCopy(dest, lowerObjectValue(e), sizeOfType(currentReturnType), line);
 }
 
 IRReg Lowering::lowerByValueObject(Type *, Expr *e, int) {
@@ -513,8 +529,7 @@ void Lowering::lowerStmt(Stmt *s) {
             if (slot >= 0) {
                 const IRReg dest = fn->emitLoad(fn->emitLocalAddr(slot, rs->line),
                                                 Layout::PointerSize, false, rs->line);
-                fn->emitMemCopy(dest, lowerObjectValue(rs->expr),
-                                sizeOfType(currentReturnType), rs->line);
+                emitReturnObject(dest, rs->expr, rs->line);
                 v = dest;
             }
         } else if (rs->expr && isReferenceType(currentReturnType)) {
@@ -1084,9 +1099,10 @@ IRReg Lowering::lowerCall(CallExpr *e, bool wantsResult) {
         if (it != functions.end()) target = it->second;
     }
     const std::string sym = target ? symbolFor(target, "") : callee->name;
+    const IRReg dest = takeObjectDest();
     const std::size_t mark = argTemps.size();
     std::vector<IRReg> args;
-    if (returnsObject(target)) args.push_back(allocReturnSlot(target, e->line));
+    if (returnsObject(target)) args.push_back(allocReturnSlot(target, e->line, dest));
     const std::vector<IRReg> rest = lowerArgs(e, target, 0);
     args.insert(args.end(), rest.begin(), rest.end());
     const IRReg out = fn->emitCall(sym, args, wantsResult, e->line);

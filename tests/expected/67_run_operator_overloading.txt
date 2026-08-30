@@ -485,14 +485,10 @@ function main
   #0 a  8 bytes
   #1 b  8 bytes
   #2 c  8 bytes
-  #3 $result  8 bytes
-  #4 d  8 bytes
-  #5 $result  8 bytes
-  #6 e  8 bytes
-  #7 $result  8 bytes
-  #8 f  8 bytes
-  #9 $result  8 bytes
-  #10 $result  8 bytes
+  #3 d  8 bytes
+  #4 e  8 bytes
+  #5 f  8 bytes
+  #6 $result  8 bytes
             call __global_init()
     %0 = local #0
             call V__ctor$v(%0)
@@ -514,95 +510,87 @@ function main
     %12 = local #1
     %13 = field %12 +4
             store [%13] <- %11 :4
-    %14 = local #0
-    %15 = local #3
+    %14 = local #2
+    %15 = local #0
     %16 = local #1
-    %17 = call V__operator+$1V(%14, %15, %16)
+    %17 = call V__operator+$1V(%15, %14, %16)
     %18 = local #2
-            memcpy [%18] <- [%17] :8
-    %19 = local #2
-    %20 = field %19 +0
-    %21 = load [%20] :4
-            call print_int(%21)
-    %22 = local #2
-    %23 = field %22 +4
-    %24 = load [%23] :4
-            call print_int(%24)
+    %19 = field %18 +0
+    %20 = load [%19] :4
+            call print_int(%20)
+    %21 = local #2
+    %22 = field %21 +4
+    %23 = load [%22] :4
+            call print_int(%23)
             call print_line()
+    %24 = local #3
     %25 = local #1
-    %26 = local #5
-    %27 = local #0
-    %28 = call V__operator-$1V(%25, %26, %27)
-    %29 = local #4
-            memcpy [%29] <- [%28] :8
-    %30 = local #4
-    %31 = field %30 +0
-    %32 = load [%31] :4
-            call print_int(%32)
-    %33 = local #4
-    %34 = field %33 +4
-    %35 = load [%34] :4
-            call print_int(%35)
+    %26 = local #0
+    %27 = call V__operator-$1V(%25, %24, %26)
+    %28 = local #3
+    %29 = field %28 +0
+    %30 = load [%29] :4
+            call print_int(%30)
+    %31 = local #3
+    %32 = field %31 +4
+    %33 = load [%32] :4
+            call print_int(%33)
             call print_line()
-    %36 = local #0
-    %37 = local #7
-    %38 = const 3
-    %39 = call V__operator*$i(%36, %37, %38)
-    %40 = local #6
-            memcpy [%40] <- [%39] :8
-    %41 = local #6
-    %42 = field %41 +0
+    %34 = local #4
+    %35 = local #0
+    %36 = const 3
+    %37 = call V__operator*$i(%35, %34, %36)
+    %38 = local #4
+    %39 = field %38 +0
+    %40 = load [%39] :4
+            call print_int(%40)
+    %41 = local #4
+    %42 = field %41 +4
     %43 = load [%42] :4
             call print_int(%43)
-    %44 = local #6
-    %45 = field %44 +4
-    %46 = load [%45] :4
-            call print_int(%46)
             call print_line()
-    %47 = local #0
-    %48 = local #1
-    %49 = call V__operator==$1V(%47, %48)
-    %50 = iresize %49 :4 unsigned
-            call print_int(%50)
-    %51 = local #0
-    %52 = local #1
-    %53 = call V__operator!=$1V(%51, %52)
-    %54 = iresize %53 :4 unsigned
-            call print_int(%54)
-    %55 = local #0
-    %56 = local #1
-    %57 = call V__operator<$1V(%55, %56)
-    %58 = iresize %57 :4 unsigned
-            call print_int(%58)
+    %44 = local #0
+    %45 = local #1
+    %46 = call V__operator==$1V(%44, %45)
+    %47 = iresize %46 :4 unsigned
+            call print_int(%47)
+    %48 = local #0
+    %49 = local #1
+    %50 = call V__operator!=$1V(%48, %49)
+    %51 = iresize %50 :4 unsigned
+            call print_int(%51)
+    %52 = local #0
+    %53 = local #1
+    %54 = call V__operator<$1V(%52, %53)
+    %55 = iresize %54 :4 unsigned
+            call print_int(%55)
             call print_line()
-    %59 = local #0
-    %60 = local #9
-    %61 = local #1
-    %62 = call V__operator+$1V(%59, %60, %61)
-    %63 = local #10
-    %64 = local #0
-    %65 = call V__operator+$1V(%62, %63, %64)
-    %66 = local #8
-            memcpy [%66] <- [%65] :8
-    %67 = local #8
-    %68 = field %67 +0
-    %69 = load [%68] :4
-            call print_int(%69)
-    %70 = local #8
-    %71 = field %70 +4
-    %72 = load [%71] :4
-            call print_int(%72)
+    %56 = local #5
+    %57 = local #0
+    %58 = local #6
+    %59 = local #1
+    %60 = call V__operator+$1V(%57, %58, %59)
+    %61 = local #0
+    %62 = call V__operator+$1V(%60, %56, %61)
+    %63 = local #5
+    %64 = field %63 +0
+    %65 = load [%64] :4
+            call print_int(%65)
+    %66 = local #5
+    %67 = field %66 +4
+    %68 = load [%67] :4
+            call print_int(%68)
             call print_line()
-    %73 = local #0
-    %74 = local #1
-    %75 = call V__operator<$1V(%73, %74)
-            brz %75 L0
-    %76 = straddr str0
-            call print_string(%76)
+    %69 = local #0
+    %70 = local #1
+    %71 = call V__operator<$1V(%69, %70)
+            brz %71 L0
+    %72 = straddr str0
+            call print_string(%72)
             call print_line()
     L0:
-    %77 = const 0
-            ret %77
+    %73 = const 0
+            ret %73
 
 function __global_init
             ret

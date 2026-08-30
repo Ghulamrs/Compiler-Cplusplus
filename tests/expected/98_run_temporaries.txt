@@ -194,7 +194,6 @@ function main
   #6 $result  4 bytes
   #7 $temp  4 bytes
   #8 c  4 bytes
-  #9 $temp  4 bytes
             call __global_init()
     %0 = local #0
     %1 = const 3
@@ -234,18 +233,16 @@ function main
             call V__ctor$i(%28, %29)
     %30 = call twice$1V(%28)
             call print_int(%30)
-    %31 = local #9
+    %31 = local #8
     %32 = const 11
             call V__ctor$i(%31, %32)
     %33 = local #8
-            memcpy [%33] <- [%31] :4
-    %34 = local #8
-    %35 = field %34 +0
-    %36 = load [%35] :4
-            call print_int(%36)
+    %34 = field %33 +0
+    %35 = load [%34] :4
+            call print_int(%35)
             call print_line()
-    %37 = const 0
-            ret %37
+    %36 = const 0
+            ret %36
 
 function __global_init
             ret

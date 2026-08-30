@@ -644,8 +644,7 @@ function main
   #13 p  16 bytes
   #14 q  16 bytes
   #15 r  16 bytes
-  #16 $result  16 bytes
-  #17 bp  8 bytes
+  #16 bp  8 bytes
             call __global_init()
     %0 = local #0
             call V__ctor$v(%0)
@@ -784,39 +783,34 @@ function main
     %105 = local #14
     %106 = field %105 +8
             store [%106] <- %104 :4
-    %107 = local #13
-    %108 = local #16
+    %107 = local #15
+    %108 = local #13
     %109 = local #14
-    %110 = call Base__operator+$4Base(%107, %108, %109)
+    %110 = call Base__operator+$4Base(%108, %107, %109)
     %111 = local #15
-            memcpy [%111] <- [%110] :16
-    %112 = global Base__vtable
-    %113 = field %111 +0
-            store [%113] <- %112 :8
+    %112 = field %111 +8
+    %113 = load [%112] :4
+            call print_int(%113)
     %114 = local #15
-    %115 = field %114 +8
-    %116 = load [%115] :4
-            call print_int(%116)
-    %117 = local #15
-    %118 = call Base__who$v(%117)
-            call print_int(%118)
-    %119 = local #13
-    %120 = local #17
-            store [%120] <- %119 :8
-    %121 = local #17
-    %122 = load [%121] :8
-    %123 = vtable [%122] slot 0
-    %124 = call.ind %123(%122)
-            call print_int(%124)
+    %115 = call Base__who$v(%114)
+            call print_int(%115)
+    %116 = local #13
+    %117 = local #16
+            store [%117] <- %116 :8
+    %118 = local #16
+    %119 = load [%118] :8
+    %120 = vtable [%119] slot 0
+    %121 = call.ind %120(%119)
+            call print_int(%121)
             call print_line()
-    %125 = const 0
-    %126 = local #15
-            call Base__dtor(%126)
-    %127 = local #14
-            call Derived__dtor(%127)
-    %128 = local #13
-            call Derived__dtor(%128)
-            ret %125
+    %122 = const 0
+    %123 = local #15
+            call Base__dtor(%123)
+    %124 = local #14
+            call Derived__dtor(%124)
+    %125 = local #13
+            call Derived__dtor(%125)
+            ret %122
 
 function __global_init
             ret

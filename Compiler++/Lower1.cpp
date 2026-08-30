@@ -237,9 +237,12 @@ bool Lowering::lowerLayerValue(cc::Expr *e, IRReg &out) {
     // its address, which is what every object-valued expression yields here.
     if (TempExpr *te = dynamic_cast<TempExpr*>(e)) {
         ClassDecl *cd = classOfMemberType(te->type);
-        const int size = layout.sizeOf(te->type);
-        const int slot = declareLocal("$temp", size > 0 ? size : Layout::PointerSize, false);
-        const IRReg addr = fn->emitLocalAddr(slot, e->line);
+        IRReg addr = takeObjectDest();
+        if (addr == IR_NoReg) {
+            const int size = layout.sizeOf(te->type);
+            const int slot = declareLocal("$temp", size > 0 ? size : Layout::PointerSize, false);
+            addr = fn->emitLocalAddr(slot, e->line);
+        }
         if (cd) emitConstruct(cd, addr, te->args, e->line, te->resolvedCtor);
         out = addr;
         return true;
@@ -356,6 +359,21 @@ void Lowering::lowerVarDecl(cc::VarDecl *vd) {
     const int size = layout.sizeOf(vd->type);
     const int slot = declareLocal(vd->name, size > 0 ? size : Layout::PointerSize, false);
     localTypes[vd->name] = vd->type;
+
+    // T b = f();  or  T b = T(1);  -- the expression has an object to build and
+    // b is where it belongs, so it is built THERE.  Copying it out of a
+    // temporary afterwards would run the copy constructor a second time and
+    // leave the temporary's own destructor unrun.
+    if (vd->init && !vd->hasCtorArgs && yieldsObject(vd->init)) {
+        const IRReg dest = fn->emitLocalAddr(slot, vd->line);
+        objectDest = dest;
+        const IRReg got = lowerObjectValue(vd->init);
+        const bool builtInPlace = (objectDest == IR_NoReg);
+        objectDest = IR_NoReg;
+        // A shape that made its own space anyway still has to reach b.
+        if (!builtInPlace) fn->emitMemCopy(dest, got, size, vd->line);
+        return;
+    }
 
     // P b = a;  copies a.  A declared copy constructor is the copy if there is
     // one; otherwise the copy is memberwise, which carries the vptr and is
@@ -522,6 +540,26 @@ bool Lowering::isBoolType(cc::Type *t) {
 // A copy is a construction, so a declared copy constructor makes it.  Without
 // this the bytes were copied and the constructor never ran, which is a silent
 // wrong answer for any class whose copy does more than move bytes.
+// `return obj;` is a copy into the caller's slot, and a copy is a construction:
+// a declared copy constructor is what has to make it.  Copying the bytes was a
+// silent wrong answer for any class whose copy does more than move them, and a
+// dangerous one for a class that owns memory -- the destructors that run
+// immediately after this then free what the caller has just been handed.
+//
+// The construction goes straight into `dest`, so there is no temporary to
+// destroy, and it happens before emitAllOpenScopeExits() for the same reason
+// the byte copy did: the object being returned is one of the locals about to
+// be torn down.
+void Lowering::emitReturnObject(IRReg dest, cc::Expr *e, int line) {
+    ClassDecl *cd = classOfMemberType(currentReturnType);
+    MethodDecl *copyCtor = copyConstructorOf(cd);
+    if (!cd || !copyCtor) { cc::Lowering::emitReturnObject(dest, e, line); return; }
+
+    std::vector<cc::Expr*> one;
+    one.push_back(e);
+    emitConstruct(cd, dest, one, line, copyCtor);
+}
+
 IRReg Lowering::lowerByValueObject(cc::Type *want, cc::Expr *e, int line) {
     ClassDecl *cd = classOfMemberType(want);
     MethodDecl *copyCtor = copyConstructorOf(cd);
@@ -570,6 +608,7 @@ IRReg Lowering::lowerOperandFor(cc::Type *want, cc::Expr *e, int line) {
 // argument.  A reference return makes the RESULT an address, which is what
 // lets  t[1] = 42;  assign through it.
 IRReg Lowering::lowerIndexOperator(cc::IndexExpr *e) {
+    const IRReg dest = takeObjectDest();   // before any operand is lowered
     MethodDecl *op = dynamic_cast<MethodDecl*>(e->resolvedOperator);
     if (!op) {
         diag.error(e->line, e->col, "internal: operator[] was not resolved");
@@ -577,7 +616,7 @@ IRReg Lowering::lowerIndexOperator(cc::IndexExpr *e) {
     }
     std::vector<IRReg> args;
     args.push_back(lowerObjectValue(e->base));
-    if (returnsObject(op)) args.push_back(allocReturnSlot(op, e->line));
+    if (returnsObject(op)) args.push_back(allocReturnSlot(op, e->line, dest));
     args.push_back(lowerOperandFor(op->params.empty() ? 0 : op->params[0]->type,
                                    e->index, e->line));
     return fn->emitCall(mangleOverload(op->ownerClass, op->name, op->params, op->isConstMethod),
@@ -589,19 +628,20 @@ IRReg Lowering::lowerIndexOperator(cc::IndexExpr *e) {
 // RIGHT, which is what makes  3 * v  work.
 IRReg Lowering::emitOperatorCall(cc::Function *op, cc::Expr *lhsExpr,
                                  cc::Expr *rhsExpr, int line) {
+    const IRReg dest = takeObjectDest();   // before any operand is lowered
     MethodDecl *asMember = dynamic_cast<MethodDecl*>(op);
     std::vector<IRReg> args;
 
     if (asMember) {
         args.push_back(lowerObjectValue(lhsExpr));          // `this`
-        if (returnsObject(op)) args.push_back(allocReturnSlot(op, line));
+        if (returnsObject(op)) args.push_back(allocReturnSlot(op, line, dest));
         args.push_back(lowerOperandFor(op->params.empty() ? 0 : op->params[0]->type,
                                        rhsExpr, line));
         return fn->emitCall(mangleOverload(asMember->ownerClass, op->name, op->params, asMember->isConstMethod),
                             args, true, line);
     }
 
-    if (returnsObject(op)) args.push_back(allocReturnSlot(op, line));
+    if (returnsObject(op)) args.push_back(allocReturnSlot(op, line, dest));
     args.push_back(lowerOperandFor(op->params.size() > 0 ? op->params[0]->type : 0,
                                    lhsExpr, line));
     args.push_back(lowerOperandFor(op->params.size() > 1 ? op->params[1]->type : 0,
@@ -610,6 +650,7 @@ IRReg Lowering::emitOperatorCall(cc::Function *op, cc::Expr *lhsExpr,
 }
 
 IRReg Lowering::lowerCall(cc::CallExpr *e, bool wantsResult) {
+    const IRReg dest = takeObjectDest();   // before any operand is lowered
     MemberAccessExpr *ma = dynamic_cast<MemberAccessExpr*>(e->callee);
 
     // obj(args) -- the callee is an OBJECT, and the analysis resolved the call
@@ -621,7 +662,7 @@ IRReg Lowering::lowerCall(cc::CallExpr *e, bool wantsResult) {
             const std::size_t mark = argTemps.size();
             std::vector<IRReg> args;
             args.push_back(lowerObjectValue(e->callee));
-            if (returnsObject(callOp)) args.push_back(allocReturnSlot(callOp, e->line));
+            if (returnsObject(callOp)) args.push_back(allocReturnSlot(callOp, e->line, dest));
             const std::vector<IRReg> rest = lowerArgs(e, callOp, 0);
             args.insert(args.end(), rest.begin(), rest.end());
             const IRReg out = fn->emitCall(
@@ -643,13 +684,16 @@ IRReg Lowering::lowerCall(cc::CallExpr *e, bool wantsResult) {
             if (m) {
                 std::vector<IRReg> args;
                 args.push_back(loadThis(e->line));
-                if (returnsObject(m)) args.push_back(allocReturnSlot(m, e->line));
+                if (returnsObject(m)) args.push_back(allocReturnSlot(m, e->line, dest));
                 const std::vector<IRReg> rest = lowerArgs(e, m, 0);
                 args.insert(args.end(), rest.begin(), rest.end());
                 return fn->emitCall(mangleOverload(m->ownerClass, m->name, m->params, m->isConstMethod),
                                     args, wantsResult, e->line);
             }
         }
+        // Not a C++ call after all.  Hand the destination back, or the C
+        // layer makes a temporary for a result that already has a home.
+        objectDest = dest;
         return cc::Lowering::lowerCall(e, wantsResult);
     }
 
@@ -668,7 +712,7 @@ IRReg Lowering::lowerCall(cc::CallExpr *e, bool wantsResult) {
     // function runs, not how it is called.
     std::vector<IRReg> args;
     args.push_back(object);
-    if (returnsObject(m)) args.push_back(allocReturnSlot(m, e->line));
+    if (returnsObject(m)) args.push_back(allocReturnSlot(m, e->line, dest));
     const std::vector<IRReg> rest = lowerArgs(e, m, 0);
     args.insert(args.end(), rest.begin(), rest.end());
 

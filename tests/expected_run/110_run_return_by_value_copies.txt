@@ -1,0 +1,7 @@
+start 0
+owned 91
+after 0
+copied 107
+after 0
+direct 3
+after 0
