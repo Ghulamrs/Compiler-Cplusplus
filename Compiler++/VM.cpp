@@ -191,10 +191,23 @@ void VM::callNative(NativeId id, int argc) {
     case NAT_Acos:  pushD(std::acos(a[0].d));  return;
     case NAT_Atan:  pushD(std::atan(a[0].d));  return;
     case NAT_Atan2: pushD(std::atan2(a[0].d, a[1].d)); return;
+    case NAT_Sinh:  pushD(std::sinh(a[0].d));  return;
+    case NAT_Cosh:  pushD(std::cosh(a[0].d));  return;
+    case NAT_Tanh:  pushD(std::tanh(a[0].d));  return;
     case NAT_Pow:   pushD(std::pow(a[0].d, a[1].d));   return;
     case NAT_Fabs:  pushD(std::fabs(a[0].d));  return;
     case NAT_Floor: pushD(std::floor(a[0].d)); return;
     case NAT_Ceil:  pushD(std::ceil(a[0].d));  return;
+    case NAT_Fmod:  pushD(std::fmod(a[0].d, a[1].d));  return;
+    // trunc and round are C99; this is C++98, so they are written in terms of
+    // the two roundings C++98 does have.  Both go away from zero the way the
+    // C99 versions do: trunc(-2.7) is -2, round(-2.5) is -3.
+    case NAT_Trunc:
+        pushD(a[0].d < 0.0 ? std::ceil(a[0].d) : std::floor(a[0].d));
+        return;
+    case NAT_Round:
+        pushD(a[0].d < 0.0 ? std::ceil(a[0].d - 0.5) : std::floor(a[0].d + 0.5));
+        return;
     case NAT_Log:   pushD(std::log(a[0].d));   return;
     case NAT_Log10: pushD(std::log10(a[0].d)); return;
     case NAT_Exp:   pushD(std::exp(a[0].d));   return;

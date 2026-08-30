@@ -154,7 +154,11 @@ struct Image {
     bool read(const std::string &path, std::string &error);
 
     static const unsigned long Magic   = 0x31425843UL;  // "CXB1"
-    static const unsigned long Version = 4;   // v2 localFloat, v3 localObject, v4 fini
+    // v2 localFloat, v3 localObject, v4 fini, v5 the maths natives grew.
+    // A native is called by its INDEX, so inserting one renumbers every native
+    // after it: a v4 image would still load and would then call the wrong
+    // function.  The bump makes it say so instead.
+    static const unsigned long Version = 5;
 };
 
 // Functions the VM supplies.  A program gets them by DECLARING one without a
@@ -174,7 +178,14 @@ enum NativeId {
     // way everything else is: `double sqrt(double);` with no body.
     NAT_Sqrt, NAT_Sin, NAT_Cos, NAT_Tan,
     NAT_Asin, NAT_Acos, NAT_Atan, NAT_Atan2,
+    NAT_Sinh, NAT_Cosh, NAT_Tanh,
     NAT_Pow, NAT_Fabs, NAT_Floor, NAT_Ceil,
+    // `%` needs integer operands and says so, which left no way at all to take
+    // a remainder of two doubles.  fmod is that operation.
+    NAT_Fmod,
+    // Rounding to a whole number in the two directions floor and ceil cannot
+    // express: toward zero, and to the nearest.
+    NAT_Trunc, NAT_Round,
     NAT_Log, NAT_Log10, NAT_Exp,
     NAT_Abs,                    // the one that is integer in and integer out
     NAT_Count
