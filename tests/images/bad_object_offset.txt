@@ -1,0 +1,1 @@
+bad_object_offset.cxb: runtime error: object argument at an invalid address

@@ -9,3 +9,6 @@
 *.txt text
 *.cmake text
 CMakeLists.txt text
+
+# Test fixtures are exact bytes.
+*.cxb binary

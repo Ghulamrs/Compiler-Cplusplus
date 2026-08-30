@@ -74,3 +74,22 @@ foreach(case_path ${TEST_CASES})
         endif()
     endif()
 endforeach()
+
+# --- malformed images ------------------------------------------------------
+# Bytecode.h says a .cxb may have come from anywhere and that nothing in it is
+# trusted.  These are hand-built files that load but are wrong in one specific
+# way, and each must stop with a diagnostic rather than reach memory outside
+# the VM's own array.  They run through the same comparator as a source case,
+# because a .cxb is given to the compiler exactly as a .cpp is.
+file(GLOB BAD_IMAGES "${CMAKE_CURRENT_SOURCE_DIR}/tests/images/*.cxb")
+foreach(img ${BAD_IMAGES})
+    get_filename_component(img_name "${img}" NAME_WE)
+    add_test(NAME image_${img_name}
+             COMMAND ${CMAKE_COMMAND}
+                     -DEXE=$<TARGET_FILE:compilerpp>
+                     -DSRC=${img}
+                     -DEXPECT=${CMAKE_CURRENT_SOURCE_DIR}/tests/images/${img_name}.txt
+                     -DWANT_STATUS=3
+                     -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/compare_run.cmake)
+    set_tests_properties(image_${img_name} PROPERTIES TIMEOUT 30)
+endforeach()

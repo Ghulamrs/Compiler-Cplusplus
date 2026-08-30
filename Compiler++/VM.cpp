@@ -40,7 +40,8 @@ VM::Value VM::pop() {
 // --- memory ---
 
 vmword VM::readInt(vmword addr, int size, bool isSigned) {
-    if (addr <= 0 || addr + size > static_cast<vmword>(mem.size())) {
+    if (addr <= 0 || size < 0 || size > static_cast<vmword>(mem.size()) ||
+        addr > static_cast<vmword>(mem.size()) - size) {
         std::ostringstream ss;
         ss << "read of " << size << " bytes at invalid address " << addr;
         trap(ss.str());
@@ -58,7 +59,8 @@ vmword VM::readInt(vmword addr, int size, bool isSigned) {
 }
 
 void VM::writeInt(vmword addr, int size, vmword value) {
-    if (addr <= 0 || addr + size > static_cast<vmword>(mem.size())) {
+    if (addr <= 0 || size < 0 || size > static_cast<vmword>(mem.size()) ||
+        addr > static_cast<vmword>(mem.size()) - size) {
         std::ostringstream ss;
         ss << "write of " << size << " bytes at invalid address " << addr;
         trap(ss.str());
@@ -71,7 +73,8 @@ void VM::writeInt(vmword addr, int size, vmword value) {
 }
 
 double VM::readFloat(vmword addr, int size) {
-    if (addr <= 0 || addr + size > static_cast<vmword>(mem.size())) {
+    if (addr <= 0 || size < 0 || size > static_cast<vmword>(mem.size()) ||
+        addr > static_cast<vmword>(mem.size()) - size) {
         trap("floating read at an invalid address");
         return 0.0;
     }
@@ -86,7 +89,8 @@ double VM::readFloat(vmword addr, int size) {
 }
 
 void VM::writeFloat(vmword addr, int size, double value) {
-    if (addr <= 0 || addr + size > static_cast<vmword>(mem.size())) {
+    if (addr <= 0 || size < 0 || size > static_cast<vmword>(mem.size()) ||
+        addr > static_cast<vmword>(mem.size()) - size) {
         trap("floating write at an invalid address");
         return;
     }
@@ -258,8 +262,26 @@ vmword VM::run(const Image &image, bool &ok) {
         return 0;
     }
     for (std::size_t i = 0; i < image.functions.size(); ++i) {
-        if (image.functions[i].localOffset.empty()) {
-            trap("function '" + image.functions[i].name + "' has no frame layout");
+        const FuncImage &fi = image.functions[i];
+        if (fi.localOffset.empty()) {
+            trap("function '" + fi.name + "' has no frame layout");
+            return 0;
+        }
+        // The four per-local tables describe the same slots and are written
+        // that way -- one entry each, plus a sentinel on localOffset saying
+        // where the registers start.  They are READ back as four independent
+        // length-prefixed arrays, so a file that disagrees with itself would
+        // send the argument loop past the end of the short one and use
+        // whatever it found there as a frame offset.  They have to agree
+        // before any of them is indexed.
+        if (fi.localOffset.size() != fi.localSize.size() + 1 ||
+            fi.localFloat.size()  != fi.localSize.size() ||
+            fi.localObject.size() != fi.localSize.size()) {
+            trap("function '" + fi.name + "' has an inconsistent frame layout");
+            return 0;
+        }
+        if (fi.frameSize < 0 || fi.paramCount < 0 || fi.registerCount < 0) {
+            trap("function '" + fi.name + "' has a negative frame size");
             return 0;
         }
     }
@@ -501,8 +523,15 @@ vmword VM::run(const Image &image, bool &ok) {
                     const vmword src = args[k].i;
                     const vmword dst = nf.base + callee.localOffset[k];
                     const vmword n = callee.localSize[k];
-                    if (src <= 0 || n < 0 || src + n > static_cast<vmword>(mem.size()) ||
-                        dst + n > static_cast<vmword>(mem.size())) {
+                    // dst is bounded below as well as above: the offset comes
+                    // out of the image, so it can be negative, and a negative
+                    // dst passes an upper bound on its own and then writes in
+                    // FRONT of memory.  The sums are written as differences
+                    // for the same reason -- src + n overflows for an address
+                    // near the top of the range and wraps past the check.
+                    const vmword limit = static_cast<vmword>(mem.size());
+                    if (src <= 0 || dst <= 0 || n < 0 || n > limit ||
+                        src > limit - n || dst > limit - n) {
                         trap("object argument at an invalid address");
                         break;
                     }
