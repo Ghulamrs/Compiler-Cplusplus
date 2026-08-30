@@ -597,6 +597,9 @@ const char *IOStreamPrelude =
     " ostream operator<<(float f)    { print_double(f); return *this; }"
     " ostream operator<<(char c)     { print_char(c); return *this; }"
     " ostream operator<<(char* s)    { print_string(s); return *this; }"
+    // Any other pointer prints as an address.  Without this one the only
+    // overload a pointer could reach was the bool, and `cout << p` printed 1.
+    " ostream operator<<(void* p)    { print_pointer(p); return *this; }"
     " ostream operator<<(bool b)     { print_int(b); return *this; }"
     " ostream operator<<(__endl_t e) { print_line(); return *this; }"
     " };"
@@ -638,6 +641,7 @@ const char *IOStreamPrelude =
     " errstream operator<<(float f)    { err_double(f); return *this; }"
     " errstream operator<<(char c)     { err_char(c); return *this; }"
     " errstream operator<<(char* s)    { err_string(s); return *this; }"
+    " errstream operator<<(void* p)    { err_pointer(p); return *this; }"
     " errstream operator<<(bool b)     { err_int(b); return *this; }"
     " errstream operator<<(__endl_t e) { err_line(); return *this; }"
     " };"
@@ -656,6 +660,8 @@ const char *IOStreamNatives =
     " void err_double(double d);"
     " void err_string(char* s);"
     " void err_line();"
+    " void print_pointer(void* p);"
+    " void err_pointer(void* p);"
     " long read_int();"
     " double read_double();"
     " int read_char();"

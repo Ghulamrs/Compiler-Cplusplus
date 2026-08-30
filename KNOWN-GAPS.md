@@ -165,6 +165,21 @@ is the one place the C++ layer reaches into the C-level IR. The IR's own data
 model is clean; moving `mangle*`/`typeCode` to their own file would let `IR.h`
 and `IR.cpp` drop both AST includes.
 
+**There is no conversion ranking**, only two tiers: exact, then merely
+possible, with nothing to choose between two possibles. `exactForOverload`
+papers over the one collision that bites -- a pointer can become either a
+`void*` or a `bool`, and `ostream` offers both -- by calling `void*` exact for
+any pointer. The deviation is real and reachable: `f(Base*)` beside
+`f(void*)`, called with a `Derived*`, picks `void*` here where C++ picks
+`Base*`. A real ranking pass would remove the special case rather than add to
+it.
+
+**A global array cannot be read into.** `cin >> buf` asks the block header for
+a `new[]` buffer and the frame table for a local, but static data is a flat run
+of bytes with no table saying what lives where, so a global is refused. An
+image-level table of global offsets and sizes would answer it the same way the
+other two are answered.
+
 **Call and constructor arguments are analysed twice**, so every diagnostic
 inside them is reported twice.
 

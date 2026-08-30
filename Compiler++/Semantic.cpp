@@ -309,10 +309,13 @@ bool SemanticAnalyzer::canConvert(cc::Type *from, cc::Type *to) {
     // A pointer tests as a bool too:  if (p)
     if (isBoolType(t) && dynamic_cast<cc::PointerType*>(f)) return true;
 
-    // Derived* -> Base*
+    // Derived* -> Base*, and any object pointer -> void*
     cc::PointerType *pf = dynamic_cast<cc::PointerType*>(f);
     cc::PointerType *ptt = dynamic_cast<cc::PointerType*>(t);
     if (pf && ptt) {
+        // void* is the generic address, as in C++.  Not the reverse: coming
+        // back out needs a cast, because only the program knows what it is.
+        if (isVoid(ptt->base)) return true;
         cxx::ClassDecl *df = classOf(pf->base);
         cxx::ClassDecl *dt = classOf(ptt->base);
         if (df && dt) return isDerivedFrom(df, dt);
@@ -529,7 +532,7 @@ cc::Function *SemanticAnalyzer::findFreeOperator(cc::Expr *lhs, cc::Type *lt,
         if (f->params.size() != 2) continue;
         cc::Type *p0 = f->params[0]->type;
         cc::Type *p1 = f->params[1]->type;
-        if (sameType(lt, stripReference(p0)) && sameType(rt, stripReference(p1))) {
+        if (exactForOverload(lt, p0) && exactForOverload(rt, p1)) {
             if (!exact) exact = f;
             continue;
         }
@@ -581,7 +584,7 @@ cxx::MethodDecl *SemanticAnalyzer::findIndexOperator(cxx::ClassDecl *cd, cc::Exp
             if (!m || m->params.size() != 1) continue;
             if (m->isConstMethod != wantConst) continue;
             cc::Type *want = m->params[0]->type;
-            if (it && sameType(it, stripReference(want))) { if (!exact) exact = m; continue; }
+            if (it && exactForOverload(it, want)) { if (!exact) exact = m; continue; }
             if (convertible(index, it, want))             { if (!viable) viable = m; }
         }
     }
@@ -622,7 +625,7 @@ cxx::MethodDecl *SemanticAnalyzer::findMemberOperator(cc::Type *lt, cc::BinaryOp
         cxx::MethodDecl *m = dynamic_cast<cxx::MethodDecl*>(cands[i]);
         if (!m || m->params.size() != 1) continue;
         cc::Type *want = m->params[0]->type;
-        if (rt && sameType(rt, stripReference(want))) { if (!exact) exact = m; continue; }
+        if (rt && exactForOverload(rt, want)) { if (!exact) exact = m; continue; }
         if (convertible(rhs, rt, want))               { if (!viable) viable = m; }
     }
 
@@ -818,6 +821,26 @@ bool SemanticAnalyzer::needsDestructor(cxx::ClassDecl *cd) {
         if (fd && hasDestructor(fd->type)) return true;
     }
     return false;
+}
+
+// Exact ENOUGH to win outright, for overload resolution only.
+//
+// sameType, plus one rule: void* is exact for any pointer.  Conversions here
+// come in two tiers -- exact, then merely possible -- with no ranking inside
+// the second, and a pointer can become either a void* or a bool, because
+// `if (p)` is the reason bool takes a pointer at all.  So an overload set
+// holding both is ambiguous for every pointer, and ostream's holds both.
+// Calling void* the exact answer for a pointer settles it the way C++ settles
+// it, without a conversion-ranking pass this compiler does not have.
+//
+// The deviation, and it is a real one: f(Base*) beside f(void*), called with a
+// Derived*, picks void* here where C++ picks Base*.
+bool SemanticAnalyzer::exactForOverload(cc::Type *arg, cc::Type *param) {
+    cc::Type *p = stripReference(param);
+    if (sameType(arg, p)) return true;
+    cc::PointerType *pa = dynamic_cast<cc::PointerType*>(stripReference(arg));
+    cc::PointerType *pp = dynamic_cast<cc::PointerType*>(p);
+    return pa != 0 && pp != 0 && isVoid(pp->base);
 }
 
 cxx::MethodDecl *SemanticAnalyzer::copyConstructorOf(cxx::ClassDecl *cd) {
@@ -1230,7 +1253,7 @@ cxx::MethodDecl *SemanticAnalyzer::selectConstructor(cxx::ClassDecl *cd,
         for (std::size_t k = 0; k < argCount; ++k) {
             if (!argTypes[k]) continue;
             cc::Type *want = c->params[k]->type;
-            if (!sameType(argTypes[k], stripReference(want))) allExact = false;
+            if (!exactForOverload(argTypes[k], want)) allExact = false;
             if (!convertible(args[k], argTypes[k], want)) allOk = false;
         }
         if (allExact) exact.push_back(c);
@@ -1812,7 +1835,7 @@ cc::Function *SemanticAnalyzer::resolveOverload(const std::vector<cc::Function*>
         bool allExact = true, allOk = true;
         for (std::size_t i = 0; i < argTypes.size(); ++i) {
             if (!argTypes[i]) continue;
-            if (!sameType(argTypes[i], f->params[i]->type)) allExact = false;
+            if (!exactForOverload(argTypes[i], f->params[i]->type)) allExact = false;
             if (!convertible(call->args[i], argTypes[i], f->params[i]->type)) allOk = false;
         }
         if (allExact) exact.push_back(f);

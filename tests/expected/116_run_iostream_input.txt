@@ -293,6 +293,20 @@ function ostream__operator<<$Pc   ; ostream::operator<<
             memcpy [%3] <- [%5] :4
             ret %3
 
+function ostream__operator<<$Pv   ; ostream::operator<<
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 p  8 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :8
+            call print_pointer(%1)
+    %2 = local #1
+    %3 = load [%2] :8
+    %4 = local #0
+    %5 = load [%4] :8
+            memcpy [%3] <- [%5] :4
+            ret %3
+
 function ostream__operator<<$b   ; ostream::operator<<
   #0 this  8 bytes  (param)
   #1 $ret  8 bytes  (param)
@@ -659,6 +673,20 @@ function errstream__operator<<$Pc   ; errstream::operator<<
     %0 = local #2
     %1 = load [%0] :8
             call err_string(%1)
+    %2 = local #1
+    %3 = load [%2] :8
+    %4 = local #0
+    %5 = load [%4] :8
+            memcpy [%3] <- [%5] :4
+            ret %3
+
+function errstream__operator<<$Pv   ; errstream::operator<<
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 p  8 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :8
+            call err_pointer(%1)
     %2 = local #1
     %3 = load [%2] :8
     %4 = local #0

@@ -89,6 +89,8 @@ private:
     // not one was written -- otherwise nothing runs its members' destructors.
     void synthesiseDestructors();
     // The copy constructor a class declares, or 0.
+    // Exact enough to win outright, in overload resolution only.
+    bool exactForOverload(cc::Type *arg, cc::Type *param);
     cxx::MethodDecl *copyConstructorOf(cxx::ClassDecl *cd);
     // A copy is memberwise: the base is copied by ITS copy constructor and so
     // is every member that has one.  A class that declares none of its own

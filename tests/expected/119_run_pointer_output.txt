@@ -1,40 +1,147 @@
-Class P
-  Field public v : int
-  Constructor public P::P
+Class Point
+  Field public x : int
+  Constructor public Point::Point
     Block
       ExprStmt
         Binary =
-          v
-          7
-Function operator<< returns class ostream
-  param:
-    Var o : class ostream
-  param:
-    Var p : class P
-  Block
-    ExprStmt
-      Binary <<
-        o
-        Member .v
-          p
-    Return
-      o
+          x
+          0
 Function main returns int
   Block
-    Var p : class P
+    Var a : int
+      init:
+        1
+    Var b : int
+      init:
+        2
+    Var p : pointer to int
+      init:
+        Unary &
+          a
+    Var q : pointer to int
+      init:
+        Unary &
+          a
+    Var r : pointer to int
+      init:
+        Unary &
+          b
+    ExprStmt
+      Binary <<
+        Binary <<
+          Binary <<
+            cout
+            Binary ==
+              p
+              q
+          Binary ==
+            p
+            r
+        endl
+    Var nothing : pointer to int
+      init:
+        0
     ExprStmt
       Binary <<
         Binary <<
           cout
-          p
+          nothing
+        endl
+    Var s : pointer to char
+      init:
+        New[] char
+          3
+    ExprStmt
+      Binary =
+        Index
+          s
+          0
+        72
+    ExprStmt
+      Binary =
+        Index
+          s
+          1
+        105
+    ExprStmt
+      Binary =
+        Index
+          s
+          2
+        0
+    ExprStmt
+      Binary <<
+        Binary <<
+          Binary <<
+            Binary <<
+              cout
+              s
+            " "
+          "literal"
+        endl
+    ExprStmt
+      Delete[]
+        s
+    Var flag : bool
+      init:
+        true
+    ExprStmt
+      Binary <<
+        Binary <<
+          Binary <<
+            cout
+            flag
+          Binary !=
+            p
+            0
+        endl
+    Var hasP : bool
+      init:
+        p
+    ExprStmt
+      Binary <<
+        Binary <<
+          cout
+          hasP
+        endl
+    Var pt : class Point
+    ExprStmt
+      Binary =
+        Member .x
+          pt
+        7
+    Var v : pointer to void
+      init:
+        Unary &
+          pt
+    Var back : pointer to class Point
+      init:
+        Cast to pointer to class Point
+          v
+    ExprStmt
+      Binary <<
+        Binary <<
+          cout
+          Member ->x
+            back
+        endl
+    ExprStmt
+      Binary <<
+        Binary <<
+          cout
+          Binary ==
+            v
+            Cast to pointer to void
+              Unary &
+                pt
         endl
     Return
       0
 
-class P  size=4 align=4
-    +0  v (4 bytes)
-    construct: field v -> P() body
-    destroy:   ~P() body -> field v
+class Point  size=4 align=4
+    +0  x (4 bytes)
+    construct: field x -> Point() body
+    destroy:   ~Point() body -> field x
 
 class __endl_t  size=4 align=4
     +0  _ (4 bytes)
@@ -55,6 +162,9 @@ class ostream  size=4 align=4
     +0  _ (4 bytes)
     construct: field _ -> ostream() body
     destroy:   ~ostream() body -> field _
+
+string str0  " "
+string str1  "literal"
 
 global endl  4 bytes
 global cout  4 bytes
@@ -613,50 +723,202 @@ function errstream__operator<<$8__endl_t   ; errstream::operator<<
             memcpy [%1] <- [%3] :4
             ret %1
 
-function P__ctor$v   ; P::P
+function Point__ctor$v   ; Point::Point
   #0 this  8 bytes  (param)
     %0 = local #0
     %1 = load [%0] :8
-    %2 = const 7
+    %2 = const 0
     %3 = local #0
     %4 = load [%3] :8
     %5 = field %4 +0
             store [%5] <- %2 :4
             ret
 
-function operator<<$7ostream1P   ; operator<<
-  #0 $ret  8 bytes  (param)
-  #1 o  4 bytes  (param)
-  #2 p  4 bytes  (param)
-  #3 $result  4 bytes
-    %0 = local #1
-    %1 = local #3
-    %2 = local #2
-    %3 = field %2 +0
-    %4 = load [%3] :4
-    %5 = call ostream__operator<<$i(%0, %1, %4)
-    %6 = local #0
-    %7 = load [%6] :8
-    %8 = local #1
-            memcpy [%7] <- [%8] :4
-            ret %7
-
 function main
-  #0 p  4 bytes
-  #1 $result  4 bytes
-  #2 $result  4 bytes
+  #0 a  4 bytes
+  #1 b  4 bytes
+  #2 p  8 bytes
+  #3 q  8 bytes
+  #4 r  8 bytes
+  #5 $result  4 bytes
+  #6 $result  4 bytes
+  #7 $result  4 bytes
+  #8 nothing  8 bytes
+  #9 $result  4 bytes
+  #10 $result  4 bytes
+  #11 s  8 bytes
+  #12 $result  4 bytes
+  #13 $result  4 bytes
+  #14 $result  4 bytes
+  #15 $result  4 bytes
+  #16 flag  1 bytes
+  #17 $result  4 bytes
+  #18 $result  4 bytes
+  #19 $result  4 bytes
+  #20 hasP  1 bytes
+  #21 $result  4 bytes
+  #22 $result  4 bytes
+  #23 pt  4 bytes
+  #24 v  8 bytes
+  #25 back  8 bytes
+  #26 $result  4 bytes
+  #27 $result  4 bytes
+  #28 $result  4 bytes
+  #29 $result  4 bytes
             call __global_init()
-    %0 = local #0
-            call P__ctor$v(%0)
-    %1 = local #1
-    %2 = global cout
-    %3 = local #0
-    %4 = call operator<<$7ostream1P(%1, %2, %3)
+    %0 = const 1
+    %1 = local #0
+            store [%1] <- %0 :4
+    %2 = const 2
+    %3 = local #1
+            store [%3] <- %2 :4
+    %4 = local #0
     %5 = local #2
-    %6 = global endl
-    %7 = call ostream__operator<<$8__endl_t(%4, %5, %6)
-    %8 = const 0
-            ret %8
+            store [%5] <- %4 :8
+    %6 = local #0
+    %7 = local #3
+            store [%7] <- %6 :8
+    %8 = local #1
+    %9 = local #4
+            store [%9] <- %8 :8
+    %10 = global cout
+    %11 = local #5
+    %12 = local #2
+    %13 = load [%12] :8
+    %14 = local #3
+    %15 = load [%14] :8
+    %16 = cmp.eq %13, %15
+    %17 = call ostream__operator<<$b(%10, %11, %16)
+    %18 = local #6
+    %19 = local #2
+    %20 = load [%19] :8
+    %21 = local #4
+    %22 = load [%21] :8
+    %23 = cmp.eq %20, %22
+    %24 = call ostream__operator<<$b(%17, %18, %23)
+    %25 = local #7
+    %26 = global endl
+    %27 = call ostream__operator<<$8__endl_t(%24, %25, %26)
+    %28 = const 0
+    %29 = local #8
+            store [%29] <- %28 :8
+    %30 = global cout
+    %31 = local #9
+    %32 = local #8
+    %33 = load [%32] :8
+    %34 = call ostream__operator<<$Pv(%30, %31, %33)
+    %35 = local #10
+    %36 = global endl
+    %37 = call ostream__operator<<$8__endl_t(%34, %35, %36)
+    %38 = const 3
+    %39 = const 3
+    %40 = alloc %39 [%38]
+    %41 = local #11
+            store [%41] <- %40 :8
+    %42 = const 72
+    %43 = iresize %42 :1 signed
+    %44 = local #11
+    %45 = load [%44] :8
+    %46 = const 0
+    %47 = add %45, %46
+            store [%47] <- %43 :1
+    %48 = const 105
+    %49 = iresize %48 :1 signed
+    %50 = local #11
+    %51 = load [%50] :8
+    %52 = const 1
+    %53 = add %51, %52
+            store [%53] <- %49 :1
+    %54 = const 0
+    %55 = iresize %54 :1 signed
+    %56 = local #11
+    %57 = load [%56] :8
+    %58 = const 2
+    %59 = add %57, %58
+            store [%59] <- %55 :1
+    %60 = global cout
+    %61 = local #12
+    %62 = local #11
+    %63 = load [%62] :8
+    %64 = call ostream__operator<<$Pc(%60, %61, %63)
+    %65 = local #13
+    %66 = straddr str0
+    %67 = call ostream__operator<<$Pc(%64, %65, %66)
+    %68 = local #14
+    %69 = straddr str1
+    %70 = call ostream__operator<<$Pc(%67, %68, %69)
+    %71 = local #15
+    %72 = global endl
+    %73 = call ostream__operator<<$8__endl_t(%70, %71, %72)
+    %74 = local #11
+    %75 = load [%74] :8
+            free %75 []
+    %76 = const 1
+    %77 = local #16
+            store [%77] <- %76 :1
+    %78 = global cout
+    %79 = local #17
+    %80 = local #16
+    %81 = load [%80] :1
+    %82 = call ostream__operator<<$b(%78, %79, %81)
+    %83 = local #18
+    %84 = local #2
+    %85 = load [%84] :8
+    %86 = const 0
+    %87 = cmp.ne %85, %86
+    %88 = call ostream__operator<<$b(%82, %83, %87)
+    %89 = local #19
+    %90 = global endl
+    %91 = call ostream__operator<<$8__endl_t(%88, %89, %90)
+    %92 = local #2
+    %93 = load [%92] :8
+    %94 = const 0
+    %95 = cmp.ne %93, %94
+    %96 = local #20
+            store [%96] <- %95 :1
+    %97 = global cout
+    %98 = local #21
+    %99 = local #20
+    %100 = load [%99] :1
+    %101 = call ostream__operator<<$b(%97, %98, %100)
+    %102 = local #22
+    %103 = global endl
+    %104 = call ostream__operator<<$8__endl_t(%101, %102, %103)
+    %105 = local #23
+            call Point__ctor$v(%105)
+    %106 = const 7
+    %107 = local #23
+    %108 = field %107 +0
+            store [%108] <- %106 :4
+    %109 = local #23
+    %110 = local #24
+            store [%110] <- %109 :8
+    %111 = local #24
+    %112 = load [%111] :8
+    %113 = local #25
+            store [%113] <- %112 :8
+    %114 = global cout
+    %115 = local #26
+    %116 = local #25
+    %117 = load [%116] :8
+    %118 = field %117 +0
+    %119 = load [%118] :4
+    %120 = call ostream__operator<<$i(%114, %115, %119)
+    %121 = local #27
+    %122 = global endl
+    %123 = call ostream__operator<<$8__endl_t(%120, %121, %122)
+    %124 = global cout
+    %125 = local #28
+    %126 = local #24
+    %127 = load [%126] :8
+    %128 = local #23
+    %129 = cmp.eq %127, %128
+    %130 = call ostream__operator<<$b(%124, %125, %129)
+    %131 = local #29
+    %132 = global endl
+    %133 = call ostream__operator<<$8__endl_t(%130, %131, %132)
+    %134 = const 0
+            ret %134
 
 function __global_init
     %0 = global endl

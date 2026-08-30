@@ -203,6 +203,7 @@ enum NativeId {
     // Input.  A read that fails leaves the destination alone and turns
     // NAT_InputGood false, which is what `cin.good()` reports -- there are no
     // exceptions to throw and no stream state object to carry one.
+    NAT_PrintPointer, NAT_ErrPointer,   // an address, which no other native takes
     NAT_ReadInt, NAT_ReadDouble, NAT_ReadChar,
     NAT_ReadString,             // one whitespace-delimited word
     NAT_ReadLine,               // the rest of the line

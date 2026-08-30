@@ -115,6 +115,8 @@ const NativeEntry NativeTable[] = {
     { "log10",        NAT_Log10,       1, true  },
     { "exp",          NAT_Exp,         1, true  },
     { "abs",          NAT_Abs,         1, false },
+    { "print_pointer", NAT_PrintPointer, 1, false },
+    { "err_pointer",   NAT_ErrPointer,   1, false },
     { "read_int",     NAT_ReadInt,     0, false },
     { "read_double",  NAT_ReadDouble,  0, true  },
     { "read_char",    NAT_ReadChar,    0, false },

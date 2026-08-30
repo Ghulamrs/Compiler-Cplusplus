@@ -394,6 +394,20 @@ void VM::callNative(NativeId id, int argc) {
     case NAT_Exp:   pushD(std::exp(a[0].d));   return;
     case NAT_Abs:   push(a[0].i < 0 ? negate(a[0].i) : a[0].i); return;
 
+    // An address, printed the way C++ prints one: as a number in hex, which
+    // is what makes two pointers comparable by eye.  It is this machine's
+    // address, not the host's, and that is the useful one -- it is where the
+    // object actually lives in the memory this program can see.
+    case NAT_PrintPointer:
+    case NAT_ErrPointer: {
+        std::ostream &out = (id == NAT_PrintPointer) ? std::cout : std::cerr;
+        if (a[0].i == 0) { out << "0"; break; }
+        std::ostringstream ss;
+        ss << "0x" << std::hex << a[0].i;
+        out << ss.str();
+        break;
+    }
+
     // --- input ---
     // A failed read leaves the destination alone and turns inputGood false.
     // There are no exceptions here and no stream-state object to carry one, so
