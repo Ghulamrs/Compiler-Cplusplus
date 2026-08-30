@@ -51,12 +51,22 @@ foreach(case_path ${TEST_CASES})
         # CMake here and runs on every platform, not only where a POSIX shell
         # exists.  run_exec.sh remains the place to RECORD an expectation
         # (--accept); this is the place that enforces it.
-        if(case_name MATCHES "run_")
+        # A `trap_` case is one whose POINT is that the VM stops the program:
+        # it must exit 3 with the right message.  Without a category for it a
+        # guard can only ever look like a failure, so the guards -- a null
+        # dereference, a double delete -- went untested.  run_exec.sh selects
+        # on *run_*, so these are invisible to it and it needs no change.
+        set(want_status 0)
+        if(case_name MATCHES "trap_")
+            set(want_status 3)
+        endif()
+        if(case_name MATCHES "run_|trap_")
             add_test(NAME ${case_name}_exec
                      COMMAND ${CMAKE_COMMAND}
                              -DEXE=$<TARGET_FILE:compilerpp>
                              -DSRC=${case_path}
                              -DEXPECT=${CMAKE_CURRENT_SOURCE_DIR}/tests/expected_run/${case_name}.txt
+                             -DWANT_STATUS=${want_status}
                              -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/compare_run.cmake)
             # A defect in the VM can outlast its own step limit -- a corrupted
             # free list spins inside allocate(), where nothing counts steps.

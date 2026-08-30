@@ -13,12 +13,18 @@
 #
 #   * the compiler is invoked as  -run -q <case>
 #   * stdout and stderr are MERGED, exactly as `2>&1` merges them there
-#   * a non-zero exit is a failure, reported separately from a wrong answer
+#   * an unexpected exit status is a failure, reported separately from a wrong
+#     answer
 #   * the merged output must equal expected_run/<name>.txt
+#
+# WANT_STATUS is 0 for an ordinary case.  A case whose POINT is that the VM
+# stops the program -- a trap -- passes 3 instead, so that the guard is pinned
+# by a test rather than only by hand.  Without it a trap can only ever be a
+# failure, and the guards go untested.
 #
 # Invoked by CTest as:
 #   cmake -DEXE=<compilerpp> -DSRC=<case.cpp> -DEXPECT=<expected.txt>
-#         -P compare_run.cmake
+#         [-DWANT_STATUS=3] -P compare_run.cmake
 
 foreach(v EXE SRC EXPECT)
     if(NOT DEFINED ${v})
@@ -53,9 +59,13 @@ execute_process(
     RESULT_VARIABLE status
 )
 
-if(NOT status EQUAL 0)
+if(NOT DEFINED WANT_STATUS)
+    set(WANT_STATUS 0)
+endif()
+
+if(NOT status EQUAL WANT_STATUS)
     message("--- output ---\n${merged}")
-    message(FATAL_ERROR "${case_name}: exited ${status}, expected 0")
+    message(FATAL_ERROR "${case_name}: exited ${status}, expected ${WANT_STATUS}")
 endif()
 
 file(READ "${EXPECT}" expected)

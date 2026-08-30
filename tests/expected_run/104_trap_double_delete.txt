@@ -1,0 +1,1 @@
+104_trap_double_delete.cpp: runtime error: delete of a pointer that was already deleted

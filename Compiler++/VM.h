@@ -71,6 +71,9 @@ private:
 
     vmword allocate(vmword bytes);
     void release(vmword addr);
+    // The longest the free list could legitimately be; a walk past it is
+    // going round a cycle, so both walks stop instead of spinning.
+    vmword freeListLimit() const;
 
     void callNative(NativeId id, int argc);
 

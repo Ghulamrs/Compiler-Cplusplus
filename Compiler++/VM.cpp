@@ -98,6 +98,13 @@ void VM::writeFloat(vmword addr, int size, double value) {
     std::memcpy(&mem[addr], &value, 8);
 }
 
+// Every block on the free list needs a header of its own, so the list cannot
+// be longer than the heap holds headers.  A walk that goes further is going
+// round a cycle rather than along a list, and must stop rather than spin.
+vmword VM::freeListLimit() const {
+    return (heapTop - heapBase) / HeaderSize + 1;
+}
+
 // A block carries its size, so `delete` knows how much it is releasing, and a
 // next pointer, so a released block can be reused.  First fit, because the
 // simplest allocator that reuses memory is enough to run a loop.
@@ -106,7 +113,10 @@ vmword VM::allocate(vmword bytes) {
     if (bytes % 8) bytes += 8 - (bytes % 8);
 
     vmword prev = 0;
+    vmword walked = 0;
+    const vmword limit = freeListLimit();
     for (vmword b = freeList; b != 0; ) {
+        if (++walked > limit) { trap("heap free list is corrupt"); return 0; }
         const vmword size = readInt(b, 8, true);
         const vmword next = readInt(b + 8, 8, true);
         if (size >= bytes) {
@@ -135,6 +145,20 @@ void VM::release(vmword addr) {
     if (block < heapBase || block >= heapTop) {
         trap("delete of a pointer that did not come from new");
         return;
+    }
+    // Deleting a block that is already free would link it to ITSELF, and the
+    // next allocation too big to satisfy from it would then follow `next`
+    // round that loop forever -- inside allocate(), where the interpreter's
+    // step limit does not reach.  A double delete is a fault in the program,
+    // so it is reported as one instead of hanging the machine.
+    vmword walked = 0;
+    const vmword limit = freeListLimit();
+    for (vmword b = freeList; b != 0; b = readInt(b + 8, 8, true)) {
+        if (++walked > limit) { trap("heap free list is corrupt"); return; }
+        if (b == block) {
+            trap("delete of a pointer that was already deleted");
+            return;
+        }
     }
     writeInt(block + 8, 8, freeList);
     freeList = block;
