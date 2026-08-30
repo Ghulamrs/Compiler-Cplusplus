@@ -605,6 +605,26 @@ QualifiedName *Parser::parseQualifiedName() {
 
 // Numbers, identifiers and parentheses are C's; these are not.
 cc::Expr *Parser::parsePrimary() {
+    // `std::cout` -- a namespace qualification, which this version does not
+    // have.  Without this it was an identifier followed by a stray '::', and
+    // three cascading errors that never said the word "namespace" -- in a
+    // language whose own <iostream> is the reason anyone types it.  The
+    // qualifier is dropped and the name kept, so one mistake costs one line
+    // and the rest of the expression still parses.
+    while (cur.kind == TOK_IDENTIFIER && !namesAClass(cur.text)) {
+        const State probe = save();
+        const int line = cur.line, col = cur.col;
+        const std::string qualifier = cur.text;
+        advance();
+        if (cur.kind != TOK_COLONCOLON) { restore(probe); break; }
+        advance();                              // '::'
+        if (cur.kind != TOK_IDENTIFIER) { restore(probe); break; }
+        diag.error(line, col,
+                   "namespaces are not supported in this version; write '"
+                   + cur.text + "', not '" + qualifier + "::" + cur.text + "'");
+        // Loop, so a::b::c is named once per qualifier rather than cascading.
+    }
+
     // ClassName ( args )  builds an unnamed object.  Only a name that IS a
     // class starts one, so an ordinary call is untouched.
     if (cur.kind == TOK_IDENTIFIER && namesAClass(cur.text)) {

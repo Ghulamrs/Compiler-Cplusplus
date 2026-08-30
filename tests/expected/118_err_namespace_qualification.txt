@@ -1,0 +1,68 @@
+118_err_namespace_qualification.cpp:27:5: error: namespaces are not supported in this version; write 'cout', not 'std::cout'
+118_err_namespace_qualification.cpp:27:29: error: namespaces are not supported in this version; write 'endl', not 'std::endl'
+118_err_namespace_qualification.cpp:28:13: error: namespaces are not supported in this version; write 'abs', not 'std::abs'
+Function abs returns int
+  param:
+    Var n : int
+Class A
+  Method public A::f returns int
+    param:
+      Var n : int
+    Block
+      Return
+        Binary *
+          n
+          2
+Method public A::f returns int
+  param:
+    Var n : int
+Function main returns int
+  Block
+    Var a : class A
+    ExprStmt
+      Binary <<
+        Binary <<
+          cout
+          Call
+            Member .f
+              a
+            arg 0:
+              21
+        endl
+    ExprStmt
+      Binary <<
+        Binary <<
+          cout
+          "hello"
+        endl
+    Var v : int
+      init:
+        Call
+          abs
+          arg 0:
+            Unary -
+              3
+    Return
+      0
+
+class A  size=1 align=1
+
+class __endl_t  size=4 align=4
+    +0  _ (4 bytes)
+    construct: field _ -> __endl_t() body
+    destroy:   ~__endl_t() body -> field _
+
+class errstream  size=4 align=4
+    +0  _ (4 bytes)
+    construct: field _ -> errstream() body
+    destroy:   ~errstream() body -> field _
+
+class istream  size=4 align=4
+    +0  _ (4 bytes)
+    construct: field _ -> istream() body
+    destroy:   ~istream() body -> field _
+
+class ostream  size=4 align=4
+    +0  _ (4 bytes)
+    construct: field _ -> ostream() body
+    destroy:   ~ostream() body -> field _
