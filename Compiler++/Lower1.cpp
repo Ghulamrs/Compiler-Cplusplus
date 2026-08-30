@@ -723,12 +723,6 @@ void Lowering::emitVPtrStore(ClassDecl *cd, IRReg objectAddr, int line) {
 void Lowering::emitConstruct(ClassDecl *cd, IRReg objectAddr,
                              const std::vector<cc::Expr*> &args, int line,
                              cc::Function *chosen) {
-    if (cd->ctors.empty()) {
-        // No constructor, but a polymorphic object still needs its vptr.
-        emitVPtrStore(cd, objectAddr, line);
-        return;
-    }
-
     // The semantic pass chose, by signature.  The fallback by argument count
     // is for the constructions lowering makes itself -- a member, an array
     // element, a base -- which are always the no-argument one.
@@ -738,7 +732,17 @@ void Lowering::emitConstruct(ClassDecl *cd, IRReg objectAddr,
             if (cd->ctors[i]->params.size() == args.size()) { ctor = cd->ctors[i]; break; }
         }
     }
-    if (!ctor) return;                  // the analysis already reported why
+    if (!ctor) {
+        // Nothing to call: either the class declares no constructor, or it
+        // declares none that takes these arguments and the analysis has
+        // already said so.  A default construction still has to set the vptr,
+        // which is the one thing an object needs before anything can be
+        // called on it.  Testing for a missing constructor rather than for an
+        // EMPTY constructor list matters now that a class may hold nothing but
+        // constructors the compiler generated.
+        if (args.empty()) emitVPtrStore(cd, objectAddr, line);
+        return;
+    }
 
     std::vector<IRReg> callArgs;
     callArgs.push_back(objectAddr);

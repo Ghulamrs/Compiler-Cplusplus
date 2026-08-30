@@ -1,0 +1,244 @@
+Function print_int returns void
+  param:
+    Var  : int
+Function print_string returns void
+  param:
+    Var s : pointer to char
+Function print_line returns void
+Class Base
+  Field public tag : int
+  Constructor public Base::Base
+    Block
+      ExprStmt
+        Binary =
+          tag
+          1
+  Constructor public Base::Base
+    param:
+      Var o : reference to class Base
+    Block
+      ExprStmt
+        Binary =
+          tag
+          Binary +
+            Member .tag
+              o
+            100
+Class Derived : public Base
+  Field public extra : int
+  Constructor public Derived::Derived
+    param:
+      Var __o : reference to class Derived
+    init base Base
+      __o
+    init member extra
+      Member .extra
+        __o
+    Block
+Class Shape
+  Method public virtual Shape::name returns void
+    Block
+      ExprStmt
+        Call
+          print_string
+          arg 0:
+            "Shape"
+      ExprStmt
+        Call
+          print_line
+Class Circle : public Shape
+  Method public virtual overriding Circle::name returns void
+    Block
+      ExprStmt
+        Call
+          print_string
+          arg 0:
+            "Circle"
+      ExprStmt
+        Call
+          print_line
+Function main returns int
+  Block
+    Var a : class Derived
+    ExprStmt
+      Binary =
+        Member .extra
+          a
+        2
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Member .extra
+            a
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Binary =
+        Member .tag
+          a
+        5
+    Var b : class Derived
+      init:
+        a
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Member .tag
+            b
+    ExprStmt
+      Call
+        print_line
+    Var c : class Circle
+    Var p : pointer to class Shape
+      init:
+        Unary &
+          c
+    ExprStmt
+      Call
+        Member ->name
+          p
+    Return
+      0
+
+class Base  size=4 align=4
+    +0  tag (4 bytes)
+    construct: field tag -> Base() body
+    destroy:   ~Base() body -> field tag
+
+class Circle  size=8 align=8  [has vptr]
+     +0  __vptr (8 bytes)
+    vtable[0] = Circle::name
+    construct: base Shape -> set vptr
+    destroy:   reset vptr -> base Shape
+
+class Derived  size=8 align=4
+    +0  tag (4 bytes)  inherited from Base
+    +4  extra (4 bytes)
+    construct: base Base -> field extra -> Derived() body
+    destroy:   ~Derived() body -> field extra -> base Base
+
+class Shape  size=8 align=8  [has vptr]
+     +0  __vptr (8 bytes)
+    vtable[0] = Shape::name
+    construct: set vptr
+    destroy:   reset vptr
+
+string str0  "Shape"
+string str1  "Circle"
+
+vtable Circle__vtable
+    [0] Circle__name$v
+
+vtable Shape__vtable
+    [0] Shape__name$v
+
+function Base__ctor$v   ; Base::Base
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = const 1
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+            store [%5] <- %2 :4
+            ret
+
+function Base__ctor$RK4Base   ; Base::Base
+  #0 this  8 bytes  (param)
+  #1 o  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = local #1
+    %3 = load [%2] :8
+    %4 = field %3 +0
+    %5 = load [%4] :4
+    %6 = const 100
+    %7 = add %5, %6
+    %8 = local #0
+    %9 = load [%8] :8
+    %10 = field %9 +0
+            store [%10] <- %7 :4
+            ret
+
+function Derived__ctor$RK7Derived   ; Derived::Derived
+  #0 this  8 bytes  (param)
+  #1 __o  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = local #1
+    %3 = load [%2] :8
+            call Base__ctor$RK4Base(%1, %3)
+    %4 = local #1
+    %5 = load [%4] :8
+    %6 = field %5 +4
+    %7 = load [%6] :4
+    %8 = local #0
+    %9 = load [%8] :8
+    %10 = field %9 +4
+            store [%10] <- %7 :4
+            ret
+
+function Shape__name$v   ; Shape::name
+  #0 this  8 bytes  (param)
+    %0 = straddr str0
+            call print_string(%0)
+            call print_line()
+            ret
+
+function Circle__name$v   ; Circle::name
+  #0 this  8 bytes  (param)
+    %0 = straddr str1
+            call print_string(%0)
+            call print_line()
+            ret
+
+function main
+  #0 a  8 bytes
+  #1 b  8 bytes
+  #2 c  8 bytes
+  #3 p  8 bytes
+            call __global_init()
+    %0 = local #0
+    %1 = const 2
+    %2 = local #0
+    %3 = field %2 +4
+            store [%3] <- %1 :4
+    %4 = local #0
+    %5 = field %4 +4
+    %6 = load [%5] :4
+            call print_int(%6)
+            call print_line()
+    %7 = const 5
+    %8 = local #0
+    %9 = field %8 +0
+            store [%9] <- %7 :4
+    %10 = local #1
+    %11 = local #0
+            call Derived__ctor$RK7Derived(%10, %11)
+    %12 = local #1
+    %13 = field %12 +0
+    %14 = load [%13] :4
+            call print_int(%14)
+            call print_line()
+    %15 = local #2
+    %16 = global Circle__vtable
+    %17 = field %15 +0
+            store [%17] <- %16 :8
+    %18 = local #2
+    %19 = local #3
+            store [%19] <- %18 :8
+    %20 = local #3
+    %21 = load [%20] :8
+    %22 = vtable [%21] slot 0
+            call.ind %22(%21)
+    %23 = const 0
+            ret %23
+
+function __global_init
+            ret
+
+function __global_fini
+            ret

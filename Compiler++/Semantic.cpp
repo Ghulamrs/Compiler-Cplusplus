@@ -1151,7 +1151,18 @@ cxx::MethodDecl *SemanticAnalyzer::selectConstructor(cxx::ClassDecl *cd,
     if (!cd) return 0;
     const std::size_t argCount = args.size();
 
-    // No constructors at all is legal: the fields are uninitialised, as in C.
+    // No constructor the USER wrote is legal: the fields are uninitialised, as
+    // in C.  A constructor the compiler generated does not change that.  The
+    // implicit copy constructor in particular must not take default
+    // construction away from a class that never declared anything -- writing
+    // nothing cannot be what makes `Derived a;` illegal.
+    bool userWritten = false;
+    for (std::size_t i = 0; i < cd->ctors.size(); ++i) {
+        if (cd->ctors[i] && !cd->ctors[i]->isImplicit) { userWritten = true; break; }
+    }
+
+    if (!userWritten && argCount == 0) return 0;
+
     if (cd->ctors.empty()) {
         if (argCount > 0) {
             error(at, "class '" + cd->name + "' has no constructor to take arguments");
