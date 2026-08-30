@@ -217,11 +217,23 @@ void CodeGen::generateFunction(const IRFunction &fn, FuncImage &out) {
             break;
 
         case IR_Alloc:
-            out.code.push_back(make(OP_Alloc, in.imm, 0, line));
+            if (in.a != IR_NoReg) {
+                // The count goes on first, so the size is on top: the machine
+                // pops the size it always pops, and the count only when told.
+                if (in.b != IR_NoReg) out.code.push_back(make(OP_LoadReg, in.b, 0, line));
+                out.code.push_back(make(OP_LoadReg, in.a, 0, line));
+                out.code.push_back(make(OP_AllocN, 0, in.b != IR_NoReg ? 1 : 0, line));
+            } else {
+                out.code.push_back(make(OP_Alloc, in.imm, 0, line));
+            }
+            break;
+        case IR_ArrayCount:
+            out.code.push_back(make(OP_LoadReg, in.a, 0, line));
+            out.code.push_back(make(OP_ArrayCount, 0, 0, line));
             break;
         case IR_Free:
             out.code.push_back(make(OP_LoadReg, in.a, 0, line));
-            out.code.push_back(make(OP_Free, 0, 0, line));
+            out.code.push_back(make(OP_Free, 0, in.isArray ? 1 : 0, line));
             continue;
 
         case IR_Jump:

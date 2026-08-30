@@ -83,7 +83,9 @@ enum IROp {
     IR_VCallTarget,  // dest = (*(vptr of a))[imm]
 
     // --- free store ---------------------------------------------------
-    IR_Alloc,        // dest = allocate imm bytes
+    IR_Alloc,        // dest = allocate imm bytes, or a bytes when a is a register;
+                     // b, when set, is the element count of a new[]
+    IR_ArrayCount,   // dest = how many elements the new[] block at a holds
     IR_Free,         // release a
 
     // --- control ------------------------------------------------------
@@ -106,13 +108,18 @@ struct IRInstr {
     // A load or store of a floating value moves different bits than an integer
     // one of the same width -- a 4-byte float is not the low half of a double.
     bool isFloat;
+    // IR_Free: which FORM of delete this is.  The allocator records the form in
+    // the block, so `delete` on a `new[]` block is caught rather than left
+    // undefined the way the language leaves it.  IR_Alloc says the same thing
+    // by carrying an element count in `b`.
+    bool isArray;
     std::string sym;            // callee or global name
     std::vector<IRReg> args;    // for IR_Call / IR_CallIndirect
     int line;
 
     IRInstr(IROp o)
         : op(o), dest(IR_NoReg), a(IR_NoReg), b(IR_NoReg), imm(0), fimm(0.0),
-          isFloat(false), line(0) {}
+          isFloat(false), isArray(false), line(0) {}
 };
 
 // A class-typed local occupies its whole object size here, which is what makes
@@ -170,7 +177,13 @@ struct IRFunction {
                            bool wantsResult, int line);
     IRReg emitVCallTarget(IRReg object, long slot, int line);
     IRReg emitAlloc(long bytes, int line);
-    void  emitFree(IRReg ptr, int line);
+    // The size in a register, and for new[] the element count beside it.  The
+    // count is stored in the block: the SIZE cannot stand in for it, because
+    // the allocator rounds a block up and five four-byte elements would come
+    // back as six.
+    IRReg emitAllocN(IRReg bytes, IRReg count, int line);
+    IRReg emitArrayCount(IRReg ptr, int line);
+    void  emitFree(IRReg ptr, int line, bool isArray = false);
     void  emitLabel(int label);
     void  emitJump(int label, int line);
     void  emitBranchZero(IRReg cond, int label, int line);

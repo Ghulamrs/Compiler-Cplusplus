@@ -1,0 +1,58 @@
+113_err_new_array.cpp:18:13: error: 'new Ok[]' cannot take constructor arguments; its elements are default-constructed
+113_err_new_array.cpp:22:16: error: class 'Plain' has no constructor taking 0 argument(s), needed for 'new Plain[]'
+113_err_new_array.cpp:26:14: error: the element count of 'new[]' must be an integer, not double
+113_err_new_array.cpp:30:5: error: 'delete[]' applied to int, which is not a pointer
+Class Plain
+  Field public n : int
+  Constructor public Plain::Plain
+    param:
+      Var x : int
+    Block
+      ExprStmt
+        Binary =
+          n
+          x
+Class Ok
+  Field public n : int
+  Constructor public Ok::Ok
+    Block
+      ExprStmt
+        Binary =
+          n
+          0
+Function main returns int
+  Block
+    Var a : pointer to class Ok
+      init:
+        New[] class Ok
+          4
+          1
+    Var b : pointer to class Plain
+      init:
+        New[] class Plain
+          4
+    Var d : double
+      init:
+        2.5 : double
+    Var c : pointer to int
+      init:
+        New[] int
+          d
+    Var x : int
+      init:
+        1
+    ExprStmt
+      Delete[]
+        x
+    Return
+      0
+
+class Ok  size=4 align=4
+    +0  n (4 bytes)
+    construct: field n -> Ok() body
+    destroy:   ~Ok() body -> field n
+
+class Plain  size=4 align=4
+    +0  n (4 bytes)
+    construct: field n -> Plain() body
+    destroy:   ~Plain() body -> field n

@@ -69,8 +69,17 @@ private:
     double readFloat(vmword addr, int size);
     void writeFloat(vmword addr, int size, double value);
 
-    vmword allocate(vmword bytes);
-    void release(vmword addr);
+    // `arrayCount` is -1 for plain new and the element count for new[].  It is
+    // recorded in the block, so delete[] knows how many destructors to run and
+    // the matching form can be required rather than assumed.
+    vmword allocate(vmword bytes, vmword arrayCount);
+    void release(vmword addr, bool isArray);
+    // Is this the START of a block, as opposed to somewhere inside one?
+    bool isBlockStart(vmword block);
+    // Is it on the free list already?  Both forms of delete need to say so.
+    bool isOnFreeList(vmword block);
+    // How many elements the new[] block at `addr` holds, or 0 with a trap set.
+    vmword arrayCount(vmword addr);
     // The longest the free list could legitimately be; a walk past it is
     // going round a cycle, so both walks stop instead of spinning.
     vmword freeListLimit() const;

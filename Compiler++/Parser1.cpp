@@ -637,6 +637,14 @@ cc::Expr *Parser::parsePrimary() {
         if (!t) { errorAtCurrent("expected a type after 'new'"); return 0; }
         NewExpr *ne = new NewExpr(t);
         ne->line = line; ne->col = col;
+        // new T[n].  parseType() stops at the '[' -- an array bound belongs to
+        // the declarator in this grammar, never to the type -- so the count is
+        // parsed here and hangs off the expression.
+        if (match(TOK_LBRACKET)) {
+            ne->count = parseExpression();
+            if (!ne->count) errorAtCurrent("expected an element count after '['");
+            expect(TOK_RBRACKET, "after the element count");
+        }
         if (match(TOK_LPAREN)) {                // constructor arguments
             while (cur.kind != TOK_RPAREN && cur.kind != TOK_EOF) {
                 cc::Expr *a = parseExpression();
@@ -651,9 +659,15 @@ cc::Expr *Parser::parsePrimary() {
 
     if (cur.kind == TOK_DELETE) {
         advance();
-        cc::Expr *e = new DeleteExpr(parseUnary());
-        e->line = line; e->col = col;
-        return e;
+        bool isArray = false;
+        if (match(TOK_LBRACKET)) {
+            isArray = true;
+            expect(TOK_RBRACKET, "after 'delete['");
+        }
+        DeleteExpr *de = new DeleteExpr(parseUnary());
+        de->isArray = isArray;
+        de->line = line; de->col = col;
+        return de;
     }
 
     return cc::Parser::parsePrimary();

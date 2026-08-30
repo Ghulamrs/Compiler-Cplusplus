@@ -1,0 +1,866 @@
+Function print_int returns void
+  param:
+    Var n : int
+Function print_string returns void
+  param:
+    Var s : pointer to char
+Function print_line returns void
+Var live : int
+  init:
+    0
+Var nextId : int
+  init:
+    0
+Class Counted
+  Field public id : int
+  Constructor public Counted::Counted
+    Block
+      ExprStmt
+        Binary =
+          id
+          nextId
+      ExprStmt
+        Binary =
+          nextId
+          Binary +
+            nextId
+            1
+      ExprStmt
+        Binary =
+          live
+          Binary +
+            live
+            1
+  Destructor public Counted::~Counted
+    Block
+      ExprStmt
+        Binary =
+          live
+          Binary -
+            live
+            1
+Class Wide
+  Field public a : int
+  Field public b : int
+  Field public c : int
+  Constructor public Wide::Wide
+    Block
+      ExprStmt
+        Binary =
+          a
+          1
+      ExprStmt
+        Binary =
+          b
+          2
+      ExprStmt
+        Binary =
+          c
+          3
+      ExprStmt
+        Binary =
+          live
+          Binary +
+            live
+            1
+  Destructor public Wide::~Wide
+    Block
+      ExprStmt
+        Binary =
+          live
+          Binary -
+            live
+            1
+Class Noisy
+  Field public id : int
+  Constructor public Noisy::Noisy
+    Block
+      ExprStmt
+        Binary =
+          id
+          nextId
+      ExprStmt
+        Binary =
+          nextId
+          Binary +
+            nextId
+            1
+  Destructor public Noisy::~Noisy
+    Block
+      ExprStmt
+        Call
+          print_int
+          arg 0:
+            id
+Function main returns int
+  Block
+    Var s : pointer to char
+      init:
+        New[] char
+          16
+    ExprStmt
+      Binary =
+        Index
+          s
+          0
+        65
+    ExprStmt
+      Binary =
+        Index
+          s
+          15
+        90
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Index
+            s
+            0
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Index
+            s
+            15
+    ExprStmt
+      Call
+        print_line
+    Var v : pointer to int
+      init:
+        New[] int
+          4
+    Block
+      Var i : int
+        init:
+          0
+      For
+        Binary <
+          i
+          4
+        Binary =
+          i
+          Binary +
+            i
+            1
+        ExprStmt
+          Binary =
+            Index
+              v
+              i
+            Binary *
+              i
+              i
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Index
+            v
+            3
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Delete[]
+        v
+    ExprStmt
+      Delete[]
+        s
+    Var a : pointer to class Counted
+      init:
+        New[] class Counted
+          8
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          live
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Delete[]
+        a
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          live
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Binary =
+        nextId
+        0
+    Var k : int
+      init:
+        5
+    Var w : pointer to class Wide
+      init:
+        New[] class Wide
+          k
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          live
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Member .c
+            Index
+              w
+              4
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Delete[]
+        w
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          live
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Binary =
+        nextId
+        0
+    Var n : pointer to class Noisy
+      init:
+        New[] class Noisy
+          4
+    ExprStmt
+      Delete[]
+        n
+    ExprStmt
+      Call
+        print_line
+    Var none : pointer to class Counted
+      init:
+        New[] class Counted
+          0
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          live
+    ExprStmt
+      Delete[]
+        none
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          live
+    ExprStmt
+      Call
+        print_line
+    Var nil : pointer to class Counted
+      init:
+        0
+    ExprStmt
+      Delete[]
+        nil
+    Var total : int
+      init:
+        0
+    Block
+      Var i : int
+        init:
+          0
+      For
+        Binary <
+          i
+          500
+        Binary =
+          i
+          Binary +
+            i
+            1
+        Block
+          Var t : pointer to int
+            init:
+              New[] int
+                4
+          ExprStmt
+            Binary =
+              Index
+                t
+                3
+              i
+          ExprStmt
+            Binary =
+              total
+              Binary +
+                total
+                Index
+                  t
+                  3
+          ExprStmt
+            Delete[]
+              t
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          total
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Call
+        print_string
+        arg 0:
+          "done"
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+class Counted  size=4 align=4
+    +0  id (4 bytes)
+    construct: field id -> Counted() body
+    destroy:   ~Counted() body -> field id
+
+class Noisy  size=4 align=4
+    +0  id (4 bytes)
+    construct: field id -> Noisy() body
+    destroy:   ~Noisy() body -> field id
+
+class Wide  size=12 align=4
+    +0  a (4 bytes)
+    +4  b (4 bytes)
+    +8  c (4 bytes)
+    construct: field a -> field b -> field c -> Wide() body
+    destroy:   ~Wide() body -> field c -> field b -> field a
+
+string str0  "done"
+
+global live  4 bytes
+global nextId  4 bytes
+
+function Counted__ctor$v   ; Counted::Counted
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = global nextId
+    %3 = load [%2] :4
+    %4 = local #0
+    %5 = load [%4] :8
+    %6 = field %5 +0
+            store [%6] <- %3 :4
+    %7 = global nextId
+    %8 = load [%7] :4
+    %9 = const 1
+    %10 = add %8, %9
+    %11 = global nextId
+            store [%11] <- %10 :4
+    %12 = global live
+    %13 = load [%12] :4
+    %14 = const 1
+    %15 = add %13, %14
+    %16 = global live
+            store [%16] <- %15 :4
+            ret
+
+function Counted__dtor   ; Counted::~Counted
+  #0 this  8 bytes  (param)
+    %0 = global live
+    %1 = load [%0] :4
+    %2 = const 1
+    %3 = sub %1, %2
+    %4 = global live
+            store [%4] <- %3 :4
+            ret
+
+function Wide__ctor$v   ; Wide::Wide
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = const 1
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+            store [%5] <- %2 :4
+    %6 = const 2
+    %7 = local #0
+    %8 = load [%7] :8
+    %9 = field %8 +4
+            store [%9] <- %6 :4
+    %10 = const 3
+    %11 = local #0
+    %12 = load [%11] :8
+    %13 = field %12 +8
+            store [%13] <- %10 :4
+    %14 = global live
+    %15 = load [%14] :4
+    %16 = const 1
+    %17 = add %15, %16
+    %18 = global live
+            store [%18] <- %17 :4
+            ret
+
+function Wide__dtor   ; Wide::~Wide
+  #0 this  8 bytes  (param)
+    %0 = global live
+    %1 = load [%0] :4
+    %2 = const 1
+    %3 = sub %1, %2
+    %4 = global live
+            store [%4] <- %3 :4
+            ret
+
+function Noisy__ctor$v   ; Noisy::Noisy
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = global nextId
+    %3 = load [%2] :4
+    %4 = local #0
+    %5 = load [%4] :8
+    %6 = field %5 +0
+            store [%6] <- %3 :4
+    %7 = global nextId
+    %8 = load [%7] :4
+    %9 = const 1
+    %10 = add %8, %9
+    %11 = global nextId
+            store [%11] <- %10 :4
+            ret
+
+function Noisy__dtor   ; Noisy::~Noisy
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +0
+    %3 = load [%2] :4
+            call print_int(%3)
+            ret
+
+function main
+  #0 s  8 bytes
+  #1 v  8 bytes
+  #2 i  4 bytes
+  #3 a  8 bytes
+  #4 $i  8 bytes
+  #5 $i  8 bytes
+  #6 k  4 bytes
+  #7 w  8 bytes
+  #8 $i  8 bytes
+  #9 $i  8 bytes
+  #10 n  8 bytes
+  #11 $i  8 bytes
+  #12 $i  8 bytes
+  #13 none  8 bytes
+  #14 $i  8 bytes
+  #15 $i  8 bytes
+  #16 nil  8 bytes
+  #17 $i  8 bytes
+  #18 total  4 bytes
+  #19 i  4 bytes
+  #20 t  8 bytes
+            call __global_init()
+    %0 = const 16
+    %1 = const 16
+    %2 = alloc %1 [%0]
+    %3 = local #0
+            store [%3] <- %2 :8
+    %4 = const 65
+    %5 = iresize %4 :1 signed
+    %6 = local #0
+    %7 = load [%6] :8
+    %8 = const 0
+    %9 = add %7, %8
+            store [%9] <- %5 :1
+    %10 = const 90
+    %11 = iresize %10 :1 signed
+    %12 = local #0
+    %13 = load [%12] :8
+    %14 = const 15
+    %15 = add %13, %14
+            store [%15] <- %11 :1
+    %16 = local #0
+    %17 = load [%16] :8
+    %18 = const 0
+    %19 = add %17, %18
+    %20 = load [%19] :1
+    %21 = iresize %20 :4 signed
+            call print_int(%21)
+    %22 = local #0
+    %23 = load [%22] :8
+    %24 = const 15
+    %25 = add %23, %24
+    %26 = load [%25] :1
+    %27 = iresize %26 :4 signed
+            call print_int(%27)
+            call print_line()
+    %28 = const 4
+    %29 = const 16
+    %30 = alloc %29 [%28]
+    %31 = local #1
+            store [%31] <- %30 :8
+    %32 = const 0
+    %33 = local #2
+            store [%33] <- %32 :4
+    L0:
+    %34 = local #2
+    %35 = load [%34] :4
+    %36 = const 4
+    %37 = cmp.lt %35, %36
+            brz %37 L2
+    %38 = local #2
+    %39 = load [%38] :4
+    %40 = local #2
+    %41 = load [%40] :4
+    %42 = mul %39, %41
+    %43 = local #1
+    %44 = load [%43] :8
+    %45 = local #2
+    %46 = load [%45] :4
+    %47 = const 4
+    %48 = mul %46, %47
+    %49 = add %44, %48
+            store [%49] <- %42 :4
+    L1:
+    %50 = local #2
+    %51 = load [%50] :4
+    %52 = const 1
+    %53 = add %51, %52
+    %54 = local #2
+            store [%54] <- %53 :4
+            jump L0
+    L2:
+    %55 = local #1
+    %56 = load [%55] :8
+    %57 = const 3
+    %58 = const 4
+    %59 = mul %57, %58
+    %60 = add %56, %59
+    %61 = load [%60] :4
+            call print_int(%61)
+            call print_line()
+    %62 = local #1
+    %63 = load [%62] :8
+            free %63 []
+    %64 = local #0
+    %65 = load [%64] :8
+            free %65 []
+    %66 = const 8
+    %67 = const 32
+    %68 = alloc %67 [%66]
+    %69 = local #4
+    %70 = const 0
+            store [%69] <- %70 :8
+    L3:
+    %71 = local #4
+    %72 = load [%71] :8
+    %73 = cmp.lt %72, %66
+            brz %73 L4
+    %74 = const 4
+    %75 = mul %72, %74
+    %76 = add %68, %75
+            call Counted__ctor$v(%76)
+    %77 = const 1
+    %78 = add %72, %77
+    %79 = local #4
+            store [%79] <- %78 :8
+            jump L3
+    L4:
+    %80 = local #3
+            store [%80] <- %68 :8
+    %81 = global live
+    %82 = load [%81] :4
+            call print_int(%82)
+            call print_line()
+    %83 = local #3
+    %84 = load [%83] :8
+    %85 = arraycount %84
+    %86 = local #5
+            store [%86] <- %85 :8
+    L5:
+    %87 = local #5
+    %88 = load [%87] :8
+            brz %88 L6
+    %89 = const 1
+    %90 = sub %88, %89
+    %91 = local #5
+            store [%91] <- %90 :8
+    %92 = const 4
+    %93 = mul %90, %92
+    %94 = add %84, %93
+            call Counted__dtor(%94)
+            jump L5
+    L6:
+            free %84 []
+    %95 = global live
+    %96 = load [%95] :4
+            call print_int(%96)
+            call print_line()
+    %97 = const 0
+    %98 = global nextId
+            store [%98] <- %97 :4
+    %99 = const 5
+    %100 = local #6
+            store [%100] <- %99 :4
+    %101 = local #6
+    %102 = load [%101] :4
+    %103 = const 12
+    %104 = mul %102, %103
+    %105 = alloc %104 [%102]
+    %106 = local #8
+    %107 = const 0
+            store [%106] <- %107 :8
+    L7:
+    %108 = local #8
+    %109 = load [%108] :8
+    %110 = cmp.lt %109, %102
+            brz %110 L8
+    %111 = const 12
+    %112 = mul %109, %111
+    %113 = add %105, %112
+            call Wide__ctor$v(%113)
+    %114 = const 1
+    %115 = add %109, %114
+    %116 = local #8
+            store [%116] <- %115 :8
+            jump L7
+    L8:
+    %117 = local #7
+            store [%117] <- %105 :8
+    %118 = global live
+    %119 = load [%118] :4
+            call print_int(%119)
+    %120 = local #7
+    %121 = load [%120] :8
+    %122 = const 4
+    %123 = const 12
+    %124 = mul %122, %123
+    %125 = add %121, %124
+    %126 = field %125 +8
+    %127 = load [%126] :4
+            call print_int(%127)
+            call print_line()
+    %128 = local #7
+    %129 = load [%128] :8
+    %130 = arraycount %129
+    %131 = local #9
+            store [%131] <- %130 :8
+    L9:
+    %132 = local #9
+    %133 = load [%132] :8
+            brz %133 L10
+    %134 = const 1
+    %135 = sub %133, %134
+    %136 = local #9
+            store [%136] <- %135 :8
+    %137 = const 12
+    %138 = mul %135, %137
+    %139 = add %129, %138
+            call Wide__dtor(%139)
+            jump L9
+    L10:
+            free %129 []
+    %140 = global live
+    %141 = load [%140] :4
+            call print_int(%141)
+            call print_line()
+    %142 = const 0
+    %143 = global nextId
+            store [%143] <- %142 :4
+    %144 = const 4
+    %145 = const 16
+    %146 = alloc %145 [%144]
+    %147 = local #11
+    %148 = const 0
+            store [%147] <- %148 :8
+    L11:
+    %149 = local #11
+    %150 = load [%149] :8
+    %151 = cmp.lt %150, %144
+            brz %151 L12
+    %152 = const 4
+    %153 = mul %150, %152
+    %154 = add %146, %153
+            call Noisy__ctor$v(%154)
+    %155 = const 1
+    %156 = add %150, %155
+    %157 = local #11
+            store [%157] <- %156 :8
+            jump L11
+    L12:
+    %158 = local #10
+            store [%158] <- %146 :8
+    %159 = local #10
+    %160 = load [%159] :8
+    %161 = arraycount %160
+    %162 = local #12
+            store [%162] <- %161 :8
+    L13:
+    %163 = local #12
+    %164 = load [%163] :8
+            brz %164 L14
+    %165 = const 1
+    %166 = sub %164, %165
+    %167 = local #12
+            store [%167] <- %166 :8
+    %168 = const 4
+    %169 = mul %166, %168
+    %170 = add %160, %169
+            call Noisy__dtor(%170)
+            jump L13
+    L14:
+            free %160 []
+            call print_line()
+    %171 = const 0
+    %172 = const 0
+    %173 = alloc %172 [%171]
+    %174 = local #14
+    %175 = const 0
+            store [%174] <- %175 :8
+    L15:
+    %176 = local #14
+    %177 = load [%176] :8
+    %178 = cmp.lt %177, %171
+            brz %178 L16
+    %179 = const 4
+    %180 = mul %177, %179
+    %181 = add %173, %180
+            call Counted__ctor$v(%181)
+    %182 = const 1
+    %183 = add %177, %182
+    %184 = local #14
+            store [%184] <- %183 :8
+            jump L15
+    L16:
+    %185 = local #13
+            store [%185] <- %173 :8
+    %186 = global live
+    %187 = load [%186] :4
+            call print_int(%187)
+    %188 = local #13
+    %189 = load [%188] :8
+    %190 = arraycount %189
+    %191 = local #15
+            store [%191] <- %190 :8
+    L17:
+    %192 = local #15
+    %193 = load [%192] :8
+            brz %193 L18
+    %194 = const 1
+    %195 = sub %193, %194
+    %196 = local #15
+            store [%196] <- %195 :8
+    %197 = const 4
+    %198 = mul %195, %197
+    %199 = add %189, %198
+            call Counted__dtor(%199)
+            jump L17
+    L18:
+            free %189 []
+    %200 = global live
+    %201 = load [%200] :4
+            call print_int(%201)
+            call print_line()
+    %202 = const 0
+    %203 = local #16
+            store [%203] <- %202 :8
+    %204 = local #16
+    %205 = load [%204] :8
+    %206 = arraycount %205
+    %207 = local #17
+            store [%207] <- %206 :8
+    L19:
+    %208 = local #17
+    %209 = load [%208] :8
+            brz %209 L20
+    %210 = const 1
+    %211 = sub %209, %210
+    %212 = local #17
+            store [%212] <- %211 :8
+    %213 = const 4
+    %214 = mul %211, %213
+    %215 = add %205, %214
+            call Counted__dtor(%215)
+            jump L19
+    L20:
+            free %205 []
+    %216 = const 0
+    %217 = local #18
+            store [%217] <- %216 :4
+    %218 = const 0
+    %219 = local #19
+            store [%219] <- %218 :4
+    L21:
+    %220 = local #19
+    %221 = load [%220] :4
+    %222 = const 500
+    %223 = cmp.lt %221, %222
+            brz %223 L23
+    %224 = const 4
+    %225 = const 16
+    %226 = alloc %225 [%224]
+    %227 = local #20
+            store [%227] <- %226 :8
+    %228 = local #19
+    %229 = load [%228] :4
+    %230 = local #20
+    %231 = load [%230] :8
+    %232 = const 3
+    %233 = const 4
+    %234 = mul %232, %233
+    %235 = add %231, %234
+            store [%235] <- %229 :4
+    %236 = local #18
+    %237 = load [%236] :4
+    %238 = local #20
+    %239 = load [%238] :8
+    %240 = const 3
+    %241 = const 4
+    %242 = mul %240, %241
+    %243 = add %239, %242
+    %244 = load [%243] :4
+    %245 = add %237, %244
+    %246 = local #18
+            store [%246] <- %245 :4
+    %247 = local #20
+    %248 = load [%247] :8
+            free %248 []
+    L22:
+    %249 = local #19
+    %250 = load [%249] :4
+    %251 = const 1
+    %252 = add %250, %251
+    %253 = local #19
+            store [%253] <- %252 :4
+            jump L21
+    L23:
+    %254 = local #18
+    %255 = load [%254] :4
+            call print_int(%255)
+            call print_line()
+    %256 = straddr str0
+            call print_string(%256)
+            call print_line()
+    %257 = const 0
+            ret %257
+
+function __global_init
+    %0 = global live
+    %1 = const 0
+            store [%0] <- %1 :4
+    %2 = global nextId
+    %3 = const 0
+            store [%2] <- %3 :4
+            ret
+
+function __global_fini
+            ret

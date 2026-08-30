@@ -95,10 +95,18 @@ enum OpCode {
     OP_ReturnVoid,
 
     // --- free store ---
-    OP_Alloc,           // push the address of imm fresh bytes
-    OP_Free,            // pop an address and release it
+    OP_Alloc,           // push the address of imm fresh bytes; b = 1 for new[]
+    OP_Free,            // pop an address and release it; b = 1 for delete[]
 
     OP_Halt,
+
+    // Appended here rather than beside OP_Alloc so that no existing opcode's
+    // value moves: a .cxb written by an earlier build still means what it
+    // meant, and the malformed images in tests/images stay the exact bytes
+    // they were recorded as.
+    OP_AllocN,          // pop a size (and, when b = 1, an element count first),
+                        // push the address
+    OP_ArrayCount,      // pop an address from new[], push its element count
 
     // Not an instruction: the count, so a byte read out of a file can be
     // checked against the set of opcodes that actually exist.

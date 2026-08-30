@@ -1936,15 +1936,39 @@ cc::Type *SemanticAnalyzer::analyzeExprImpl(cc::Expr *e, bool &isLValue) {
     cxx::NewExpr *ne = dynamic_cast<cxx::NewExpr*>(e);
     if (ne) {
         checkTypeIsKnown(ne->allocType, ne, "'new' expression");
+        if (ne->count) {
+            bool lv = false;
+            cc::Type *nt = analyzeExpr(ne->count, lv);
+            cc::BuiltinKind nk;
+            if (nt && (!arithmeticKind(nt, nk) || !cc::builtinIsInteger(nk))) {
+                error(ne, "the element count of 'new[]' must be an integer, not "
+                          + describe(nt));
+            }
+        }
         for (std::size_t i = 0; i < ne->args.size(); ++i) {
             bool lv = false;
             analyzeExpr(ne->args[i], lv);
         }
         // new allocates AND constructs, so the arguments must match a ctor.
         cxx::ClassType *nct = dynamic_cast<cxx::ClassType*>(ne->allocType);
-        if (nct) ne->resolvedCtor = selectConstructor(findClass(nct->className),
-                                                     ne->args, ne, "'new'");
-        else if (!ne->args.empty()) {
+        if (ne->count) {
+            // Every element gets the same constructor and there is nowhere to
+            // write arguments for each, so the array form takes none and the
+            // elements are default-constructed -- as in C++.
+            if (!ne->args.empty()) {
+                error(ne, "'new " + describe(ne->allocType)
+                          + "[]' cannot take constructor arguments; its elements are"
+                            " default-constructed");
+            }
+            if (nct) {
+                std::vector<cc::Expr*> none;
+                ne->resolvedCtor = selectConstructor(findClass(nct->className), none, ne,
+                                                     "'new " + nct->className + "[]'");
+            }
+        } else if (nct) {
+            ne->resolvedCtor = selectConstructor(findClass(nct->className),
+                                                 ne->args, ne, "'new'");
+        } else if (!ne->args.empty()) {
             error(ne, "'new " + describe(ne->allocType) + "' cannot take constructor arguments");
         }
         // new T yields T*, and the T belongs to the AST node, so it is copied
@@ -1957,7 +1981,8 @@ cc::Type *SemanticAnalyzer::analyzeExprImpl(cc::Expr *e, bool &isLValue) {
         cc::Type *t = analyzeExpr(de->operand, lv);
         cc::PointerType *pt = t ? dynamic_cast<cc::PointerType*>(t) : 0;
         if (t && !pt) {
-            error(de, "'delete' applied to " + describe(t) + ", which is not a pointer");
+            error(de, std::string(de->isArray ? "'delete[]'" : "'delete'") + " applied to "
+                      + describe(t) + ", which is not a pointer");
         } else if (pt) {
             // Only a virtual destructor is found through the vtable.
             cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(pt->base);

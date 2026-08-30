@@ -1,0 +1,2 @@
+allocated
+114_trap_delete_array_mismatch.cpp: runtime error: delete applied to a pointer from 'new[]'; use delete[]

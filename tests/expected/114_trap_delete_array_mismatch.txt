@@ -1,0 +1,110 @@
+Function print_string returns void
+  param:
+    Var s : pointer to char
+Function print_line returns void
+Class C
+  Field public n : int
+  Constructor public C::C
+    Block
+      ExprStmt
+        Binary =
+          n
+          1
+  Destructor public C::~C
+    Block
+Function main returns int
+  Block
+    Var a : pointer to class C
+      init:
+        New[] class C
+          4
+    ExprStmt
+      Call
+        print_string
+        arg 0:
+          "allocated"
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Delete
+        a
+    ExprStmt
+      Call
+        print_string
+        arg 0:
+          "unreachable"
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+class C  size=4 align=4
+    +0  n (4 bytes)
+    construct: field n -> C() body
+    destroy:   ~C() body -> field n
+
+string str0  "allocated"
+string str1  "unreachable"
+
+function C__ctor$v   ; C::C
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = const 1
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+            store [%5] <- %2 :4
+            ret
+
+function C__dtor   ; C::~C
+  #0 this  8 bytes  (param)
+            ret
+
+function main
+  #0 a  8 bytes
+  #1 $i  8 bytes
+            call __global_init()
+    %0 = const 4
+    %1 = const 16
+    %2 = alloc %1 [%0]
+    %3 = local #1
+    %4 = const 0
+            store [%3] <- %4 :8
+    L0:
+    %5 = local #1
+    %6 = load [%5] :8
+    %7 = cmp.lt %6, %0
+            brz %7 L1
+    %8 = const 4
+    %9 = mul %6, %8
+    %10 = add %2, %9
+            call C__ctor$v(%10)
+    %11 = const 1
+    %12 = add %6, %11
+    %13 = local #1
+            store [%13] <- %12 :8
+            jump L0
+    L1:
+    %14 = local #0
+            store [%14] <- %2 :8
+    %15 = straddr str0
+            call print_string(%15)
+            call print_line()
+    %16 = local #0
+    %17 = load [%16] :8
+            call C__dtor(%17)
+            free %17
+    %18 = straddr str1
+            call print_string(%18)
+            call print_line()
+    %19 = const 0
+            ret %19
+
+function __global_init
+            ret
+
+function __global_fini
+            ret

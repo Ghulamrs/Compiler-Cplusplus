@@ -251,9 +251,31 @@ bool Lowering::lowerLayerValue(cc::Expr *e, IRReg &out) {
     // Allocate, then construct -- two steps, in the order the language says.
     if (NewExpr *ne = dynamic_cast<NewExpr*>(e)) {
         ClassDecl *cd = classOfType(ne->allocType);
-        const int size = cd ? layout.sizeOf(ne->allocType) : layout.sizeOf(ne->allocType);
-        out = fn->emitAlloc(size > 0 ? size : Layout::IntSize, e->line);
-        if (cd) emitConstruct(cd, out, ne->args, e->line, ne->resolvedCtor);
+        int elemSize = layout.sizeOf(ne->allocType);
+        if (elemSize <= 0) elemSize = Layout::IntSize;
+
+        if (!ne->count) {
+            out = fn->emitAlloc(elemSize, e->line);
+            if (cd) emitConstruct(cd, out, ne->args, e->line, ne->resolvedCtor);
+            return true;
+        }
+
+        // new T[n].  A literal bound is multiplied out here -- there is no
+        // reason to compute at run time a product the compiler already knows --
+        // and anything else is multiplied at run time, because the bound of a
+        // heap array is a value like any other.  Either way the count ends up
+        // in a register, because the constructor loop needs it.
+        cc::NumberExpr *lit = dynamic_cast<cc::NumberExpr*>(ne->count);
+        IRReg count, bytes;
+        if (lit && lit->value >= 0) {
+            count = fn->emitConst(lit->value, e->line);
+            bytes = fn->emitConst(lit->value * elemSize, e->line);
+        } else {
+            count = lowerValue(ne->count);
+            bytes = fn->emitBinary(IR_Mul, count, fn->emitConst(elemSize, e->line), e->line);
+        }
+        out = fn->emitAllocN(bytes, count, e->line);
+        if (cd) emitHeapArrayConstruct(cd, out, count, elemSize, e->line);
         return true;
     }
 
@@ -262,6 +284,26 @@ bool Lowering::lowerLayerValue(cc::Expr *e, IRReg &out) {
     if (DeleteExpr *de = dynamic_cast<DeleteExpr*>(e)) {
         const IRReg ptr = lowerValue(de->operand);
         ClassDecl *cd = classOfType(typeOf(de->operand));
+        if (de->isArray) {
+            // How many elements?  Not in the type -- the pointer is a T* -- and
+            // not in a cookie either: new[] wrote the count into the block's
+            // header, in the field the free list only uses while the block is
+            // free.  A real ABI has to put a cookie in front of the payload
+            // because free() cannot be asked anything; this machine can be
+            // asked.
+            if (cd) {
+                int elemSize = Layout::PointerSize;
+                if (cc::PointerType *pt = dynamic_cast<cc::PointerType*>(typeOf(de->operand))) {
+                    elemSize = layout.sizeOf(pt->base);
+                }
+                if (elemSize <= 0) elemSize = Layout::IntSize;
+                emitHeapArrayDestruct(cd, ptr, fn->emitArrayCount(ptr, e->line),
+                                      elemSize, e->line);
+            }
+            fn->emitFree(ptr, e->line, true);
+            out = ptr;
+            return true;
+        }
         if (cd) emitDestruct(cd, ptr, e->line);
         fn->emitFree(ptr, e->line);
         out = ptr;              // delete has no value; reusing ptr emits nothing
@@ -433,6 +475,53 @@ ClassDecl *Lowering::elementClassOf(cc::Type *t, long &count) const {
     }
     ClassType *ct = dynamic_cast<ClassType*>(t);
     return ct ? findClass(ct->className) : 0;
+}
+
+// The same two runs as emitArrayConstruct/emitArrayDestruct below, but as
+// loops: a heap array's length is not known until the program says it, so the
+// run cannot be unrolled -- and should not be even for `new C[1000]`, where
+// unrolling would emit a thousand calls.
+void Lowering::emitHeapArrayConstruct(ClassDecl *cd, IRReg base, IRReg count,
+                                      int elemSize, int line) {
+    const int i = declareLocal("$i", 8, false);
+    const IRReg slot = fn->emitLocalAddr(i, line);
+    fn->emitStore(slot, fn->emitConst(0, line), 8, false, line);
+
+    const int top = fn->newLabel();
+    const int end = fn->newLabel();
+    fn->emitLabel(top);
+    const IRReg iv = fn->emitLoad(fn->emitLocalAddr(i, line), 8, false, line);
+    fn->emitBranchZero(fn->emitBinary(IR_CmpLT, iv, count, line), end, line);
+
+    const IRReg off = fn->emitBinary(IR_Mul, iv, fn->emitConst(elemSize, line), line);
+    std::vector<cc::Expr*> none;
+    emitConstruct(cd, fn->emitBinary(IR_Add, base, off, line), none, line);
+
+    const IRReg next = fn->emitBinary(IR_Add, iv, fn->emitConst(1, line), line);
+    fn->emitStore(fn->emitLocalAddr(i, line), next, 8, false, line);
+    fn->emitJump(top, line);
+    fn->emitLabel(end);
+}
+
+// Backwards, for the same reason the unrolled one runs backwards: the last
+// element built is the first destroyed.
+void Lowering::emitHeapArrayDestruct(ClassDecl *cd, IRReg base, IRReg count,
+                                     int elemSize, int line) {
+    const int i = declareLocal("$i", 8, false);
+    fn->emitStore(fn->emitLocalAddr(i, line), count, 8, false, line);
+
+    const int top = fn->newLabel();
+    const int end = fn->newLabel();
+    fn->emitLabel(top);
+    const IRReg iv = fn->emitLoad(fn->emitLocalAddr(i, line), 8, false, line);
+    fn->emitBranchZero(iv, end, line);
+
+    const IRReg prev = fn->emitBinary(IR_Sub, iv, fn->emitConst(1, line), line);
+    fn->emitStore(fn->emitLocalAddr(i, line), prev, 8, false, line);
+    const IRReg off = fn->emitBinary(IR_Mul, prev, fn->emitConst(elemSize, line), line);
+    emitDestruct(cd, fn->emitBinary(IR_Add, base, off, line), line, true);
+    fn->emitJump(top, line);
+    fn->emitLabel(end);
 }
 
 // Element 0 first, exactly as a single object is built before the next one.

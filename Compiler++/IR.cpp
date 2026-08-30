@@ -64,6 +64,7 @@ const char *irOpName(IROp op) {
     case IR_CallIndirect: return "call.ind";
     case IR_VCallTarget:  return "vtable";
     case IR_Alloc:        return "alloc";
+    case IR_ArrayCount:   return "arraycount";
     case IR_Free:         return "free";
     case IR_Label:        return "label";
     case IR_Jump:         return "jump";
@@ -334,9 +335,29 @@ IRReg IRFunction::emitAlloc(long bytes, int line) {
     return i.dest;
 }
 
-void IRFunction::emitFree(IRReg ptr, int line) {
+IRReg IRFunction::emitAllocN(IRReg bytes, IRReg count, int line) {
+    IRInstr i(IR_Alloc);
+    i.dest = newReg();
+    i.a = bytes;                // a register here means "the size is this"
+    i.b = count;                // and a register here means "and it is new[]"
+    i.line = line;
+    push(i);
+    return i.dest;
+}
+
+IRReg IRFunction::emitArrayCount(IRReg ptr, int line) {
+    IRInstr i(IR_ArrayCount);
+    i.dest = newReg();
+    i.a = ptr;
+    i.line = line;
+    push(i);
+    return i.dest;
+}
+
+void IRFunction::emitFree(IRReg ptr, int line, bool isArray) {
     IRInstr i(IR_Free);
     i.a = ptr;
+    i.isArray = isArray;
     i.line = line;
     push(i);
 }
@@ -412,8 +433,14 @@ void IRModule::printInstr(const IRInstr &i) {
 
     switch (i.op) {
     case IR_Const:
-    case IR_Alloc:
         std::cout << " " << i.imm;
+        break;
+    case IR_Alloc:
+        // The size is a constant or a register, and a count beside it says the
+        // instruction is a new[]; both show in the dump.
+        if (i.a != IR_NoReg) std::cout << " " << regName(i.a);
+        else                 std::cout << " " << i.imm;
+        if (i.b != IR_NoReg) std::cout << " [" << regName(i.b) << "]";
         break;
     case IR_FConst:
         std::cout << " " << i.fimm;
@@ -479,6 +506,7 @@ void IRModule::printInstr(const IRInstr &i) {
         break;
     case IR_Free:
         std::cout << " " << regName(i.a);
+        if (i.isArray) std::cout << " []";
         break;
     default:
         if (i.a != IR_NoReg) std::cout << " " << regName(i.a);

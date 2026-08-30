@@ -186,16 +186,23 @@ struct TempExpr : public cc::Expr {
 
 struct NewExpr : public cc::Expr {
     Type *allocType;
+    // new T[n]: the count, owned, and 0 for the single-object form.  It is an
+    // EXPRESSION, not a constant -- the bound of a heap array is a value the
+    // program computes, which is the whole reason to want one.
+    cc::Expr *count;
     std::vector<cc::Expr*> args;
     cc::Function *resolvedCtor;         // chosen by the semantic pass; not owned
-    NewExpr(Type *t) : allocType(t), resolvedCtor(0) {}
+    NewExpr(Type *t) : allocType(t), count(0), resolvedCtor(0) {}
     ~NewExpr();
     void print(int indent);
 };
 
 struct DeleteExpr : public cc::Expr {
     cc::Expr *operand;
-    DeleteExpr(cc::Expr *e) : operand(e) {}
+    // delete[] -- it must match the new that made the block, and here that is
+    // checked rather than assumed: the allocator records which form was used.
+    bool isArray;
+    DeleteExpr(cc::Expr *e) : operand(e), isArray(false) {}
     ~DeleteExpr() { delete operand; }
     void print(int indent);
 };

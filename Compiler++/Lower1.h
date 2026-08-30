@@ -111,6 +111,12 @@ private:
     void emitDestruct(ClassDecl *cd, IRReg objectAddr, int line,
                       bool concreteType = false);
     void emitVPtrStore(ClassDecl *cd, IRReg objectAddr, int line);
+    // A heap array's length is a VALUE, so these are real loops rather than
+    // the unrolled runs used for an array whose bound the compiler knows.
+    void emitHeapArrayConstruct(ClassDecl *cd, IRReg base, IRReg count,
+                                int elemSize, int line);
+    void emitHeapArrayDestruct(ClassDecl *cd, IRReg base, IRReg count,
+                               int elemSize, int line);
     bool classHasDestructor(ClassDecl *cd) const;
     // A field that IS an object, as opposed to a pointer or reference to one.
     ClassDecl *classOfMemberType(cc::Type *t) const;

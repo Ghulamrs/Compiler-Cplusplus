@@ -130,7 +130,16 @@ vmword VM::freeListLimit() const {
 // A block carries its size, so `delete` knows how much it is releasing, and a
 // next pointer, so a released block can be reused.  First fit, because the
 // simplest allocator that reuses memory is enough to run a loop.
-vmword VM::allocate(vmword bytes) {
+// The block's `next` field is only a free-list link while the block is FREE.
+// While it is allocated it is spare, so what made the block lives there: 0 for
+// plain new, and the element count plus one for new[].  One word, no cookie in
+// front of the payload, and every address the program sees is still the address
+// the allocator returned.
+//
+// The block's SIZE cannot stand in for the count: a block is rounded up to a
+// multiple of eight, so five four-byte elements come back as six.
+vmword VM::allocate(vmword bytes, vmword arrayCount) {
+    const vmword mark = arrayCount < 0 ? 0 : arrayCount + 1;
     if (bytes <= 0) bytes = 1;
     // Round up AFTER the size is known to fit, or the rounding itself wraps.
     if (bytes > static_cast<vmword>(mem.size())) { trap("out of heap memory"); return 0; }
@@ -146,6 +155,7 @@ vmword VM::allocate(vmword bytes) {
         if (size >= bytes) {
             if (prev) writeInt(prev + 8, 8, next);
             else      freeList = next;
+            writeInt(b + 8, 8, mark);
             return b + HeaderSize;
         }
         prev = b;
@@ -161,11 +171,59 @@ vmword VM::allocate(vmword bytes) {
     const vmword block = heapTop;
     heapTop += HeaderSize + bytes;
     writeInt(block, 8, bytes);
-    writeInt(block + 8, 8, 0);
+    writeInt(block + 8, 8, mark);
     return block + HeaderSize;
 }
 
-void VM::release(vmword addr) {
+// Walking from the bottom of the heap: every block says how long it is, so the
+// starts are exactly the addresses this walk lands on.
+bool VM::isBlockStart(vmword block) {
+    vmword walk = heapBase;
+    vmword steppedOver = 0;
+    const vmword guard = freeListLimit();
+    while (walk < heapTop) {
+        if (++steppedOver > guard) { trap("heap is corrupt"); return false; }
+        if (walk == block) return true;
+        const vmword size = readInt(walk, 8, true);
+        if (size <= 0) { trap("heap is corrupt"); return false; }
+        walk += HeaderSize + size;
+    }
+    return false;
+}
+
+bool VM::isOnFreeList(vmword block) {
+    vmword walked = 0;
+    const vmword limit = freeListLimit();
+    for (vmword b = freeList; b != 0; b = readInt(b + 8, 8, true)) {
+        if (++walked > limit) { trap("heap free list is corrupt"); return false; }
+        if (b == block) return true;
+    }
+    return false;
+}
+
+vmword VM::arrayCount(vmword addr) {
+    if (addr == 0) return 0;                    // delete[] of null: nothing to do
+    const vmword block = addr - HeaderSize;
+    if (block < heapBase || block >= heapTop || !isBlockStart(block)) {
+        trap("delete[] of a pointer that did not come from new[]");
+        return 0;
+    }
+    // Asked BEFORE the mark is read: releasing a block overwrites the mark with
+    // a free-list link, so a second delete[] would otherwise be reported as a
+    // form mismatch rather than as the double delete it is.
+    if (isOnFreeList(block)) {
+        trap("delete[] of a pointer that was already deleted");
+        return 0;
+    }
+    const vmword mark = readInt(block + 8, 8, true);
+    if (mark <= 0) {
+        trap("delete[] applied to a pointer from plain 'new'");
+        return 0;
+    }
+    return mark - 1;
+}
+
+void VM::release(vmword addr, bool isArray) {
     if (addr == 0) return;                      // deleting null is harmless
     const vmword block = addr - HeaderSize;
     if (block < heapBase || block >= heapTop) {
@@ -179,19 +237,11 @@ void VM::release(vmword addr) {
     // bottom -- each one says how long it is -- and only a block START counts.
     // Linear in the number of blocks, which is what a first-fit allocator with
     // a single free list already costs.
-    bool isBlock = false;
-    vmword walk = heapBase;
-    vmword steppedOver = 0;
-    const vmword blockGuard = freeListLimit();
-    while (walk < heapTop) {
-        if (++steppedOver > blockGuard) { trap("heap is corrupt"); return; }
-        if (walk == block) { isBlock = true; break; }
-        const vmword size = readInt(walk, 8, true);
-        if (size <= 0) { trap("heap is corrupt"); return; }
-        walk += HeaderSize + size;
-    }
-    if (!isBlock) {
-        trap("delete of a pointer that did not come from new");
+    if (!isBlockStart(block)) {
+        if (!failed()) {
+            trap(isArray ? "delete[] of a pointer that did not come from new[]"
+                         : "delete of a pointer that did not come from new");
+        }
         return;
     }
     // Deleting a block that is already free would link it to ITSELF, and the
@@ -199,14 +249,26 @@ void VM::release(vmword addr) {
     // round that loop forever -- inside allocate(), where the interpreter's
     // step limit does not reach.  A double delete is a fault in the program,
     // so it is reported as one instead of hanging the machine.
-    vmword walked = 0;
-    const vmword limit = freeListLimit();
-    for (vmword b = freeList; b != 0; b = readInt(b + 8, 8, true)) {
-        if (++walked > limit) { trap("heap free list is corrupt"); return; }
-        if (b == block) {
-            trap("delete of a pointer that was already deleted");
-            return;
+    //
+    // Asked before the form is read, because releasing a block overwrites the
+    // form with a free-list link: a second delete[] would otherwise be
+    // reported as a mismatch rather than as the double delete it is.
+    if (isOnFreeList(block)) {
+        if (!failed()) {
+            trap(isArray ? "delete[] of a pointer that was already deleted"
+                         : "delete of a pointer that was already deleted");
         }
+        return;
+    }
+    // The two forms are not interchangeable: delete[] runs a destructor for
+    // every element and delete runs one.  The language leaves the mismatch
+    // undefined because a real allocator has nowhere to record which was used.
+    // This one does, so it is an error rather than a mystery.
+    const vmword wasArray = readInt(block + 8, 8, true);
+    if ((wasArray != 0) != isArray) {
+        trap(isArray ? "delete[] applied to a pointer from plain 'new'"
+                     : "delete applied to a pointer from 'new[]'; use delete[]");
+        return;
     }
     writeInt(block + 8, 8, freeList);
     freeList = block;
@@ -683,8 +745,22 @@ vmword VM::run(const Image &image, bool &ok) {
             break;
         }
 
-        case OP_Alloc: push(allocate(in.imm)); break;
-        case OP_Free:  release(pop().i); break;
+        case OP_Alloc:  push(allocate(in.imm, -1)); break;
+        case OP_AllocN: {
+            const vmword bytes = pop().i;
+            vmword count = -1;
+            if (in.b != 0) {
+                count = pop().i;
+                // new T[-1] is not a mistake the language catches for you.
+                // Here the size is about to be a negative number of bytes, so
+                // it is caught before it becomes one.
+                if (count < 0) { trap("negative element count in 'new[]'"); break; }
+            }
+            push(allocate(bytes, count));
+            break;
+        }
+        case OP_ArrayCount: push(arrayCount(pop().i)); break;
+        case OP_Free:   release(pop().i, in.b != 0); break;
         case OP_Halt:  frames.clear(); break;
 
         // Bytecode.cpp casts a byte straight to OpCode, and 195 of the 256

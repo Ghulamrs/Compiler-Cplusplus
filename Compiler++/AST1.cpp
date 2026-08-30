@@ -137,20 +137,22 @@ void TempExpr::print(int indent) {
 
 NewExpr::~NewExpr() {
     delete allocType;
+    delete count;
     for (std::size_t i = 0; i < args.size(); ++i) delete args[i];
 }
 
 void NewExpr::print(int indent) {
     printIndent(indent);
-    std::cout << "New ";
+    std::cout << (count ? "New[] " : "New ");
     if (allocType) allocType->print(0);
     else std::cout << "<none>" << std::endl;
+    if (count) count->print(indent + 1);
     for (std::size_t i = 0; i < args.size(); ++i) args[i]->print(indent + 1);
 }
 
 void DeleteExpr::print(int indent) {
     printIndent(indent);
-    std::cout << "Delete" << std::endl;
+    std::cout << (isArray ? "Delete[]" : "Delete") << std::endl;
     if (operand) operand->print(indent + 1);
 }
 
