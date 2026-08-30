@@ -1,14 +1,17 @@
-# Shell scripts must stay LF: CRLF makes them fail to run on macOS and Linux,
-# which is where run_tests.sh and run_exec.sh are actually used.
-*.sh text eol=lf
+# This project is LF everywhere -- in the repository and in the working tree,
+# on every platform.
+#
+# The reason is the test corpus, not taste.  tests/expected/ and
+# tests/expected_run/ are compared byte for byte against output the compiler
+# writes with '\n', so a checkout that converts them to CRLF makes every golden
+# file fail on the platform it was converted for.  The shell runners need LF
+# for the same reason they always did, and MSVC, MinGW, GCC and Clang all read
+# LF source without complaint -- so there is nothing left to vary per platform.
+#
+# text=auto lets Git detect binary content and leave it alone; eol=lf pins the
+# working-tree ending for everything it decides is text.
+* text=auto eol=lf
 
-# The test corpus is compared byte for byte; let Git normalise it in the repo
-# and check it out with the platform's own endings.
-*.cpp text
-*.h   text
-*.txt text
-*.cmake text
-CMakeLists.txt text
-
-# Test fixtures are exact bytes.
+# Test fixtures are exact bytes: never detected, never normalised, never
+# translated.  A single byte changed here is the whole point of the file.
 *.cxb binary
