@@ -1,0 +1,173 @@
+# Known gaps
+
+Every entry below was reproduced against a build of this tree, not read off the
+source. Each names the file and the shape of program that shows it, so a fix
+starts from a failing case rather than from a description.
+
+They are gaps, not surprises: the language this compiler accepts is a subset by
+design, and the exclusions (multiple inheritance, exceptions, templates, `goto`,
+`sizeof`, array initialiser lists) are stated in `Lexer.cpp` and reported by
+name. What follows is the list of places where the compiler accepts a program
+and then does something other than what the program says.
+
+## Closed
+
+| What | Where it was |
+|---|---|
+| A generated copy constructor suppressed the implicit default one, so `Derived a;` on a class declaring nothing became an error | `Semantic::selectConstructor`, `cxx::Lowering::emitConstruct` |
+| The generated initialiser list named bases and members that had no constructor taking one argument, rejecting code that had always compiled | `Semantic::synthesiseCopyConstructors` |
+| A class returned by value was copied with `memcpy`, so its copy constructor never ran — and for a class owning memory the caller was handed a pointer the returning frame then freed | `cc::Lowering::lowerStmt` |
+| A `.cxb` could corrupt the host heap (static-data length), segfault (`OP_MemCopy` count), abort the process (call and native argument counts), read and write past memory (floating widths), or run silently to a false success (unknown opcodes) | `VM::load`, the dispatch switch |
+| `delete` of a pointer inside a block forged a free-list header out of program data | `VM::release` |
+| `MIN / -1` and `-MIN` were undefined; on x86-64 the divide faults | `OP_Div`, `OP_Mod`, `OP_Neg` |
+| A double `delete` hung the machine past the step limit | `VM::release` |
+| Twelve golden files were CRLF while the compiler writes LF, so the suite failed on a correct compiler | `.gitattributes` |
+
+## Open
+
+### Wrong answers on correct programs
+
+**`-run` reports `main returned 0` whatever main returned.** `VM.cpp:660`. The
+value is captured, then `__global_fini` is pushed, and when that frame returns
+with `frames` empty again the result is overwritten with its own zero.
+`int main(){ return 7; }` lowers to `ret 7` and reports 0.
+
+**Unsigned integers narrower than eight bytes are sign-extended.** `CodeGen.cpp:171`
+hardcodes the sign-extend bit on every integer load, and `IRInstr` carries no
+signedness at all — only `isFloat`. `unsigned char c = 200; int x = c;` gives
+**-56**; `unsigned short s = 60000` gives **-5536**. Fixing it means threading a
+signedness flag through the IR, which is why it is still here.
+`32_types_all_builtins` misses it because its values never set the sign bit.
+
+**A class that declares no constructor never constructs its base or its
+class-typed members — but is still destroyed.** `Lower1.cpp:774`. With
+`class Inner { int v; Inner(){v=7;} }; class Outer { Inner i; };`, `Outer o;`
+leaves `o.i.v` at 0, and `~Inner` runs on an object that was never constructed.
+
+**A shadowed local is destroyed twice and the outer one never.**
+`Lower1.cpp:979` resolves a scope-exit destructor by NAME, so when a `return`
+unwinds several open blocks the innermost binding wins for all of them.
+`K a(1); { K a(2); return 0; }` runs `~K` on the inner object twice.
+
+**`(*p).f()` is devirtualised, `p->f()` is not.** `Lower1.cpp:726` clears the
+dynamic type whenever a dot-form base has a class type. That is sound for a
+named object, but `*p` has the pointee's STATIC class and an unknown dynamic
+one, so the call goes to the base's version.
+
+**A temporary is constructed and never destroyed.** `W mk(){ return W(9); }`
+called as `mk();` runs no destructor. A variable initialised from a call no
+longer makes a temporary at all, but a discarded one still does, and four of the
+six call paths never destroy their by-value argument copies either.
+
+**`a * b;` is parsed as a declaration.** `Parser1.cpp`, the declaration probe:
+when the leading identifier is not a known class it skips `*` and `&` and
+declares "this is a type", which is exactly what the `classNames` set exists to
+prevent. `int a; int b; a * b;` declares `b` as a pointer to class `a`.
+
+### Valid programs rejected
+
+**`const T&` cannot bind to an rvalue.** `Semantic.cpp:1853` and the matching
+guard on local bindings test `!isLValue` without exempting a const referent,
+though `convertible` reasons about exactly that case. `int g(const int&);
+g(3);` is rejected — the most common idiom in the language being targeted.
+Fixing it needs a temp slot in lowering as well; `lowerByValueObject` is the
+model.
+
+**An out-of-line definition loses its parameter names.** `Semantic.cpp:1373`
+copies a name from the definition only when the declaration's is empty, and the
+body is analysed against the declaration's. `class A { int f(int a); };
+int A::f(int b){ return b; }` errors on `b`.
+
+**Const-qualified pointer overloads are always ambiguous.** The exact-match test
+uses `sameType`, which ignores pointee const, so `f(int*)` and `f(const int*)`
+never reach the viable pass. `sameDeclaredType` exists and is not used here.
+
+**A `const`-qualified class return type on an out-of-line definition
+mis-parses**, and `operator int()` is rejected with "operator overloading is not
+supported" because the reserved-construct skip runs before the `operator`
+handling.
+
+### Accepted when it should not be
+
+**`A b = p;` where `p` is an `A*`.** `Semantic.cpp:288` — `classOf` silently
+strips one pointer level, so `A*` and `A` compare equal in `canConvert`. This
+also affects argument passing, returns and `==`.
+
+**`f() const` takes the vtable slot of `virtual f()`.** `Semantic.cpp:702` —
+`sameSignature` compares parameters with `sameType` and never compares the
+methods' own const-ness. `sameParams`, written for a different caller, gets both
+right; the wrong one of the two is wired into override resolution.
+
+**A function name used as a value** is accepted and typed as its return type:
+`int f(); int x = f;` compiles.
+
+**A bare-name call inside a method** uses `lookupLocal`, which searches only the
+innermost scope, so a local declared in an enclosing block does not suppress the
+rewrite to `this->name(...)` and the wrong function is called with no
+diagnostic. `Semantic.cpp:2027`.
+
+### Robustness and diagnostics
+
+**Deep expressions overflow the stack.** `Parser.h:126` caps paren and block
+nesting at 256, but nothing bounds operand-chain depth: `1+1+…` with 20,000
+terms is parsed iteratively and then segfaults in the recursive semantic pass
+and destructors. `!!!…x`, `***…p` and `a.b.c.d…` do the same.
+
+**`<<=`, `>>=` and `~` still have no named diagnostic.** The lexer splits the
+first two into two tokens, and `~` is a prefix operator so it can never reach
+the check in `parseExpression`, which runs after a complete expression.
+
+**One bad array bound costs five diagnostics** — the offending token is reported
+but not consumed. **An unterminated literal's message is built and thrown away**;
+an unterminated `/*` gets no diagnostic at all. **Warnings are silenced by the
+error cap** (`Diagnostics.cpp:34`): `capped` is set by errors, and once 20 have
+printed no warning is ever shown again.
+
+**`main.cpp` argv handling**: `-o` as the last argument becomes the input path,
+and every unrecognised token does the same, so `--help` reports "Cannot open
+input file: --help". There is no usage text.
+
+**`0779` mis-tokenises** into two numbers; an invalid octal digit is never named.
+
+**`round()` is wrong at the two `floor(x + 0.5)` edge cases** (`VM.cpp:281`):
+`round(0.49999999999999994)` gives 1, and `round(4503599627370497.0)` is one too
+large.
+
+### Design and structure
+
+**`long long` breaks the C++98 rule.** `Bytecode.h` pins the VM's word with
+`long long` (or `__int64` on MSVC), which is the right decision for a fixed
+64-bit word but takes the build from zero warnings to twelve `-Wlong-long` under
+`-pedantic`. Selecting `long` where `LONG_MAX` is already 64 bits, and falling
+back only where it is not, gives the same width with a clean build. Note also
+that the widening stops at the VM: `Token::numberValue`, `NumberExpr::value`,
+`ArrayType::count` and `IRInstr::imm` are all host `long`, so on LLP64 a literal
+is clipped before it ever becomes a word.
+
+**The overload-resolution loop is written five times** — in `findFreeOperator`,
+`findIndexOperator`, `findMemberOperator`, `selectConstructor` and
+`resolveOverload` — with subtly different exactness tests. Two of the "accepted
+when it should not be" entries above are direct consequences. One shared
+candidate-ranking routine would remove the bugs rather than fix them.
+
+**`Layout` computes a construction plan that nothing consumes.**
+`Layout.cpp` builds `constructionPlan`/`destructionPlan`, including the
+vptr-after-base-before-members ordering its header explains at length, and the
+only reader is its own `print()`. `Lower1.cpp` re-derives the same ordering by
+hand — and the hand-written copy is where the missing-constructor bug lives.
+
+**`analyzeExprImpl` is one 489-line function** with fourteen `dynamic_cast`
+dispatch arms, in a 2,200-line file. Natural seams: type rules and conversions,
+class and member machinery, declarations and statements, expressions.
+
+**Name mangling lives in `IR.cpp`** and `dynamic_cast`s to `cxx::` types, which
+is the one place the C++ layer reaches into the C-level IR. The IR's own data
+model is clean; moving `mangle*`/`typeCode` to their own file would let `IR.h`
+and `IR.cpp` drop both AST includes.
+
+**Call and constructor arguments are analysed twice**, so every diagnostic
+inside them is reported twice.
+
+**`Expr::resolvedType` outlives its owner.** It points into the analyzer's
+`ownedTypes`, which is freed in `main` before the AST is deleted. Nothing reads
+it in that window today, and nothing enforces the ordering either.
