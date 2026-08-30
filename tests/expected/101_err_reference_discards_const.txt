@@ -1,0 +1,31 @@
+101_err_reference_discards_const.cpp:9:8: error: cannot bind 'int& bad' to an initialiser of type const int
+101_err_reference_discards_const.cpp:13:12: error: argument const int does not match parameter 'r' of type int&
+Function takesRef returns void
+  param:
+    Var r : reference to int
+Function main returns int
+  Block
+    Var c : int
+      init:
+        10
+    Var bad : reference to int
+      init:
+        c
+    Var ok : reference to int
+      init:
+        c
+    Var plain : int
+      init:
+        1
+    Var alsoOk : reference to int
+      init:
+        plain
+    ExprStmt
+      Call
+        takesRef
+        arg 0:
+          c
+    Return
+      Binary +
+        ok
+        alsoOk

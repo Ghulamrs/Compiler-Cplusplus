@@ -1,0 +1,720 @@
+Class Box
+  Field public v : int
+  Constructor public Box::Box
+    Block
+      ExprStmt
+        Binary =
+          v
+          0
+Var g : int
+  init:
+    1
+Function byRef returns void
+  param:
+    Var r : reference to int
+  Block
+    ExprStmt
+      Binary =
+        r
+        Binary *
+          r
+          2
+Function byConstRef returns void
+  param:
+    Var r : reference to int
+  param:
+    Var out : reference to int
+  Block
+    ExprStmt
+      Binary =
+        out
+        Binary +
+          r
+          1
+Function ret returns reference to int
+  Block
+    Return
+      g
+Function main returns int
+  Block
+    Var a : int
+      init:
+        21
+    ExprStmt
+      Call
+        byRef
+        arg 0:
+          a
+    ExprStmt
+      Binary <<
+        Binary <<
+          Binary <<
+            cout
+            "param:"
+          a
+        endl
+    Var la : reference to int
+      init:
+        a
+    ExprStmt
+      Binary =
+        la
+        Binary +
+          la
+          1
+    ExprStmt
+      Binary <<
+        Binary <<
+          Binary <<
+            cout
+            "local:"
+          a
+        endl
+    Var b : class Box
+    Var fr : reference to int
+      init:
+        Member .v
+          b
+    ExprStmt
+      Binary =
+        fr
+        7
+    ExprStmt
+      Binary <<
+        Binary <<
+          Binary <<
+            cout
+            "field:"
+          Member .v
+            b
+        endl
+    Var arr : array[3] of int
+    ExprStmt
+      Binary =
+        Index
+          arr
+          1
+        5
+    Var er : reference to int
+      init:
+        Index
+          arr
+          1
+    ExprStmt
+      Binary =
+        er
+        9
+    ExprStmt
+      Binary <<
+        Binary <<
+          Binary <<
+            cout
+            "elem:"
+          Index
+            arr
+            1
+        endl
+    Var out : int
+      init:
+        0
+    ExprStmt
+      Call
+        byConstRef
+        arg 0:
+          a
+        arg 1:
+          out
+    ExprStmt
+      Binary <<
+        Binary <<
+          Binary <<
+            cout
+            "constref:"
+          out
+        endl
+    Var chain : reference to int
+      init:
+        la
+    ExprStmt
+      Binary =
+        chain
+        100
+    ExprStmt
+      Binary <<
+        Binary <<
+          Binary <<
+            cout
+            "chain:"
+          a
+        endl
+    ExprStmt
+      Binary =
+        Call
+          ret
+        5
+    ExprStmt
+      Binary <<
+        Binary <<
+          Binary <<
+            cout
+            "retref:"
+          g
+        endl
+    Return
+      0
+
+class Box  size=4 align=4
+    +0  v (4 bytes)
+    construct: field v -> Box() body
+    destroy:   ~Box() body -> field v
+
+class __endl_t  size=4 align=4
+    +0  _ (4 bytes)
+    construct: field _ -> __endl_t() body
+    destroy:   ~__endl_t() body -> field _
+
+class errstream  size=4 align=4
+    +0  _ (4 bytes)
+    construct: field _ -> errstream() body
+    destroy:   ~errstream() body -> field _
+
+class ostream  size=4 align=4
+    +0  _ (4 bytes)
+    construct: field _ -> ostream() body
+    destroy:   ~ostream() body -> field _
+
+string str0  "param:"
+string str1  "local:"
+string str2  "field:"
+string str3  "elem:"
+string str4  "constref:"
+string str5  "chain:"
+string str6  "retref:"
+
+global endl  4 bytes
+global cout  4 bytes
+global cerr  4 bytes
+global g  4 bytes
+
+function __endl_t__ctor$v   ; __endl_t::__endl_t
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = const 0
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+            store [%5] <- %2 :4
+            ret
+
+function ostream__ctor$v   ; ostream::ostream
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = const 0
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+            store [%5] <- %2 :4
+            ret
+
+function ostream__operator<<$i   ; ostream::operator<<
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 n  4 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :4
+            call print_int(%1)
+    %2 = local #1
+    %3 = load [%2] :8
+    %4 = local #0
+    %5 = load [%4] :8
+            memcpy [%3] <- [%5] :4
+            ret %3
+
+function ostream__operator<<$l   ; ostream::operator<<
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 n  8 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :8
+    %2 = iresize %1 :4 signed
+            call print_int(%2)
+    %3 = local #1
+    %4 = load [%3] :8
+    %5 = local #0
+    %6 = load [%5] :8
+            memcpy [%4] <- [%6] :4
+            ret %4
+
+function ostream__operator<<$s   ; ostream::operator<<
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 n  2 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :2
+    %2 = iresize %1 :4 signed
+            call print_int(%2)
+    %3 = local #1
+    %4 = load [%3] :8
+    %5 = local #0
+    %6 = load [%5] :8
+            memcpy [%4] <- [%6] :4
+            ret %4
+
+function ostream__operator<<$d   ; ostream::operator<<
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 d  8 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :8f
+            call print_double(%1)
+    %2 = local #1
+    %3 = load [%2] :8
+    %4 = local #0
+    %5 = load [%4] :8
+            memcpy [%3] <- [%5] :4
+            ret %3
+
+function ostream__operator<<$f   ; ostream::operator<<
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 f  4 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :4f
+    %2 = fresize %1 :8
+            call print_double(%2)
+    %3 = local #1
+    %4 = load [%3] :8
+    %5 = local #0
+    %6 = load [%5] :8
+            memcpy [%4] <- [%6] :4
+            ret %4
+
+function ostream__operator<<$c   ; ostream::operator<<
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 c  1 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :1
+    %2 = iresize %1 :4 signed
+            call print_char(%2)
+    %3 = local #1
+    %4 = load [%3] :8
+    %5 = local #0
+    %6 = load [%5] :8
+            memcpy [%4] <- [%6] :4
+            ret %4
+
+function ostream__operator<<$Pc   ; ostream::operator<<
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 s  8 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :8
+            call print_string(%1)
+    %2 = local #1
+    %3 = load [%2] :8
+    %4 = local #0
+    %5 = load [%4] :8
+            memcpy [%3] <- [%5] :4
+            ret %3
+
+function ostream__operator<<$b   ; ostream::operator<<
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 b  1 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :1
+    %2 = iresize %1 :4 unsigned
+            call print_int(%2)
+    %3 = local #1
+    %4 = load [%3] :8
+    %5 = local #0
+    %6 = load [%5] :8
+            memcpy [%4] <- [%6] :4
+            ret %4
+
+function ostream__operator<<$8__endl_t   ; ostream::operator<<
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 e  4 bytes  (param)
+            call print_line()
+    %0 = local #1
+    %1 = load [%0] :8
+    %2 = local #0
+    %3 = load [%2] :8
+            memcpy [%1] <- [%3] :4
+            ret %1
+
+function errstream__ctor$v   ; errstream::errstream
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = const 0
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+            store [%5] <- %2 :4
+            ret
+
+function errstream__operator<<$i   ; errstream::operator<<
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 n  4 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :4
+            call err_int(%1)
+    %2 = local #1
+    %3 = load [%2] :8
+    %4 = local #0
+    %5 = load [%4] :8
+            memcpy [%3] <- [%5] :4
+            ret %3
+
+function errstream__operator<<$l   ; errstream::operator<<
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 n  8 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :8
+    %2 = iresize %1 :4 signed
+            call err_int(%2)
+    %3 = local #1
+    %4 = load [%3] :8
+    %5 = local #0
+    %6 = load [%5] :8
+            memcpy [%4] <- [%6] :4
+            ret %4
+
+function errstream__operator<<$s   ; errstream::operator<<
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 n  2 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :2
+    %2 = iresize %1 :4 signed
+            call err_int(%2)
+    %3 = local #1
+    %4 = load [%3] :8
+    %5 = local #0
+    %6 = load [%5] :8
+            memcpy [%4] <- [%6] :4
+            ret %4
+
+function errstream__operator<<$d   ; errstream::operator<<
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 d  8 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :8f
+            call err_double(%1)
+    %2 = local #1
+    %3 = load [%2] :8
+    %4 = local #0
+    %5 = load [%4] :8
+            memcpy [%3] <- [%5] :4
+            ret %3
+
+function errstream__operator<<$f   ; errstream::operator<<
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 f  4 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :4f
+    %2 = fresize %1 :8
+            call err_double(%2)
+    %3 = local #1
+    %4 = load [%3] :8
+    %5 = local #0
+    %6 = load [%5] :8
+            memcpy [%4] <- [%6] :4
+            ret %4
+
+function errstream__operator<<$c   ; errstream::operator<<
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 c  1 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :1
+    %2 = iresize %1 :4 signed
+            call err_char(%2)
+    %3 = local #1
+    %4 = load [%3] :8
+    %5 = local #0
+    %6 = load [%5] :8
+            memcpy [%4] <- [%6] :4
+            ret %4
+
+function errstream__operator<<$Pc   ; errstream::operator<<
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 s  8 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :8
+            call err_string(%1)
+    %2 = local #1
+    %3 = load [%2] :8
+    %4 = local #0
+    %5 = load [%4] :8
+            memcpy [%3] <- [%5] :4
+            ret %3
+
+function errstream__operator<<$b   ; errstream::operator<<
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 b  1 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :1
+    %2 = iresize %1 :4 unsigned
+            call err_int(%2)
+    %3 = local #1
+    %4 = load [%3] :8
+    %5 = local #0
+    %6 = load [%5] :8
+            memcpy [%4] <- [%6] :4
+            ret %4
+
+function errstream__operator<<$8__endl_t   ; errstream::operator<<
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 e  4 bytes  (param)
+            call err_line()
+    %0 = local #1
+    %1 = load [%0] :8
+    %2 = local #0
+    %3 = load [%2] :8
+            memcpy [%1] <- [%3] :4
+            ret %1
+
+function Box__ctor$v   ; Box::Box
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = const 0
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+            store [%5] <- %2 :4
+            ret
+
+function byRef$Ri   ; byRef
+  #0 r  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = load [%1] :4
+    %3 = const 2
+    %4 = mul %2, %3
+    %5 = local #0
+    %6 = load [%5] :8
+            store [%6] <- %4 :4
+            ret
+
+function byConstRef$RKiRi   ; byConstRef
+  #0 r  8 bytes  (param)
+  #1 out  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = load [%1] :4
+    %3 = const 1
+    %4 = add %2, %3
+    %5 = local #1
+    %6 = load [%5] :8
+            store [%6] <- %4 :4
+            ret
+
+function ret$v   ; ret
+    %0 = global g
+            ret %0
+
+function main
+  #0 a  4 bytes
+  #1 $result  4 bytes
+  #2 $result  4 bytes
+  #3 $result  4 bytes
+  #4 la  8 bytes
+  #5 $result  4 bytes
+  #6 $result  4 bytes
+  #7 $result  4 bytes
+  #8 b  4 bytes
+  #9 fr  8 bytes
+  #10 $result  4 bytes
+  #11 $result  4 bytes
+  #12 $result  4 bytes
+  #13 arr  12 bytes
+  #14 er  8 bytes
+  #15 $result  4 bytes
+  #16 $result  4 bytes
+  #17 $result  4 bytes
+  #18 out  4 bytes
+  #19 $result  4 bytes
+  #20 $result  4 bytes
+  #21 $result  4 bytes
+  #22 chain  8 bytes
+  #23 $result  4 bytes
+  #24 $result  4 bytes
+  #25 $result  4 bytes
+  #26 $result  4 bytes
+  #27 $result  4 bytes
+  #28 $result  4 bytes
+            call __global_init()
+    %0 = const 21
+    %1 = local #0
+            store [%1] <- %0 :4
+    %2 = local #0
+            call byRef$Ri(%2)
+    %3 = global cout
+    %4 = local #1
+    %5 = straddr str0
+    %6 = call ostream__operator<<$Pc(%3, %4, %5)
+    %7 = local #2
+    %8 = local #0
+    %9 = load [%8] :4
+    %10 = call ostream__operator<<$i(%6, %7, %9)
+    %11 = local #3
+    %12 = global endl
+    %13 = call ostream__operator<<$8__endl_t(%10, %11, %12)
+    %14 = local #0
+    %15 = local #4
+            store [%15] <- %14 :8
+    %16 = local #4
+    %17 = load [%16] :8
+    %18 = load [%17] :4
+    %19 = const 1
+    %20 = add %18, %19
+    %21 = local #4
+    %22 = load [%21] :8
+            store [%22] <- %20 :4
+    %23 = global cout
+    %24 = local #5
+    %25 = straddr str1
+    %26 = call ostream__operator<<$Pc(%23, %24, %25)
+    %27 = local #6
+    %28 = local #0
+    %29 = load [%28] :4
+    %30 = call ostream__operator<<$i(%26, %27, %29)
+    %31 = local #7
+    %32 = global endl
+    %33 = call ostream__operator<<$8__endl_t(%30, %31, %32)
+    %34 = local #8
+            call Box__ctor$v(%34)
+    %35 = local #8
+    %36 = field %35 +0
+    %37 = local #9
+            store [%37] <- %36 :8
+    %38 = const 7
+    %39 = local #9
+    %40 = load [%39] :8
+            store [%40] <- %38 :4
+    %41 = global cout
+    %42 = local #10
+    %43 = straddr str2
+    %44 = call ostream__operator<<$Pc(%41, %42, %43)
+    %45 = local #11
+    %46 = local #8
+    %47 = field %46 +0
+    %48 = load [%47] :4
+    %49 = call ostream__operator<<$i(%44, %45, %48)
+    %50 = local #12
+    %51 = global endl
+    %52 = call ostream__operator<<$8__endl_t(%49, %50, %51)
+    %53 = const 5
+    %54 = local #13
+    %55 = const 1
+    %56 = const 4
+    %57 = mul %55, %56
+    %58 = add %54, %57
+            store [%58] <- %53 :4
+    %59 = local #13
+    %60 = const 1
+    %61 = const 4
+    %62 = mul %60, %61
+    %63 = add %59, %62
+    %64 = local #14
+            store [%64] <- %63 :8
+    %65 = const 9
+    %66 = local #14
+    %67 = load [%66] :8
+            store [%67] <- %65 :4
+    %68 = global cout
+    %69 = local #15
+    %70 = straddr str3
+    %71 = call ostream__operator<<$Pc(%68, %69, %70)
+    %72 = local #16
+    %73 = local #13
+    %74 = const 1
+    %75 = const 4
+    %76 = mul %74, %75
+    %77 = add %73, %76
+    %78 = load [%77] :4
+    %79 = call ostream__operator<<$i(%71, %72, %78)
+    %80 = local #17
+    %81 = global endl
+    %82 = call ostream__operator<<$8__endl_t(%79, %80, %81)
+    %83 = const 0
+    %84 = local #18
+            store [%84] <- %83 :4
+    %85 = local #0
+    %86 = local #18
+            call byConstRef$RKiRi(%85, %86)
+    %87 = global cout
+    %88 = local #19
+    %89 = straddr str4
+    %90 = call ostream__operator<<$Pc(%87, %88, %89)
+    %91 = local #20
+    %92 = local #18
+    %93 = load [%92] :4
+    %94 = call ostream__operator<<$i(%90, %91, %93)
+    %95 = local #21
+    %96 = global endl
+    %97 = call ostream__operator<<$8__endl_t(%94, %95, %96)
+    %98 = local #4
+    %99 = load [%98] :8
+    %100 = local #22
+            store [%100] <- %99 :8
+    %101 = const 100
+    %102 = local #22
+    %103 = load [%102] :8
+            store [%103] <- %101 :4
+    %104 = global cout
+    %105 = local #23
+    %106 = straddr str5
+    %107 = call ostream__operator<<$Pc(%104, %105, %106)
+    %108 = local #24
+    %109 = local #0
+    %110 = load [%109] :4
+    %111 = call ostream__operator<<$i(%107, %108, %110)
+    %112 = local #25
+    %113 = global endl
+    %114 = call ostream__operator<<$8__endl_t(%111, %112, %113)
+    %115 = const 5
+    %116 = call ret$v()
+            store [%116] <- %115 :4
+    %117 = global cout
+    %118 = local #26
+    %119 = straddr str6
+    %120 = call ostream__operator<<$Pc(%117, %118, %119)
+    %121 = local #27
+    %122 = global g
+    %123 = load [%122] :4
+    %124 = call ostream__operator<<$i(%120, %121, %123)
+    %125 = local #28
+    %126 = global endl
+    %127 = call ostream__operator<<$8__endl_t(%124, %125, %126)
+    %128 = const 0
+            ret %128
+
+function __global_init
+    %0 = global endl
+            call __endl_t__ctor$v(%0)
+    %1 = global cout
+            call ostream__ctor$v(%1)
+    %2 = global cerr
+            call errstream__ctor$v(%2)
+    %3 = global g
+    %4 = const 1
+            store [%3] <- %4 :4
+            ret
+
+function __global_fini
+            ret

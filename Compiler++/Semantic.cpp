@@ -1394,7 +1394,15 @@ void SemanticAnalyzer::analyzeVarDecl(cc::VarDecl *vd, bool declareIt) {
         } else if (initType && !initIsLValue) {
             error(vd, "cannot bind reference '" + vd->name + "' of type "
                       + describe(vd->type) + " to a non-lvalue initialiser");
-        } else if (initType && !convertible(vd->init, initType, rt->base)) {
+        } else if (initType && !convertible(vd->init, initType, vd->type)) {
+            // The whole reference type, not rt->base: convertible() has the
+            // rule that binding a T& to a const object discards the const,
+            // and it can only apply that rule if it can SEE the reference.
+            // Passing the base type asked "does const int convert to int?",
+            // which is true -- for a copy.  A reference is not a copy, so
+            // `const int c; int &r = c;` slipped through and let a const
+            // object be assigned to.  The argument path already passes the
+            // parameter's own type and has always rejected this.
             error(vd, "cannot bind '" + describe(vd->type) + " " + vd->name
                       + "' to an initialiser of type " + describe(initType));
         }
