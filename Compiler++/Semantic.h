@@ -95,6 +95,11 @@ private:
     // still needs one when anything it is made of has one, or the copy is
     // done with memcpy and those constructors never run.
     bool needsCopyConstructor(cxx::ClassDecl *cd);
+    // Whether one CAN be generated: every base and class-typed member the
+    // generated list names must itself be constructible from one argument.
+    bool canSynthesiseCopy(cxx::ClassDecl *cd, int depth = 0);
+    // Generates it for cd, and first for every part cd's list will name.
+    bool synthesiseCopyFor(cxx::ClassDecl *cd);
     void synthesiseCopyConstructors();
     void declareTopLevel(const std::vector<cc::Decl*> &units);
     void analyzeDecl(cc::Decl *d);

@@ -835,20 +835,44 @@ cxx::MethodDecl *SemanticAnalyzer::copyConstructorOf(cxx::ClassDecl *cd) {
     return 0;
 }
 
-bool SemanticAnalyzer::needsCopyConstructor(cxx::ClassDecl *cd) {
-    if (!cd || copyConstructorOf(cd)) return false;
+// Can a copy constructor for this class be GENERATED?  Only if every part its
+// initialiser list will name can be constructed from one argument.  A part
+// that declares a copy constructor answers yes on the spot; otherwise it must
+// be one this same rule can generate, which makes the question recursive.
+//
+// An array member is where the recursion stops with a no.  An array cannot be
+// written in an initialiser list, and a member the list leaves out is
+// default-constructed -- or, for an array of scalars, left as it lies.  Either
+// way the source's elements would not arrive, so a generated constructor would
+// copy the class WORSE than the byte copy it already gets.  Such a class keeps
+// that byte copy, and so does anything that holds one: those members' copy
+// constructors still do not run, which is the same gap as before rather than a
+// new one.
+bool SemanticAnalyzer::canSynthesiseCopy(cxx::ClassDecl *cd, int depth) {
+    if (!cd) return true;                       // no part is no obstacle
+    if (copyConstructorOf(cd)) return true;     // declared: nothing to generate
+    if (depth > 64) return false;               // a hierarchy this deep is broken
 
-    // An array member cannot be written in an initialiser list, and a member
-    // the list leaves out is default-constructed -- or, for an array of
-    // scalars, left as it lies.  Either way the source's elements would not
-    // arrive, so a synthesised constructor would copy this class WORSE than
-    // the byte copy it already gets.  Such a class keeps that byte copy: it
-    // still does not run its members' copy constructors, which is the same
-    // gap as before rather than a new one.
     for (std::size_t i = 0; i < cd->members.size(); ++i) {
         cxx::FieldDecl *fd = dynamic_cast<cxx::FieldDecl*>(cd->members[i]);
         if (fd && dynamic_cast<cc::ArrayType*>(fd->type)) return false;
     }
+    if (!canSynthesiseCopy(cd->base, depth + 1)) return false;
+    for (std::size_t i = 0; i < cd->members.size(); ++i) {
+        cxx::FieldDecl *fd = dynamic_cast<cxx::FieldDecl*>(cd->members[i]);
+        if (!fd) continue;
+        // Only a member declared AS a class is constructed by the list; a
+        // pointer or a scalar is copied as the value it is.
+        cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(fd->type);
+        if (!ct) continue;
+        if (!canSynthesiseCopy(findClass(ct->className), depth + 1)) return false;
+    }
+    return true;
+}
+
+bool SemanticAnalyzer::needsCopyConstructor(cxx::ClassDecl *cd) {
+    if (!cd || copyConstructorOf(cd)) return false;
+    if (!canSynthesiseCopy(cd)) return false;
 
     for (cxx::ClassDecl *b = cd->base; b; b = b->base) {
         if (copyConstructorOf(b)) return true;
@@ -873,6 +897,86 @@ bool SemanticAnalyzer::needsCopyConstructor(cxx::ClassDecl *cd) {
 // so nothing downstream needs to know it was generated.  selectConstructor
 // picks the base's and each member's copy constructor exactly as it would for
 // a written one, and Lowering::copyConstructorOf finds it in cd->ctors.
+//
+// Generates the constructor for cd, and FIRST for every base and class-typed
+// member its initialiser list will name -- otherwise the list calls a
+// constructor that does not exist, and a class whose parts were merely
+// default-constructible stopped compiling the moment one of its other parts
+// gained a copy constructor.  canSynthesiseCopy has already established that
+// the recursion succeeds all the way down.
+bool SemanticAnalyzer::synthesiseCopyFor(cxx::ClassDecl *cd) {
+    if (!cd || copyConstructorOf(cd) || !canSynthesiseCopy(cd)) return false;
+
+    if (cd->base) synthesiseCopyFor(cd->base);
+    for (std::size_t m = 0; m < cd->members.size(); ++m) {
+        cxx::FieldDecl *fd = dynamic_cast<cxx::FieldDecl*>(cd->members[m]);
+        if (!fd) continue;
+        cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(fd->type);
+        if (ct) synthesiseCopyFor(findClass(ct->className));
+    }
+
+    cxx::MethodDecl *c = new cxx::MethodDecl(0, cd->name, cxx::ACC_Public);
+    c->ownerClass = cd->name;
+    c->isConstructor = true;
+    c->isImplicit = true;
+    c->line = cd->line;
+    c->col = cd->col;
+
+    // const T &__o -- the const rides on the referenced type, which is
+    // where every check looks for it.
+    cxx::ClassType *arg = new cxx::ClassType(cd->name);
+    arg->isConst = true;
+    arg->line = cd->line;
+    arg->col = cd->col;
+    cxx::ReferenceType *ref = new cxx::ReferenceType(arg);
+    ref->line = cd->line;
+    ref->col = cd->col;
+    cc::VarDecl *param = new cc::VarDecl(ref, "__o", 0);
+    param->line = cd->line;
+    param->col = cd->col;
+    c->params.push_back(param);
+
+    // : Base(__o)
+    if (cd->base) {
+        cxx::MemberInit bi;
+        bi.name = cd->base->name;
+        bi.line = cd->line;
+        bi.col = cd->col;
+        cc::IdentExpr *src = new cc::IdentExpr("__o");
+        src->line = cd->line;
+        src->col = cd->col;
+        bi.args.push_back(src);
+        c->memberInits.push_back(bi);
+    }
+
+    // , each member as  m(__o.m)
+    for (std::size_t m = 0; m < cd->members.size(); ++m) {
+        cxx::FieldDecl *fd = dynamic_cast<cxx::FieldDecl*>(cd->members[m]);
+        if (!fd) continue;
+        cxx::MemberInit mi;
+        mi.name = fd->name;
+        mi.line = cd->line;
+        mi.col = cd->col;
+        cc::IdentExpr *base = new cc::IdentExpr("__o");
+        base->line = cd->line;
+        base->col = cd->col;
+        cxx::MemberAccessExpr *acc =
+            new cxx::MemberAccessExpr(base, fd->name, false);
+        acc->line = cd->line;
+        acc->col = cd->col;
+        mi.args.push_back(acc);
+        c->memberInits.push_back(mi);
+    }
+
+    c->body = new cc::CompoundStmt();    // the list is the whole of it
+    c->body->line = cd->line;
+    c->body->col = cd->col;
+
+    cd->members.push_back(c);
+    cd->ctors.push_back(c);
+    return true;
+}
+
 void SemanticAnalyzer::synthesiseCopyConstructors() {
     // Repeat until nothing changes: giving one class a copy constructor can
     // make a class that holds one need its own.
@@ -881,69 +985,8 @@ void SemanticAnalyzer::synthesiseCopyConstructors() {
         changed = false;
         std::map<std::string, cxx::ClassDecl*>::iterator it;
         for (it = classes.begin(); it != classes.end(); ++it) {
-            cxx::ClassDecl *cd = it->second;
-            if (!cd || !needsCopyConstructor(cd)) continue;
-
-            cxx::MethodDecl *c = new cxx::MethodDecl(0, cd->name, cxx::ACC_Public);
-            c->ownerClass = cd->name;
-            c->isConstructor = true;
-            c->isImplicit = true;
-            c->line = cd->line;
-            c->col = cd->col;
-
-            // const T &__o -- the const rides on the referenced type, which is
-            // where every check looks for it.
-            cxx::ClassType *arg = new cxx::ClassType(cd->name);
-            arg->isConst = true;
-            arg->line = cd->line;
-            arg->col = cd->col;
-            cxx::ReferenceType *ref = new cxx::ReferenceType(arg);
-            ref->line = cd->line;
-            ref->col = cd->col;
-            cc::VarDecl *param = new cc::VarDecl(ref, "__o", 0);
-            param->line = cd->line;
-            param->col = cd->col;
-            c->params.push_back(param);
-
-            // : Base(__o)
-            if (cd->base) {
-                cxx::MemberInit bi;
-                bi.name = cd->base->name;
-                bi.line = cd->line;
-                bi.col = cd->col;
-                cc::IdentExpr *src = new cc::IdentExpr("__o");
-                src->line = cd->line;
-                src->col = cd->col;
-                bi.args.push_back(src);
-                c->memberInits.push_back(bi);
-            }
-
-            // , each member as  m(__o.m)
-            for (std::size_t m = 0; m < cd->members.size(); ++m) {
-                cxx::FieldDecl *fd = dynamic_cast<cxx::FieldDecl*>(cd->members[m]);
-                if (!fd) continue;
-                cxx::MemberInit mi;
-                mi.name = fd->name;
-                mi.line = cd->line;
-                mi.col = cd->col;
-                cc::IdentExpr *base = new cc::IdentExpr("__o");
-                base->line = cd->line;
-                base->col = cd->col;
-                cxx::MemberAccessExpr *acc =
-                    new cxx::MemberAccessExpr(base, fd->name, false);
-                acc->line = cd->line;
-                acc->col = cd->col;
-                mi.args.push_back(acc);
-                c->memberInits.push_back(mi);
-            }
-
-            c->body = new cc::CompoundStmt();    // the list is the whole of it
-            c->body->line = cd->line;
-            c->body->col = cd->col;
-
-            cd->members.push_back(c);
-            cd->ctors.push_back(c);
-            changed = true;
+            if (!it->second || !needsCopyConstructor(it->second)) continue;
+            if (synthesiseCopyFor(it->second)) changed = true;
         }
     }
 }
