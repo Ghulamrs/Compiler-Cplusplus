@@ -32,46 +32,65 @@ else()
 endif()
 
 # --- tests -----------------------------------------------------------------
-# Each case is one test: the compiler must accept it, or reject it when its
-# name says "err_".  This is the exit-status half of tests/run_tests.sh, which
-# needs a POSIX shell; expressed here it runs on Windows too.
+# Both shell suites compare the compiler's output against a recorded file, and
+# both need a POSIX shell, so on Windows neither ran.  What ran there checked
+# only the exit status, which let a compiler that emitted the wrong opcode pass
+# by running, returning 0, and printing nonsense that nothing compared.
+#
+# tests/compare_output.cmake is that comparison in CMake, so it runs wherever
+# the build does.  Every case gets both halves the shell suites give it:
+#
+#   <name>        the syntax tree, layout and IR   (run_tests.sh, expected/)
+#   <name>_exec   what the program prints          (run_exec.sh, expected_run/)
+#
+# The name says what a case must do -- err_ must be rejected, trap_ must be
+# stopped by the VM, run_ must execute -- so the status each expects comes from
+# the name rather than from a property.
 enable_testing()
+set(COMPARE "${CMAKE_CURRENT_SOURCE_DIR}/tests/compare_output.cmake")
 file(GLOB TEST_CASES "${CMAKE_CURRENT_SOURCE_DIR}/tests/cases/*.cpp")
 foreach(case_path ${TEST_CASES})
     get_filename_component(case_name "${case_path}" NAME_WE)
-    add_test(NAME ${case_name}
-             COMMAND compilerpp -ast -layout -q "${case_path}")
+
+    # An err_ case is one the compiler must refuse, and refuse with the right
+    # words: the dump file holds its diagnostics, so comparing it is what keeps
+    # a reworded message a visible change rather than a silent one.
+    set(want_status 0)
     if(case_name MATCHES "err_")
-        set_tests_properties(${case_name} PROPERTIES WILL_FAIL TRUE)
-    else()
-        # A case that runs must also RUN, and must print the RIGHT thing: a
-        # compiler can emit the wrong opcode, exit 0, and print nonsense.
-        # Checking only the exit status let exactly that through on MSVC, so
-        # the byte-exact comparison from tests/run_exec.sh is expressed in
-        # CMake here and runs on every platform, not only where a POSIX shell
-        # exists.  run_exec.sh remains the place to RECORD an expectation
-        # (--accept); this is the place that enforces it.
-        # A `trap_` case is one whose POINT is that the VM stops the program:
-        # it must exit 3 with the right message.  Without a category for it a
-        # guard can only ever look like a failure, so the guards -- a null
-        # dereference, a double delete -- went untested.  run_exec.sh selects
-        # on *run_*, so these are invisible to it and it needs no change.
+        set(want_status 1)
+    endif()
+    add_test(NAME ${case_name}
+             COMMAND ${CMAKE_COMMAND}
+                     -DEXE=$<TARGET_FILE:compilerpp>
+                     -DSRC=${case_path}
+                     -DEXPECT=${CMAKE_CURRENT_SOURCE_DIR}/tests/expected/${case_name}.txt
+                     -DMODE=dump
+                     -DWANT_STATUS=${want_status}
+                     -P ${COMPARE})
+    set_tests_properties(${case_name} PROPERTIES TIMEOUT 60)
+
+    # A case that runs must also RUN, and must print the RIGHT thing.  A
+    # `trap_` case is one whose POINT is that the VM stops the program: it must
+    # exit 3 with the right message.  Without a category for it a guard could
+    # only ever look like a failure, so the guards -- a null dereference, a
+    # double delete -- went untested.  run_exec.sh selects on *run_*, so trap_
+    # cases are invisible to it and it needs no change.
+    if(case_name MATCHES "run_|trap_")
         set(want_status 0)
         if(case_name MATCHES "trap_")
             set(want_status 3)
         endif()
-        if(case_name MATCHES "run_|trap_")
-            add_test(NAME ${case_name}_exec
-                     COMMAND ${CMAKE_COMMAND}
-                             -DEXE=$<TARGET_FILE:compilerpp>
-                             -DSRC=${case_path}
-                             -DEXPECT=${CMAKE_CURRENT_SOURCE_DIR}/tests/expected_run/${case_name}.txt
-                             -DWANT_STATUS=${want_status}
-                             -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/compare_run.cmake)
-            # A defect in the VM can outlast its own step limit -- a corrupted
-            # free list spins inside allocate(), where nothing counts steps.
-            set_tests_properties(${case_name}_exec PROPERTIES TIMEOUT 60)
-        endif()
+        add_test(NAME ${case_name}_exec
+                 COMMAND ${CMAKE_COMMAND}
+                         -DEXE=$<TARGET_FILE:compilerpp>
+                         -DSRC=${case_path}
+                         -DEXPECT=${CMAKE_CURRENT_SOURCE_DIR}/tests/expected_run/${case_name}.txt
+                         -DMODE=run
+                         -DWANT_STATUS=${want_status}
+                         -P ${COMPARE})
+        # A defect in the VM can outlast its own step limit -- a corrupted
+        # free list spins inside allocate(), where nothing counts steps.
+        set_tests_properties(${case_name}_exec PROPERTIES TIMEOUT 60)
     endif()
 endforeach()
 
@@ -90,6 +109,7 @@ foreach(img ${BAD_IMAGES})
                      -DSRC=${img}
                      -DEXPECT=${CMAKE_CURRENT_SOURCE_DIR}/tests/images/${img_name}.txt
                      -DWANT_STATUS=3
-                     -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/compare_run.cmake)
+                     -DMODE=run
+                     -P ${COMPARE})
     set_tests_properties(image_${img_name} PROPERTIES TIMEOUT 30)
 endforeach()
