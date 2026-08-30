@@ -98,7 +98,11 @@ enum OpCode {
     OP_Alloc,           // push the address of imm fresh bytes
     OP_Free,            // pop an address and release it
 
-    OP_Halt
+    OP_Halt,
+
+    // Not an instruction: the count, so a byte read out of a file can be
+    // checked against the set of opcodes that actually exist.
+    OP_Count
 };
 
 const char *opCodeName(OpCode op);

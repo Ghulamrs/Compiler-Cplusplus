@@ -73,6 +73,7 @@ const char *opCodeName(OpCode op) {
     case OP_Alloc:        return "alloc";
     case OP_Free:         return "free";
     case OP_Halt:         return "halt";
+    case OP_Count:        break;         // not an instruction
     }
     return "?";
 }

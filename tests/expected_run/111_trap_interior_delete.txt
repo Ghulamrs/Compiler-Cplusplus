@@ -1,0 +1,2 @@
+allocated
+111_trap_interior_delete.cpp: runtime error: delete of a pointer that did not come from new

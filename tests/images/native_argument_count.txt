@@ -1,0 +1,1 @@
+native_argument_count.cxb: runtime error: native call wants more arguments than the stack holds

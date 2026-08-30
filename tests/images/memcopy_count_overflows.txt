@@ -1,0 +1,1 @@
+memcopy_count_overflows.cxb: runtime error: object copy at an invalid address

@@ -1,0 +1,87 @@
+Function print_string returns void
+  param:
+    Var s : pointer to char
+Function print_line returns void
+Class Pair
+  Field public a : int
+  Field public b : int
+Function main returns int
+  Block
+    Var p : pointer to class Pair
+      init:
+        New class Pair
+    ExprStmt
+      Binary =
+        Member ->a
+          p
+        33
+    ExprStmt
+      Binary =
+        Member ->b
+          p
+        44
+    ExprStmt
+      Call
+        print_string
+        arg 0:
+          "allocated"
+    ExprStmt
+      Call
+        print_line
+    ExprStmt
+      Delete
+        Unary &
+          Member ->b
+            p
+    ExprStmt
+      Call
+        print_string
+        arg 0:
+          "unreachable"
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+class Pair  size=8 align=4
+    +0  a (4 bytes)
+    +4  b (4 bytes)
+
+string str0  "allocated"
+string str1  "unreachable"
+
+function main
+  #0 p  8 bytes
+            call __global_init()
+    %0 = alloc 8
+    %1 = local #0
+            store [%1] <- %0 :8
+    %2 = const 33
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+            store [%5] <- %2 :4
+    %6 = const 44
+    %7 = local #0
+    %8 = load [%7] :8
+    %9 = field %8 +4
+            store [%9] <- %6 :4
+    %10 = straddr str0
+            call print_string(%10)
+            call print_line()
+    %11 = local #0
+    %12 = load [%11] :8
+    %13 = field %12 +4
+            free %13
+    %14 = straddr str1
+            call print_string(%14)
+            call print_line()
+    %15 = const 0
+            ret %15
+
+function __global_init
+            ret
+
+function __global_fini
+            ret

@@ -4,6 +4,7 @@
 
 #include "VM.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cmath>
 #include <cstring>
@@ -15,6 +16,14 @@ const vmword MemorySize   = 4L * 1024 * 1024;
 const vmword StackSize    = 1L * 1024 * 1024;
 const vmword MaxSteps     = 50L * 1000 * 1000;   // a runaway program stops itself
 const int  HeaderSize   = 16;                  // [size][next] before each block
+
+// -MIN and MIN / -1 have no answer in the range, and signed overflow is
+// undefined in C++ -- on x86-64 the divide instruction faults and takes the
+// whole process with it.  The VM defines them the way the hardware would if
+// it were allowed to: wrap, like every other signed operation here.
+vmword negate(vmword v) {
+    return static_cast<vmword>(~static_cast<uvmword>(v) + 1);
+}
 }
 
 VM::VM()
@@ -40,6 +49,9 @@ VM::Value VM::pop() {
 // --- memory ---
 
 vmword VM::readInt(vmword addr, int size, bool isSigned) {
+    // A width the word cannot hold would shift by 64 or more, which is
+    // undefined -- and `size` comes out of the file.
+    if (size > 8) { trap("read of a width this machine has no word for"); return 0; }
     if (addr <= 0 || size < 0 || size > static_cast<vmword>(mem.size()) ||
         addr > static_cast<vmword>(mem.size()) - size) {
         std::ostringstream ss;
@@ -59,6 +71,7 @@ vmword VM::readInt(vmword addr, int size, bool isSigned) {
 }
 
 void VM::writeInt(vmword addr, int size, vmword value) {
+    if (size > 8) { trap("write of a width this machine has no word for"); return; }
     if (addr <= 0 || size < 0 || size > static_cast<vmword>(mem.size()) ||
         addr > static_cast<vmword>(mem.size()) - size) {
         std::ostringstream ss;
@@ -73,6 +86,10 @@ void VM::writeInt(vmword addr, int size, vmword value) {
 }
 
 double VM::readFloat(vmword addr, int size) {
+    // Only two widths exist.  Any other passed the bounds check on `size` and
+    // then moved eight bytes regardless, reading past the end of memory for
+    // every size below eight.
+    if (size != 4 && size != 8) { trap("floating read of an unsupported width"); return 0.0; }
     if (addr <= 0 || size < 0 || size > static_cast<vmword>(mem.size()) ||
         addr > static_cast<vmword>(mem.size()) - size) {
         trap("floating read at an invalid address");
@@ -89,6 +106,7 @@ double VM::readFloat(vmword addr, int size) {
 }
 
 void VM::writeFloat(vmword addr, int size, double value) {
+    if (size != 4 && size != 8) { trap("floating write of an unsupported width"); return; }
     if (addr <= 0 || size < 0 || size > static_cast<vmword>(mem.size()) ||
         addr > static_cast<vmword>(mem.size()) - size) {
         trap("floating write at an invalid address");
@@ -114,6 +132,8 @@ vmword VM::freeListLimit() const {
 // simplest allocator that reuses memory is enough to run a loop.
 vmword VM::allocate(vmword bytes) {
     if (bytes <= 0) bytes = 1;
+    // Round up AFTER the size is known to fit, or the rounding itself wraps.
+    if (bytes > static_cast<vmword>(mem.size())) { trap("out of heap memory"); return 0; }
     if (bytes % 8) bytes += 8 - (bytes % 8);
 
     vmword prev = 0;
@@ -132,7 +152,9 @@ vmword VM::allocate(vmword bytes) {
         b = next;
     }
 
-    if (heapTop + HeaderSize + bytes > static_cast<vmword>(mem.size())) {
+    // As a difference: the sum overflows for a size near the top of the range
+    // and wraps back under the limit.
+    if (heapTop > static_cast<vmword>(mem.size()) - HeaderSize - bytes) {
         trap("out of heap memory");
         return 0;
     }
@@ -147,6 +169,28 @@ void VM::release(vmword addr) {
     if (addr == 0) return;                      // deleting null is harmless
     const vmword block = addr - HeaderSize;
     if (block < heapBase || block >= heapTop) {
+        trap("delete of a pointer that did not come from new");
+        return;
+    }
+    // Being INSIDE the heap is not the same as being a block.  `delete` of a
+    // pointer to a field of an object landed here, and the bytes of that field
+    // then became a header: a size and a next of the program's own choosing,
+    // which the next allocation followed.  So the blocks are walked from the
+    // bottom -- each one says how long it is -- and only a block START counts.
+    // Linear in the number of blocks, which is what a first-fit allocator with
+    // a single free list already costs.
+    bool isBlock = false;
+    vmword walk = heapBase;
+    vmword steppedOver = 0;
+    const vmword blockGuard = freeListLimit();
+    while (walk < heapTop) {
+        if (++steppedOver > blockGuard) { trap("heap is corrupt"); return; }
+        if (walk == block) { isBlock = true; break; }
+        const vmword size = readInt(walk, 8, true);
+        if (size <= 0) { trap("heap is corrupt"); return; }
+        walk += HeaderSize + size;
+    }
+    if (!isBlock) {
         trap("delete of a pointer that did not come from new");
         return;
     }
@@ -239,9 +283,13 @@ void VM::callNative(NativeId id, int argc) {
     case NAT_Log:   pushD(std::log(a[0].d));   return;
     case NAT_Log10: pushD(std::log10(a[0].d)); return;
     case NAT_Exp:   pushD(std::exp(a[0].d));   return;
-    case NAT_Abs:   push(a[0].i < 0 ? -a[0].i : a[0].i); return;
+    case NAT_Abs:   push(a[0].i < 0 ? negate(a[0].i) : a[0].i); return;
 
-    case NAT_Count: break;
+    // Not a native: the caller range-checks the id, and this keeps the switch
+    // exhaustive so the compiler goes on checking it too.
+    case NAT_Count:
+        trap("call to a native this machine does not have");
+        break;
     }
     push(0);                                    // a print yields a value too
 }
@@ -286,6 +334,14 @@ vmword VM::run(const Image &image, bool &ok) {
         }
     }
 
+    // The length is the file's to claim, and the memory is a fixed size: a
+    // claim larger than the machine wrote past the end of the vector's buffer
+    // and corrupted the host's heap, which is not a fault the program can be
+    // blamed for.
+    if (static_cast<vmword>(image.staticData.size()) > MemorySize) {
+        trap("static data does not fit in this machine's memory");
+        return 0;
+    }
     mem.assign(MemorySize, 0);
     std::copy(image.staticData.begin(), image.staticData.end(), mem.begin());
 
@@ -303,6 +359,13 @@ vmword VM::run(const Image &image, bool &ok) {
     top.base = stackTop;
     top.regBase = image.functions[image.entry].localOffset.back();
     top.wantsResult = true;
+    // The same bound every other call gets.  The entry frame was pushed
+    // without one, so a frame size the file made up slid the whole stack past
+    // the heap before a single instruction ran.
+    if (stackTop > heapBase - image.functions[image.entry].frameSize) {
+        trap("the entry function's frame does not fit on the stack");
+        return 0;
+    }
     stackTop += image.functions[image.entry].frameSize;
     frames.push_back(top);
 
@@ -326,9 +389,20 @@ vmword VM::run(const Image &image, bool &ok) {
         case OP_Pop:        pop(); break;
 
         case OP_LoadReg:
+            // The frame declares how many it has.  Without this the index was
+            // multiplied by eight and added to the frame base unchecked, which
+            // both overflows and reaches anywhere in memory.
+            if (in.imm < 0 || in.imm >= fi.registerCount) {
+                trap("register out of range");
+                break;
+            }
             push(readInt(fr.base + fr.regBase + in.imm * 8, 8, true));
             break;
         case OP_StoreReg:
+            if (in.imm < 0 || in.imm >= fi.registerCount) {
+                trap("register out of range");
+                break;
+            }
             writeInt(fr.base + fr.regBase + in.imm * 8, 8, pop().i);
             break;
 
@@ -361,9 +435,14 @@ vmword VM::run(const Image &image, bool &ok) {
             const vmword src = pop().i;
             const vmword dst = pop().i;
             const vmword n   = in.imm;
-            if (src <= 0 || dst <= 0 || n < 0 ||
-                src + n > static_cast<vmword>(mem.size()) ||
-                dst + n > static_cast<vmword>(mem.size())) {
+            // As differences: `src + n` overflows for a count near the top of
+            // the range and wraps back under the limit, which is how a copy of
+            // nine million million bytes passed this check.  The by-value
+            // argument copy below was written this way already; this one was
+            // not.
+            const vmword limit = static_cast<vmword>(mem.size());
+            if (src <= 0 || dst <= 0 || n < 0 || n > limit ||
+                src > limit - n || dst > limit - n) {
                 trap("object copy at an invalid address");
                 break;
             }
@@ -398,12 +477,14 @@ vmword VM::run(const Image &image, bool &ok) {
         case OP_Div: {
             vmword b = pop().i, a = pop().i;
             if (b == 0) { trap("division by zero"); break; }
+            if (b == -1) { push(negate(a)); break; }
             push(a / b);
             break;
         }
         case OP_Mod: {
             vmword b = pop().i, a = pop().i;
             if (b == 0) { trap("remainder by zero"); break; }
+            if (b == -1) { push(0); break; }
             push(a % b);
             break;
         }
@@ -421,7 +502,7 @@ vmword VM::run(const Image &image, bool &ok) {
             push(static_cast<vmword>(a % b));
             break;
         }
-        case OP_Neg: push(-pop().i); break;
+        case OP_Neg: push(negate(pop().i)); break;
         case OP_Not: push(pop().i == 0 ? 1 : 0); break;
 
         case OP_FAdd: { double b = pop().d, a = pop().d; pushD(a + b); break; }
@@ -462,6 +543,7 @@ vmword VM::run(const Image &image, bool &ok) {
         case OP_IntResize: {
             const vmword v = pop().i;
             const int size = static_cast<int>(in.imm);
+            if (size <= 0) { trap("integer resize to an impossible width"); break; }
             if (size >= 8) { push(v); break; }
             uvmword masked = static_cast<uvmword>(v) & ((static_cast<uvmword>(1) << (size * 8)) - 1);
             if (in.b) {
@@ -483,12 +565,32 @@ vmword VM::run(const Image &image, bool &ok) {
             break;
         }
 
-        case OP_Native: callNative(static_cast<NativeId>(in.imm),
-                                   static_cast<int>(in.b)); break;
+        case OP_Native:
+            if (in.imm < 0 || in.imm >= NAT_Count) {
+                trap("call to a native this machine does not have");
+                break;
+            }
+            // The count says how many to pop.  Unvalidated it popped for as
+            // long as it liked -- setting the trap on the first empty pop and
+            // then carrying on for two thousand million more.
+            if (in.b < 0 || static_cast<std::size_t>(in.b) > stack.size()) {
+                trap("native call wants more arguments than the stack holds");
+                break;
+            }
+            callNative(static_cast<NativeId>(in.imm), static_cast<int>(in.b));
+            break;
 
         case OP_Call:
         case OP_CallIndirect: {
             const int argc = static_cast<int>(in.b);
+            // This sizes a vector.  Negative became an enormous size_t and
+            // threw length_error; large positive threw bad_alloc.  Nothing
+            // catches either, so a single flipped byte in a .cxb aborted the
+            // process.  The stack is the true bound: the arguments are on it.
+            if (argc < 0 || static_cast<std::size_t>(argc) > stack.size()) {
+                trap("call wants more arguments than the stack holds");
+                break;
+            }
             vmword target = in.imm;
             std::vector<Value> args(argc);
             for (int k = argc - 1; k >= 0; --k) args[k] = pop();
@@ -584,6 +686,20 @@ vmword VM::run(const Image &image, bool &ok) {
         case OP_Alloc: push(allocate(in.imm)); break;
         case OP_Free:  release(pop().i); break;
         case OP_Halt:  frames.clear(); break;
+
+        // Bytecode.cpp casts a byte straight to OpCode, and 195 of the 256
+        // values are not opcodes.  Without this they fell out of the switch as
+        // silent no-ops, so a corrupt image RAN, quietly did nothing, and
+        // reported success -- the one outcome an untrusted file should never
+        // get.  OP_Count is not an instruction; it is here so the switch is
+        // exhaustive and the compiler keeps it that way.
+        case OP_Count:
+        default: {
+            std::ostringstream ss;
+            ss << "unknown instruction " << static_cast<int>(in.op);
+            trap(ss.str());
+            break;
+        }
         }
     }
 

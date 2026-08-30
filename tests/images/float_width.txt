@@ -1,0 +1,1 @@
+float_width.cxb: runtime error: floating write of an unsupported width
