@@ -444,7 +444,23 @@ cc::Type *Parser::parseType() {
     // then find no specifier it knows, so it is taken here for a class type.
     const bool leadingConst = (cur.kind == TOK_CONST);
 
+    // `const bool` -- the C layer's parseType would consume the const and then
+    // find no specifier it knows, so bool claims both tokens itself.  The
+    // lookahead is a probe because a lone `const` in front of anything else
+    // still belongs to the branches below.
+    if (leadingConst) {
+        const State probe = save();
+        advance();
+        if (cur.kind != TOK_BOOL) restore(probe);
+    }
+
+    cc::Type *t = 0;
+
     // bool is C++'s, so the C layer's specifier soup knows nothing about it.
+    // It joins the common path rather than returning from here: the reference
+    // suffix is handled once, at the bottom, and a `return` taken early meant
+    // `bool*` parsed while `bool&` did not.
+    bool isBool = false;
     if (cur.kind == TOK_BOOL) {
         const int line = cur.line, col = cur.col;
         advance();
@@ -452,16 +468,17 @@ cc::Type *Parser::parseType() {
         b->line = line;
         b->col = col;
         b->isConst = leadingConst;
-        return parsePointerSuffixes(b);
+        t = parsePointerSuffixes(b);
+        isBool = true;
     }
 
-    cc::Type *t = cc::Parser::parseType();      // int, char, void, and T*
+    if (!isBool) t = cc::Parser::parseType();   // int, char, void, and T*
 
     // a qualified / class name like A::B -- new in C++.  An identifier is a
     // type only when it names a class; otherwise it is somebody's variable,
     // and `(x)` is a parenthesised expression rather than a cast.
     bool isTypeName = false;
-    if (!t && cur.kind == TOK_IDENTIFIER) {
+    if (!isBool && !t && cur.kind == TOK_IDENTIFIER) {
         isTypeName = namesAClass(cur.text);
         if (!isTypeName) {
             // Two names in a row is a declaration even when the first is not a
