@@ -114,7 +114,13 @@ const NativeEntry NativeTable[] = {
     { "log",          NAT_Log,         1, true  },
     { "log10",        NAT_Log10,       1, true  },
     { "exp",          NAT_Exp,         1, true  },
-    { "abs",          NAT_Abs,         1, false }
+    { "abs",          NAT_Abs,         1, false },
+    { "read_int",     NAT_ReadInt,     0, false },
+    { "read_double",  NAT_ReadDouble,  0, true  },
+    { "read_char",    NAT_ReadChar,    0, false },
+    { "read_string",  NAT_ReadString,  2, false },
+    { "read_line",    NAT_ReadLine,    2, false },
+    { "input_good",   NAT_InputGood,   0, false }
 };
 const int NativeCount = static_cast<int>(sizeof(NativeTable) / sizeof(NativeTable[0]));
 }

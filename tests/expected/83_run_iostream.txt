@@ -85,6 +85,11 @@ class errstream  size=4 align=4
     construct: field _ -> errstream() body
     destroy:   ~errstream() body -> field _
 
+class istream  size=4 align=4
+    +0  _ (4 bytes)
+    construct: field _ -> istream() body
+    destroy:   ~istream() body -> field _
+
 class ostream  size=4 align=4
     +0  _ (4 bytes)
     construct: field _ -> ostream() body
@@ -99,6 +104,7 @@ string str5  "to cerr"
 
 global endl  4 bytes
 global cout  4 bytes
+global cin  4 bytes
 global cerr  4 bytes
 
 function __endl_t__ctor$v   ; __endl_t::__endl_t
@@ -251,6 +257,239 @@ function ostream__operator<<$8__endl_t   ; ostream::operator<<
     %3 = load [%2] :8
             memcpy [%1] <- [%3] :4
             ret %1
+
+function istream__ctor$v   ; istream::istream
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = const 0
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+            store [%5] <- %2 :4
+            ret
+
+function istream__operator>>$Ri   ; istream::operator>>
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 n  8 bytes  (param)
+  #3 v  8 bytes
+    %0 = call read_int()
+    %1 = local #3
+            store [%1] <- %0 :8
+    %2 = call input_good()
+    %3 = const 0
+    %4 = cmp.ne %2, %3
+            brz %4 L0
+    %5 = local #3
+    %6 = load [%5] :8
+    %7 = iresize %6 :4 signed
+    %8 = local #2
+    %9 = load [%8] :8
+            store [%9] <- %7 :4
+    L0:
+    %10 = local #1
+    %11 = load [%10] :8
+    %12 = local #0
+    %13 = load [%12] :8
+            memcpy [%11] <- [%13] :4
+            ret %11
+
+function istream__operator>>$Rl   ; istream::operator>>
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 n  8 bytes  (param)
+  #3 v  8 bytes
+    %0 = call read_int()
+    %1 = local #3
+            store [%1] <- %0 :8
+    %2 = call input_good()
+    %3 = const 0
+    %4 = cmp.ne %2, %3
+            brz %4 L0
+    %5 = local #3
+    %6 = load [%5] :8
+    %7 = local #2
+    %8 = load [%7] :8
+            store [%8] <- %6 :8
+    L0:
+    %9 = local #1
+    %10 = load [%9] :8
+    %11 = local #0
+    %12 = load [%11] :8
+            memcpy [%10] <- [%12] :4
+            ret %10
+
+function istream__operator>>$Rs   ; istream::operator>>
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 n  8 bytes  (param)
+  #3 v  8 bytes
+    %0 = call read_int()
+    %1 = local #3
+            store [%1] <- %0 :8
+    %2 = call input_good()
+    %3 = const 0
+    %4 = cmp.ne %2, %3
+            brz %4 L0
+    %5 = local #3
+    %6 = load [%5] :8
+    %7 = iresize %6 :2 signed
+    %8 = local #2
+    %9 = load [%8] :8
+            store [%9] <- %7 :2
+    L0:
+    %10 = local #1
+    %11 = load [%10] :8
+    %12 = local #0
+    %13 = load [%12] :8
+            memcpy [%11] <- [%13] :4
+            ret %11
+
+function istream__operator>>$Rd   ; istream::operator>>
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 d  8 bytes  (param)
+  #3 v  8 bytes
+    %0 = call read_double()
+    %1 = local #3
+            store [%1] <- %0 :8f
+    %2 = call input_good()
+    %3 = const 0
+    %4 = cmp.ne %2, %3
+            brz %4 L0
+    %5 = local #3
+    %6 = load [%5] :8f
+    %7 = local #2
+    %8 = load [%7] :8
+            store [%8] <- %6 :8f
+    L0:
+    %9 = local #1
+    %10 = load [%9] :8
+    %11 = local #0
+    %12 = load [%11] :8
+            memcpy [%10] <- [%12] :4
+            ret %10
+
+function istream__operator>>$Rf   ; istream::operator>>
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 f  8 bytes  (param)
+  #3 v  8 bytes
+    %0 = call read_double()
+    %1 = local #3
+            store [%1] <- %0 :8f
+    %2 = call input_good()
+    %3 = const 0
+    %4 = cmp.ne %2, %3
+            brz %4 L0
+    %5 = local #3
+    %6 = load [%5] :8f
+    %7 = fresize %6 :4
+    %8 = local #2
+    %9 = load [%8] :8
+            store [%9] <- %7 :4f
+    L0:
+    %10 = local #1
+    %11 = load [%10] :8
+    %12 = local #0
+    %13 = load [%12] :8
+            memcpy [%11] <- [%13] :4
+            ret %11
+
+function istream__operator>>$Rc   ; istream::operator>>
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 c  8 bytes  (param)
+  #3 v  4 bytes
+    %0 = call read_char()
+    %1 = local #3
+            store [%1] <- %0 :4
+    %2 = call input_good()
+    %3 = const 0
+    %4 = cmp.ne %2, %3
+            brz %4 L0
+    %5 = local #3
+    %6 = load [%5] :4
+    %7 = iresize %6 :1 signed
+    %8 = local #2
+    %9 = load [%8] :8
+            store [%9] <- %7 :1
+    L0:
+    %10 = local #1
+    %11 = load [%10] :8
+    %12 = local #0
+    %13 = load [%12] :8
+            memcpy [%11] <- [%13] :4
+            ret %11
+
+function istream__operator>>$Rb   ; istream::operator>>
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 b  8 bytes  (param)
+  #3 v  8 bytes
+    %0 = call read_int()
+    %1 = local #3
+            store [%1] <- %0 :8
+    %2 = call input_good()
+    %3 = const 0
+    %4 = cmp.ne %2, %3
+            brz %4 L0
+    %5 = local #3
+    %6 = load [%5] :8
+    %7 = const 0
+    %8 = iresize %7 :8 signed
+    %9 = cmp.ne %6, %8
+    %10 = local #2
+    %11 = load [%10] :8
+            store [%11] <- %9 :1
+    L0:
+    %12 = local #1
+    %13 = load [%12] :8
+    %14 = local #0
+    %15 = load [%14] :8
+            memcpy [%13] <- [%15] :4
+            ret %13
+
+function istream__operator>>$Pc   ; istream::operator>>
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 s  8 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :8
+    %2 = const 0
+            call read_string(%1, %2)
+    %3 = local #1
+    %4 = load [%3] :8
+    %5 = local #0
+    %6 = load [%5] :8
+            memcpy [%4] <- [%6] :4
+            ret %4
+
+function istream__good$v   ; istream::good
+  #0 this  8 bytes  (param)
+    %0 = call input_good()
+    %1 = const 0
+    %2 = cmp.ne %0, %1
+            ret %2
+
+function istream__eof$v   ; istream::eof
+  #0 this  8 bytes  (param)
+    %0 = call input_good()
+    %1 = const 0
+    %2 = cmp.eq %0, %1
+            ret %2
+
+function istream__getline$Pci   ; istream::getline
+  #0 this  8 bytes  (param)
+  #1 s  8 bytes  (param)
+  #2 max  4 bytes  (param)
+    %0 = local #1
+    %1 = load [%0] :8
+    %2 = local #2
+    %3 = load [%2] :4
+            call read_line(%1, %3)
+            ret
 
 function errstream__ctor$v   ; errstream::errstream
   #0 this  8 bytes  (param)
@@ -517,8 +756,10 @@ function __global_init
             call __endl_t__ctor$v(%0)
     %1 = global cout
             call ostream__ctor$v(%1)
-    %2 = global cerr
-            call errstream__ctor$v(%2)
+    %2 = global cin
+            call istream__ctor$v(%2)
+    %3 = global cerr
+            call errstream__ctor$v(%3)
             ret
 
 function __global_fini

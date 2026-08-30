@@ -601,6 +601,33 @@ const char *IOStreamPrelude =
     " ostream operator<<(__endl_t e) { print_line(); return *this; }"
     " };"
     " ostream cout;"
+    // istream is the same shape: no state of its own, every operator forwards
+    // to a native and returns *this so that  cin >> a >> b  chains.  Whether
+    // the last read worked lives in the machine rather than in the object,
+    // which is why a copy returned by value costs nothing -- and why
+    // cin.good() is right after a chain, not just after its first read.
+    " class istream {"
+    " public: int _;"
+    " istream() { _ = 0; }"
+    // A read that fails leaves its destination alone, which is what C++98
+    // says -- so every one of these asks whether the read worked before it
+    // assigns.  There are no exceptions here to throw instead.
+    " istream operator>>(int &n)    { long v = read_int(); if (input_good() != 0) n = (int) v; return *this; }"
+    " istream operator>>(long &n)   { long v = read_int(); if (input_good() != 0) n = v; return *this; }"
+    " istream operator>>(short &n)  { long v = read_int(); if (input_good() != 0) n = (short) v; return *this; }"
+    " istream operator>>(double &d) { double v = read_double(); if (input_good() != 0) d = v; return *this; }"
+    " istream operator>>(float &f)  { double v = read_double(); if (input_good() != 0) f = (float) v; return *this; }"
+    " istream operator>>(char &c)   { int v = read_char(); if (input_good() != 0) c = (char) v; return *this; }"
+    " istream operator>>(bool &b)   { long v = read_int(); if (input_good() != 0) b = v != 0; return *this; }"
+    // No width, so the buffer has to say how long it is: one from new[] does,
+    // and the machine asks it.  Anything else gets told to use getline rather
+    // than being written past the end of.
+    " istream operator>>(char* s)   { read_string(s, 0); return *this; }"
+    " bool good() { return input_good() != 0; }"
+    " bool eof() { return input_good() == 0; }"
+    " void getline(char* s, int max) { read_line(s, max); }"
+    " };"
+    " istream cin;"
     " class errstream {"
     " public: int _;"
     " errstream() { _ = 0; }"
@@ -628,7 +655,13 @@ const char *IOStreamNatives =
     " void err_char(int c);"
     " void err_double(double d);"
     " void err_string(char* s);"
-    " void err_line();";
+    " void err_line();"
+    " long read_int();"
+    " double read_double();"
+    " int read_char();"
+    " void read_string(char* s, int max);"
+    " void read_line(char* s, int max);"
+    " int input_good();";
 
 // Does the source include the named header?  Only the spelling matters --
 // there is no file to look for.

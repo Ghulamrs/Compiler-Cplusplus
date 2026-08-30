@@ -276,4 +276,3 @@ function __global_init
 
 function __global_fini
             ret
-

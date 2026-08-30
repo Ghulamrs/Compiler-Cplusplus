@@ -27,7 +27,8 @@ vmword negate(vmword v) {
 }
 
 VM::VM()
-    : steps(0), stackBase(0), stackTop(0), heapBase(0), heapTop(0), freeList(0) {}
+    : steps(0), stackBase(0), stackTop(0), heapBase(0), heapTop(0), freeList(0),
+      inputGood(true) {}
 
 void VM::trap(const std::string &msg) {
     if (error.empty()) error = msg;
@@ -201,6 +202,32 @@ bool VM::isOnFreeList(vmword block) {
     return false;
 }
 
+// The same question arrayCount asks, without the trap: a pointer that is not a
+// heap block is a legitimate answer here, not an error.
+bool VM::heapCapacity(vmword addr, vmword &cap) {
+    if (addr <= 0) return false;
+    const vmword block = addr - HeaderSize;
+    if (block < heapBase || block >= heapTop) return false;
+    if (!isBlockStart(block) || isOnFreeList(block)) return false;
+    cap = readInt(block, 8, true);
+    return cap > 0;
+}
+
+void VM::writeCString(vmword addr, const std::string &s, vmword cap) {
+    if (cap <= 0) return;
+    const vmword limit = static_cast<vmword>(mem.size());
+    if (addr <= 0 || cap > limit || addr > limit - cap) {
+        trap("input written to an invalid address");
+        return;
+    }
+    vmword n = static_cast<vmword>(s.size());
+    if (n > cap - 1) n = cap - 1;               // room for the terminator
+    for (vmword i = 0; i < n; ++i) {
+        mem[addr + i] = static_cast<unsigned char>(s[static_cast<std::size_t>(i)]);
+    }
+    mem[addr + n] = 0;
+}
+
 vmword VM::arrayCount(vmword addr) {
     if (addr == 0) return 0;                    // delete[] of null: nothing to do
     const vmword block = addr - HeaderSize;
@@ -346,6 +373,64 @@ void VM::callNative(NativeId id, int argc) {
     case NAT_Log10: pushD(std::log10(a[0].d)); return;
     case NAT_Exp:   pushD(std::exp(a[0].d));   return;
     case NAT_Abs:   push(a[0].i < 0 ? negate(a[0].i) : a[0].i); return;
+
+    // --- input ---
+    // A failed read leaves the destination alone and turns inputGood false.
+    // There are no exceptions here and no stream-state object to carry one, so
+    // that flag is the whole of the mechanism and cin.good() reads it.
+    case NAT_ReadInt: {
+        long v = 0;
+        inputGood = (std::cin >> v) ? true : false;
+        push(inputGood ? static_cast<vmword>(v) : 0);
+        return;
+    }
+    case NAT_ReadDouble: {
+        double v = 0.0;
+        inputGood = (std::cin >> v) ? true : false;
+        pushD(inputGood ? v : 0.0);
+        return;
+    }
+    case NAT_ReadChar: {
+        char c = 0;
+        inputGood = (std::cin >> c) ? true : false;   // leading space skipped, as >> does
+        push(inputGood ? static_cast<vmword>(c) : 0);
+        return;
+    }
+    case NAT_ReadString: {
+        std::string w;
+        inputGood = (std::cin >> w) ? true : false;
+        vmword cap = a[1].i;
+        if (cap <= 0) {
+            // `cin >> s` gives no width.  If the buffer came from new[] the
+            // machine knows how long it is; otherwise nothing does, and a read
+            // into a buffer of unknown length is the overflow this VM refuses
+            // everywhere else.
+            if (!heapCapacity(a[0].i, cap)) {
+                trap("reading a word into a buffer of unknown size; "
+                     "use cin.getline(buffer, size)");
+                push(0);
+                return;
+            }
+        }
+        if (inputGood) writeCString(a[0].i, w, cap);
+        push(0);
+        return;
+    }
+    case NAT_ReadLine: {
+        std::string l;
+        inputGood = std::getline(std::cin, l) ? true : false;
+        vmword cap = a[1].i;
+        if (cap <= 0 && !heapCapacity(a[0].i, cap)) {
+            trap("reading a line into a buffer of unknown size; "
+                 "give cin.getline a size");
+            push(0);
+            return;
+        }
+        if (inputGood) writeCString(a[0].i, l, cap);
+        push(0);
+        return;
+    }
+    case NAT_InputGood: push(inputGood ? 1 : 0); return;
 
     // Not a native: the caller range-checks the id, and this keeps the switch
     // exhaustive so the compiler goes on checking it too.

@@ -32,7 +32,12 @@ for case_file in cases/*.cpp; do
     case "$name" in *run_*) ;; *) continue ;; esac
 
     expected="expected_run/$name.txt"
-    actual=$("$BIN" -run -q "$case_file" 2>&1)
+    # A case that reads cin gets its input from input/NAME.txt.  Everything
+    # else gets /dev/null -- never the terminal, or a case that reads would
+    # sit waiting for a suite nobody is watching.
+    input=/dev/null
+    [ -f "input/$name.txt" ] && input="input/$name.txt"
+    actual=$("$BIN" -run -q "$case_file" < "$input" 2>&1)
     status=$?
 
     if [ "$ACCEPT" = "--accept" ]; then

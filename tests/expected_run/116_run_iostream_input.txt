@@ -1,0 +1,8 @@
+sum 7
+good 1
+2.5 Z
+flag 1
+[hello]
+[the rest of the line]
+kept 99
+eof 1

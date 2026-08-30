@@ -10,9 +10,11 @@ for case_file in cases/*.cpp; do
     case "$name" in *err_*) continue ;; esac
     # Only the program's own output is compared: diagnostics belong to
     # compilation, so they are absent when a .cxb is run, and rightly so.
-    direct=$("$BIN" -run -q "$case_file" 2>/dev/null); dstat=$?
+    input=/dev/null
+    [ -f "input/$name.txt" ] && input="input/$name.txt"
+    direct=$("$BIN" -run -q "$case_file" < "$input" 2>/dev/null); dstat=$?
     "$BIN" -q -o "/tmp/rt_$name.cxb" "$case_file" >/dev/null 2>&1 || { echo "SKIP  $name"; continue; }
-    viafile=$("$BIN" -run -q "/tmp/rt_$name.cxb" 2>/dev/null); fstat=$?
+    viafile=$("$BIN" -run -q "/tmp/rt_$name.cxb" < "$input" 2>/dev/null); fstat=$?
     if [ "$direct" = "$viafile" ] && [ "$dstat" -eq "$fstat" ]; then
         pass=$((pass + 1))
     else

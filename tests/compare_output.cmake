@@ -69,12 +69,26 @@ function(normalise text out)
 endfunction()
 
 # One variable for both streams is how CMake merges them, matching `2>&1`.
-execute_process(
-    COMMAND "${EXE}" ${flags} "${SRC}"
-    OUTPUT_VARIABLE merged
-    ERROR_VARIABLE merged
-    RESULT_VARIABLE status
-)
+# A case that reads cin gets input/NAME.txt; everything else reads nothing at
+# all, so no test can sit waiting on a terminal.
+get_filename_component(_case_dir "${SRC}" DIRECTORY)
+set(_input "${_case_dir}/../input/${case_name}.txt")
+if(EXISTS "${_input}")
+    execute_process(
+        COMMAND "${EXE}" ${flags} "${SRC}"
+        INPUT_FILE "${_input}"
+        OUTPUT_VARIABLE merged
+        ERROR_VARIABLE merged
+        RESULT_VARIABLE status
+    )
+else()
+    execute_process(
+        COMMAND "${EXE}" ${flags} "${SRC}"
+        OUTPUT_VARIABLE merged
+        ERROR_VARIABLE merged
+        RESULT_VARIABLE status
+    )
+endif()
 
 if(NOT status EQUAL WANT_STATUS)
     message("--- output ---\n${merged}")

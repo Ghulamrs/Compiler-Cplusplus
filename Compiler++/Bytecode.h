@@ -200,6 +200,13 @@ enum NativeId {
     NAT_Trunc, NAT_Round,
     NAT_Log, NAT_Log10, NAT_Exp,
     NAT_Abs,                    // the one that is integer in and integer out
+    // Input.  A read that fails leaves the destination alone and turns
+    // NAT_InputGood false, which is what `cin.good()` reports -- there are no
+    // exceptions to throw and no stream state object to carry one.
+    NAT_ReadInt, NAT_ReadDouble, NAT_ReadChar,
+    NAT_ReadString,             // one whitespace-delimited word
+    NAT_ReadLine,               // the rest of the line
+    NAT_InputGood,
     NAT_Count
 };
 

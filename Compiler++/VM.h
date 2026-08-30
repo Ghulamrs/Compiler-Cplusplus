@@ -78,6 +78,15 @@ private:
     bool isBlockStart(vmword block);
     // Is it on the free list already?  Both forms of delete need to say so.
     bool isOnFreeList(vmword block);
+    // How many bytes the block at `addr` can hold, without trapping when the
+    // address is not a heap block at all.  Input uses it to refuse a read into
+    // a buffer whose size nothing knows.
+    bool heapCapacity(vmword addr, vmword &cap);
+    // Copy a string into the machine's memory, NUL-terminated, never writing
+    // more than `cap` bytes.
+    void writeCString(vmword addr, const std::string &s, vmword cap);
+    // False once a read has failed: what cin.good() reports.
+    bool inputGood;
     // How many elements the new[] block at `addr` holds, or 0 with a trap set.
     vmword arrayCount(vmword addr);
     // The longest the free list could legitimately be; a walk past it is
