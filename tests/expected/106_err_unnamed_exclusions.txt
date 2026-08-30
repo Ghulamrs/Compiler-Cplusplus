@@ -1,0 +1,42 @@
+106_err_unnamed_exclusions.cpp:13:12: error: declaring more than one variable in a statement is not supported in this version; write a declaration each
+106_err_unnamed_exclusions.cpp:14:13: error: the conditional operator '?:' is not supported in this version; use an if statement
+106_err_unnamed_exclusions.cpp:15:13: error: bitwise operators are not supported in this version; '<<' and '>>' are the only bit operations
+106_err_unnamed_exclusions.cpp:16:13: error: bitwise operators are not supported in this version; '<<' and '>>' are the only bit operations
+106_err_unnamed_exclusions.cpp:17:13: error: bitwise operators are not supported in this version; '<<' and '>>' are the only bit operations
+106_err_unnamed_exclusions.cpp:18:13: error: the comma operator is not supported in this version; write the two expressions as separate statements
+Function one returns int
+  param:
+    Var n : int
+  Block
+    Return
+      n
+Function main returns int
+  Block
+    Var a : int
+      init:
+        1
+    Var t : int
+      init:
+        a
+    Var m : int
+      init:
+        a
+    Var o : int
+      init:
+        a
+    Var x : int
+      init:
+        a
+    Var c : int
+      init:
+        a
+    Return
+      Binary +
+        Binary +
+          Binary +
+            Binary +
+              t
+              m
+            o
+          x
+        c

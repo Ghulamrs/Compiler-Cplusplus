@@ -97,6 +97,15 @@ enum TokenKind {
     TOK_SHL,        // <<
     TOK_SHR,        // >>
 
+    // Operators of real C++ that this subset leaves out.  They are lexed for
+    // the same reason TOK_RESERVED exists: without a token, `a ? 1 : 2` and
+    // `a | b` reached the parser as an unknown character and were reported as
+    // punctuation trouble, which reads as a broken compiler rather than as a
+    // language that is smaller than expected.
+    TOK_QUESTION,   // ?   the conditional operator
+    TOK_PIPE,       // |   bitwise or
+    TOK_CARET,      // ^   bitwise xor
+
     // A keyword of real C++ that this subset leaves out.  It is lexed rather
     // than left as an identifier so the parser can say WHICH feature is
     // missing, once, instead of failing its way through the construct.  The

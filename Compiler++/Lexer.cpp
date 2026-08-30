@@ -93,6 +93,9 @@ const char *tokenName(TokenKind k) {
     case TOK_OROR:       return "'||'";
     case TOK_NOT:        return "'!'";
     case TOK_AMP:        return "'&'";
+    case TOK_QUESTION:   return "'?'";
+    case TOK_PIPE:       return "'|'";
+    case TOK_CARET:      return "'^'";
     case TOK_RESERVED:   return "a reserved keyword";
     case TOK_UNKNOWN:    return "unknown token";
     }
@@ -409,8 +412,10 @@ Token Lexer::nextToken() {
         break;
     case '|':
         if (peek() == '|') { get(); kind = TOK_OROR; }
-        else kind = TOK_UNKNOWN;
+        else kind = TOK_PIPE;
         break;
+    case '?': kind = TOK_QUESTION; break;
+    case '^': kind = TOK_CARET; break;
     case ':':
         if (peek() == ':') { get(); kind = TOK_COLONCOLON; }
         else kind = TOK_COLON;

@@ -265,6 +265,12 @@ void Parser::parseFunctionParamsAndBody(Function *fn) {
             while (cur.kind != TOK_COMMA && cur.kind != TOK_RPAREN &&
                    cur.kind != TOK_EOF) advance();
         }
+        if (cur.kind == TOK_LBRACKET) {
+            errorAtCurrent("array parameters are not supported in this version; "
+                           "pass a pointer");
+            while (cur.kind != TOK_COMMA && cur.kind != TOK_RPAREN &&
+                   cur.kind != TOK_EOF) advance();
+        }
         VarDecl *param = new VarDecl(pt, pname, 0);
         param->line = pline;
         param->col = pcol;
@@ -281,6 +287,15 @@ void Parser::parseFunctionParamsAndBody(Function *fn) {
         fn->body = parseBlock();
         return;
     }
+    // `= 0` is the one thing that plausibly follows a signature and is not a
+    // body, so it is worth its own sentence rather than a punctuation complaint.
+    if (cur.kind == TOK_ASSIGN) {
+        errorAtCurrent("pure virtual functions are not supported in this version; "
+                       "give the method a body");
+        while (cur.kind != TOK_SEMI && cur.kind != TOK_EOF) advance();
+        match(TOK_SEMI);
+        return;
+    }
     errorAtCurrent("expected ';' or '{' after function " + fn->name);
 }
 
@@ -292,6 +307,14 @@ VarDecl *Parser::parseVarDeclTail(Type *type, const std::string &name,
     vd->line = nameLine;
     vd->col = nameCol;
     parseVarInitializer(vd);            // virtual: C++ adds  (args)
+    // `int a = 1, b = 2;` -- one type, several names.  The comma is where it
+    // shows, so the comma is where it is named; without this the reader was
+    // told a semicolon was expected, which is true and unhelpful.
+    if (cur.kind == TOK_COMMA) {
+        errorAtCurrent("declaring more than one variable in a statement is not "
+                       "supported in this version; write a declaration each");
+        while (cur.kind != TOK_SEMI && cur.kind != TOK_EOF) advance();
+    }
     expect(TOK_SEMI, ("after declaration of " + name).c_str());
     return vd;
 }
@@ -663,6 +686,25 @@ Expr *Parser::parseExpression() {
     ++nesting;
     Expr *e = parseAssign();
     --nesting;
+
+    // An operator left out of the subset lands here, where a complete
+    // expression has been parsed and something follows it that no rule above
+    // accepts.  Naming it costs one message; leaving it produced a complaint
+    // about whichever bracket happened to be expected next, which never
+    // mentioned the operator the program was reaching for.  None of these can
+    // be a separator -- an argument list consumes its own commas in
+    // parseCallSuffix -- so seeing one here is always the operator itself.
+    if (cur.kind == TOK_QUESTION) {
+        errorAtCurrent("the conditional operator '?:' is not supported in this "
+                       "version; use an if statement");
+        while (cur.kind != TOK_SEMI && cur.kind != TOK_RPAREN &&
+               cur.kind != TOK_EOF) advance();
+    } else if (cur.kind == TOK_AMP || cur.kind == TOK_PIPE || cur.kind == TOK_CARET) {
+        errorAtCurrent("bitwise operators are not supported in this version; "
+                       "'<<' and '>>' are the only bit operations");
+        while (cur.kind != TOK_SEMI && cur.kind != TOK_RPAREN &&
+               cur.kind != TOK_EOF) advance();
+    }
     return e;
 }
 
@@ -938,6 +980,15 @@ Expr *Parser::parseCastOrParen() {
 
     advance();                                      // consume '(' again
     Expr *e = parseExpression();
+    // A comma HERE is the comma operator: an argument list consumes its own
+    // commas in parseCallSuffix, so this pair of brackets is grouping and
+    // nothing else.
+    if (cur.kind == TOK_COMMA) {
+        errorAtCurrent("the comma operator is not supported in this version; "
+                       "write the two expressions as separate statements");
+        while (cur.kind != TOK_RPAREN && cur.kind != TOK_SEMI &&
+               cur.kind != TOK_EOF) advance();
+    }
     expect(TOK_RPAREN, "after parenthesised expression");
     return e;
 }
