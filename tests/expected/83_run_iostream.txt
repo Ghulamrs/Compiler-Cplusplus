@@ -129,21 +129,7 @@ function ostream__operator<<$i   ; ostream::operator<<
   #2 n  4 bytes  (param)
     %0 = local #2
     %1 = load [%0] :4
-            call print_int(%1)
-    %2 = local #1
-    %3 = load [%2] :8
-    %4 = local #0
-    %5 = load [%4] :8
-            memcpy [%3] <- [%5] :4
-            ret %3
-
-function ostream__operator<<$l   ; ostream::operator<<
-  #0 this  8 bytes  (param)
-  #1 $ret  8 bytes  (param)
-  #2 n  8 bytes  (param)
-    %0 = local #2
-    %1 = load [%0] :8
-    %2 = iresize %1 :4 signed
+    %2 = iresize %1 :8 signed
             call print_int(%2)
     %3 = local #1
     %4 = load [%3] :8
@@ -152,13 +138,27 @@ function ostream__operator<<$l   ; ostream::operator<<
             memcpy [%4] <- [%6] :4
             ret %4
 
+function ostream__operator<<$l   ; ostream::operator<<
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 n  8 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :8
+            call print_int(%1)
+    %2 = local #1
+    %3 = load [%2] :8
+    %4 = local #0
+    %5 = load [%4] :8
+            memcpy [%3] <- [%5] :4
+            ret %3
+
 function ostream__operator<<$s   ; ostream::operator<<
   #0 this  8 bytes  (param)
   #1 $ret  8 bytes  (param)
   #2 n  2 bytes  (param)
     %0 = local #2
     %1 = load [%0] :2
-    %2 = iresize %1 :4 signed
+    %2 = iresize %1 :8 signed
             call print_int(%2)
     %3 = local #1
     %4 = load [%3] :8
@@ -231,7 +231,7 @@ function ostream__operator<<$b   ; ostream::operator<<
   #2 b  1 bytes  (param)
     %0 = local #2
     %1 = load [%0] :1
-    %2 = iresize %1 :4 unsigned
+    %2 = iresize %1 :8 unsigned
             call print_int(%2)
     %3 = local #1
     %4 = load [%3] :8
@@ -269,21 +269,7 @@ function errstream__operator<<$i   ; errstream::operator<<
   #2 n  4 bytes  (param)
     %0 = local #2
     %1 = load [%0] :4
-            call err_int(%1)
-    %2 = local #1
-    %3 = load [%2] :8
-    %4 = local #0
-    %5 = load [%4] :8
-            memcpy [%3] <- [%5] :4
-            ret %3
-
-function errstream__operator<<$l   ; errstream::operator<<
-  #0 this  8 bytes  (param)
-  #1 $ret  8 bytes  (param)
-  #2 n  8 bytes  (param)
-    %0 = local #2
-    %1 = load [%0] :8
-    %2 = iresize %1 :4 signed
+    %2 = iresize %1 :8 signed
             call err_int(%2)
     %3 = local #1
     %4 = load [%3] :8
@@ -292,13 +278,27 @@ function errstream__operator<<$l   ; errstream::operator<<
             memcpy [%4] <- [%6] :4
             ret %4
 
+function errstream__operator<<$l   ; errstream::operator<<
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 n  8 bytes  (param)
+    %0 = local #2
+    %1 = load [%0] :8
+            call err_int(%1)
+    %2 = local #1
+    %3 = load [%2] :8
+    %4 = local #0
+    %5 = load [%4] :8
+            memcpy [%3] <- [%5] :4
+            ret %3
+
 function errstream__operator<<$s   ; errstream::operator<<
   #0 this  8 bytes  (param)
   #1 $ret  8 bytes  (param)
   #2 n  2 bytes  (param)
     %0 = local #2
     %1 = load [%0] :2
-    %2 = iresize %1 :4 signed
+    %2 = iresize %1 :8 signed
             call err_int(%2)
     %3 = local #1
     %4 = load [%3] :8
@@ -371,7 +371,7 @@ function errstream__operator<<$b   ; errstream::operator<<
   #2 b  1 bytes  (param)
     %0 = local #2
     %1 = load [%0] :1
-    %2 = iresize %1 :4 unsigned
+    %2 = iresize %1 :8 unsigned
             call err_int(%2)
     %3 = local #1
     %4 = load [%3] :8

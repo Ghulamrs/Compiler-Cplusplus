@@ -586,7 +586,7 @@ const char *IOStreamPrelude =
     " public: int _;"
     " ostream() { _ = 0; }"
     " ostream operator<<(int n)      { print_int(n); return *this; }"
-    " ostream operator<<(long n)     { print_int((int)n); return *this; }"
+    " ostream operator<<(long n)     { print_int(n); return *this; }"
     " ostream operator<<(short n)    { print_int(n); return *this; }"
     " ostream operator<<(double d)   { print_double(d); return *this; }"
     " ostream operator<<(float f)    { print_double(f); return *this; }"
@@ -600,7 +600,7 @@ const char *IOStreamPrelude =
     " public: int _;"
     " errstream() { _ = 0; }"
     " errstream operator<<(int n)      { err_int(n); return *this; }"
-    " errstream operator<<(long n)     { err_int((int)n); return *this; }"
+    " errstream operator<<(long n)     { err_int(n); return *this; }"
     " errstream operator<<(short n)    { err_int(n); return *this; }"
     " errstream operator<<(double d)   { err_double(d); return *this; }"
     " errstream operator<<(float f)    { err_double(f); return *this; }"
@@ -614,12 +614,12 @@ const char *IOStreamPrelude =
 // The natives the prelude leans on.  Declaring them here means a program that
 // includes <iostream> need not declare them itself.
 const char *IOStreamNatives =
-    "void print_int(int n);"
+    "void print_int(long n);"
     " void print_char(int c);"
     " void print_double(double d);"
     " void print_string(char* s);"
     " void print_line();"
-    " void err_int(int n);"
+    " void err_int(long n);"
     " void err_char(int c);"
     " void err_double(double d);"
     " void err_string(char* s);"
