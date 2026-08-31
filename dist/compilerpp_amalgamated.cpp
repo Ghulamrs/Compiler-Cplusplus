@@ -276,7 +276,8 @@ private:
     std::string name;
     int errors;
     int warnings;
-    bool capped;
+    bool capped;            // errors have stopped being reported
+    bool warningsCapped;    // and warnings, separately -- one cannot end the other
     int lineOffset;
 
     void report(const char *level, int line, int col, const std::string &msg);
@@ -3383,7 +3384,8 @@ std::string preludeFor(const std::string &src, int &lines) {
 #include <iostream>
 
 Diagnostics::Diagnostics(const std::string &sourceName)
-    : name(sourceName), errors(0), warnings(0), capped(false), lineOffset(0) {}
+    : name(sourceName), errors(0), warnings(0), capped(false), warningsCapped(false),
+      lineOffset(0) {}
 
 void Diagnostics::report(const char *level, int line, int col, const std::string &msg) {
     std::cout.flush();          // keep diagnostics in step with any AST dump
@@ -3405,9 +3407,25 @@ void Diagnostics::error(int line, int col, const std::string &msg) {
     report("error", line, col, msg);
 }
 
+// A warning has its own budget, and the error cap does not spend it.
+//
+// This used to read `if (capped || warnings > MaxReported)`, so the twenty-first
+// ERROR silenced every warning for the rest of the compilation -- including the
+// ones already found, and including the ones about the very code the errors were
+// in. Two channels, one of which could switch the other off: a program with a
+// syntax error early on had its narrowing warnings disappear, and nothing said
+// they had.
+//
+// They are counted apart and capped apart, and the notice says which ran out.
 void Diagnostics::warning(int line, int col, const std::string &msg) {
     ++warnings;
-    if (capped || warnings > MaxReported) return;
+    if (warnings > MaxReported) {
+        if (!warningsCapped) {
+            warningsCapped = true;
+            std::cerr << name << ": warning: too many warnings; stopping here" << std::endl;
+        }
+        return;
+    }
     report("warning", line, col, msg);
 }
 

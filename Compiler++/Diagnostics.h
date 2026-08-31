@@ -39,7 +39,8 @@ private:
     std::string name;
     int errors;
     int warnings;
-    bool capped;
+    bool capped;            // errors have stopped being reported
+    bool warningsCapped;    // and warnings, separately -- one cannot end the other
     int lineOffset;
 
     void report(const char *level, int line, int col, const std::string &msg);

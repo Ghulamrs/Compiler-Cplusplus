@@ -84,6 +84,7 @@ refused without being named is a defect in the refusing, not an entry in a list.
 | `MIN / -1` and `-MIN` were undefined; on x86-64 the divide faults | `OP_Div`, `OP_Mod`, `OP_Neg` |
 | A double `delete` hung the machine past the step limit | `VM::release` |
 | Twelve golden files were CRLF while the compiler writes LF, so the suite failed on a correct compiler | `.gitattributes` |
+| The error cap silenced warnings: `capped` was set by the twenty-first error and the warning routine tested it too, so every warning for the rest of the compilation vanished without a word — including warnings about the code the errors were in | `Diagnostics::warning` |
 
 ## Open
 
@@ -188,9 +189,7 @@ the check in `parseExpression`, which runs after a complete expression.
 
 **One bad array bound costs five diagnostics** — the offending token is reported
 but not consumed. **An unterminated literal's message is built and thrown away**;
-an unterminated `/*` gets no diagnostic at all. **Warnings are silenced by the
-error cap** (`Diagnostics.cpp:34`): `capped` is set by errors, and once 20 have
-printed no warning is ever shown again.
+an unterminated `/*` gets no diagnostic at all.
 
 **`main.cpp` argv handling**: `-o` as the last argument becomes the input path,
 and every unrecognised token does the same, so `--help` reports "Cannot open

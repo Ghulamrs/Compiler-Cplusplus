@@ -1,0 +1,110 @@
+128_err_warnings_survive_the_error_cap.cpp:19:10: error: undeclared identifier 'missing0'
+128_err_warnings_survive_the_error_cap.cpp:20:10: error: undeclared identifier 'missing1'
+128_err_warnings_survive_the_error_cap.cpp:21:10: error: undeclared identifier 'missing2'
+128_err_warnings_survive_the_error_cap.cpp:22:10: error: undeclared identifier 'missing3'
+128_err_warnings_survive_the_error_cap.cpp:23:10: error: undeclared identifier 'missing4'
+128_err_warnings_survive_the_error_cap.cpp:24:10: error: undeclared identifier 'missing5'
+128_err_warnings_survive_the_error_cap.cpp:25:10: error: undeclared identifier 'missing6'
+128_err_warnings_survive_the_error_cap.cpp:26:10: error: undeclared identifier 'missing7'
+128_err_warnings_survive_the_error_cap.cpp:27:10: error: undeclared identifier 'missing8'
+128_err_warnings_survive_the_error_cap.cpp:28:10: error: undeclared identifier 'missing9'
+128_err_warnings_survive_the_error_cap.cpp:29:10: error: undeclared identifier 'absent0'
+128_err_warnings_survive_the_error_cap.cpp:30:10: error: undeclared identifier 'absent1'
+128_err_warnings_survive_the_error_cap.cpp:31:10: error: undeclared identifier 'absent2'
+128_err_warnings_survive_the_error_cap.cpp:32:10: error: undeclared identifier 'absent3'
+128_err_warnings_survive_the_error_cap.cpp:33:10: error: undeclared identifier 'absent4'
+128_err_warnings_survive_the_error_cap.cpp:34:10: error: undeclared identifier 'absent5'
+128_err_warnings_survive_the_error_cap.cpp:35:10: error: undeclared identifier 'absent6'
+128_err_warnings_survive_the_error_cap.cpp:36:10: error: undeclared identifier 'absent7'
+128_err_warnings_survive_the_error_cap.cpp:37:10: error: undeclared identifier 'absent8'
+128_err_warnings_survive_the_error_cap.cpp:38:10: error: undeclared identifier 'absent9'
+128_err_warnings_survive_the_error_cap.cpp: error: too many errors; stopping here
+128_err_warnings_survive_the_error_cap.cpp:45:15: warning: narrowing double to int in the argument to parameter 1 of 'print_int'
+Function print_int returns void
+  param:
+    Var  : int
+Function print_line returns void
+Var a0 : int
+  init:
+    missing0
+Var a1 : int
+  init:
+    missing1
+Var a2 : int
+  init:
+    missing2
+Var a3 : int
+  init:
+    missing3
+Var a4 : int
+  init:
+    missing4
+Var a5 : int
+  init:
+    missing5
+Var a6 : int
+  init:
+    missing6
+Var a7 : int
+  init:
+    missing7
+Var a8 : int
+  init:
+    missing8
+Var a9 : int
+  init:
+    missing9
+Var b0 : int
+  init:
+    absent0
+Var b1 : int
+  init:
+    absent1
+Var b2 : int
+  init:
+    absent2
+Var b3 : int
+  init:
+    absent3
+Var b4 : int
+  init:
+    absent4
+Var b5 : int
+  init:
+    absent5
+Var b6 : int
+  init:
+    absent6
+Var b7 : int
+  init:
+    absent7
+Var b8 : int
+  init:
+    absent8
+Var b9 : int
+  init:
+    absent9
+Var c0 : int
+  init:
+    gone0
+Var c1 : int
+  init:
+    gone1
+Var c2 : int
+  init:
+    gone2
+Function main returns int
+  Block
+    Var d : double
+      init:
+        3.9 : double
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          d
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
