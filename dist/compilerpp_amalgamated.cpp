@@ -118,6 +118,15 @@ enum TokenKind {
     TOK_SHL,        // <<
     TOK_SHR,        // >>
 
+    // Operators of real C++ that this subset leaves out.  They are lexed for
+    // the same reason TOK_RESERVED exists: without a token, `a ? 1 : 2` and
+    // `a | b` reached the parser as an unknown character and were reported as
+    // punctuation trouble, which reads as a broken compiler rather than as a
+    // language that is smaller than expected.
+    TOK_QUESTION,   // ?   the conditional operator
+    TOK_PIPE,       // |   bitwise or
+    TOK_CARET,      // ^   bitwise xor
+
     // A keyword of real C++ that this subset leaves out.  It is lexed rather
     // than left as an identifier so the parser can say WHICH feature is
     // missing, once, instead of failing its way through the construct.  The
@@ -871,16 +880,23 @@ struct TempExpr : public cc::Expr {
 
 struct NewExpr : public cc::Expr {
     Type *allocType;
+    // new T[n]: the count, owned, and 0 for the single-object form.  It is an
+    // EXPRESSION, not a constant -- the bound of a heap array is a value the
+    // program computes, which is the whole reason to want one.
+    cc::Expr *count;
     std::vector<cc::Expr*> args;
     cc::Function *resolvedCtor;         // chosen by the semantic pass; not owned
-    NewExpr(Type *t) : allocType(t), resolvedCtor(0) {}
+    NewExpr(Type *t) : allocType(t), count(0), resolvedCtor(0) {}
     ~NewExpr();
     void print(int indent);
 };
 
 struct DeleteExpr : public cc::Expr {
     cc::Expr *operand;
-    DeleteExpr(cc::Expr *e) : operand(e) {}
+    // delete[] -- it must match the new that made the block, and here that is
+    // checked rather than assumed: the allocator records which form was used.
+    bool isArray;
+    DeleteExpr(cc::Expr *e) : operand(e), isArray(false) {}
     ~DeleteExpr() { delete operand; }
     void print(int indent);
 };
@@ -1272,6 +1288,21 @@ private:
     // A class that owns something destructible gets a destructor whether or
     // not one was written -- otherwise nothing runs its members' destructors.
     void synthesiseDestructors();
+    // The copy constructor a class declares, or 0.
+    // Exact enough to win outright, in overload resolution only.
+    bool exactForOverload(cc::Type *arg, cc::Type *param);
+    cxx::MethodDecl *copyConstructorOf(cxx::ClassDecl *cd);
+    // A copy is memberwise: the base is copied by ITS copy constructor and so
+    // is every member that has one.  A class that declares none of its own
+    // still needs one when anything it is made of has one, or the copy is
+    // done with memcpy and those constructors never run.
+    bool needsCopyConstructor(cxx::ClassDecl *cd);
+    // Whether one CAN be generated: every base and class-typed member the
+    // generated list names must itself be constructible from one argument.
+    bool canSynthesiseCopy(cxx::ClassDecl *cd, int depth = 0);
+    // Generates it for cd, and first for every part cd's list will name.
+    bool synthesiseCopyFor(cxx::ClassDecl *cd);
+    void synthesiseCopyConstructors();
     void declareTopLevel(const std::vector<cc::Decl*> &units);
     void analyzeDecl(cc::Decl *d);
     void analyzeClass(cxx::ClassDecl *cd);
@@ -1349,6 +1380,9 @@ private:
     bool convertible(cc::Expr *fromExpr, cc::Type *from, cc::Type *to);
     static bool isNullPointerConstant(cc::Expr *e);
     cxx::ClassDecl *classOf(cc::Type *t);   // through one pointer or reference
+    // The class a MEMBER is made of, through any number of array dimensions.
+    // Not through a pointer: a pointer member is copied as the value it is.
+    cxx::ClassDecl *memberClassOf(cc::Type *t);
     static bool isVoid(cc::Type *t);
     // The builtin kind a type names, or BK_Void when it names none.
     static bool builtinKindOf(cc::Type *t, cc::BuiltinKind &out);
@@ -1588,7 +1622,9 @@ enum IROp {
     IR_VCallTarget,  // dest = (*(vptr of a))[imm]
 
     // --- free store ---------------------------------------------------
-    IR_Alloc,        // dest = allocate imm bytes
+    IR_Alloc,        // dest = allocate imm bytes, or a bytes when a is a register;
+                     // b, when set, is the element count of a new[]
+    IR_ArrayCount,   // dest = how many elements the new[] block at a holds
     IR_Free,         // release a
 
     // --- control ------------------------------------------------------
@@ -1611,13 +1647,18 @@ struct IRInstr {
     // A load or store of a floating value moves different bits than an integer
     // one of the same width -- a 4-byte float is not the low half of a double.
     bool isFloat;
+    // IR_Free: which FORM of delete this is.  The allocator records the form in
+    // the block, so `delete` on a `new[]` block is caught rather than left
+    // undefined the way the language leaves it.  IR_Alloc says the same thing
+    // by carrying an element count in `b`.
+    bool isArray;
     std::string sym;            // callee or global name
     std::vector<IRReg> args;    // for IR_Call / IR_CallIndirect
     int line;
 
     IRInstr(IROp o)
         : op(o), dest(IR_NoReg), a(IR_NoReg), b(IR_NoReg), imm(0), fimm(0.0),
-          isFloat(false), line(0) {}
+          isFloat(false), isArray(false), line(0) {}
 };
 
 // A class-typed local occupies its whole object size here, which is what makes
@@ -1675,7 +1716,13 @@ struct IRFunction {
                            bool wantsResult, int line);
     IRReg emitVCallTarget(IRReg object, long slot, int line);
     IRReg emitAlloc(long bytes, int line);
-    void  emitFree(IRReg ptr, int line);
+    // The size in a register, and for new[] the element count beside it.  The
+    // count is stored in the block: the SIZE cannot stand in for it, because
+    // the allocator rounds a block up and five four-byte elements would come
+    // back as six.
+    IRReg emitAllocN(IRReg bytes, IRReg count, int line);
+    IRReg emitArrayCount(IRReg ptr, int line);
+    void  emitFree(IRReg ptr, int line, bool isArray = false);
     void  emitLabel(int label);
     void  emitJump(int label, int line);
     void  emitBranchZero(IRReg cond, int label, int line);
@@ -1933,14 +1980,29 @@ protected:
     // An object passed BY VALUE: the callee gets a copy, and if the class
     // wrote a copy constructor that constructor is what makes it.
     virtual IRReg lowerByValueObject(Type *want, Expr *e, int line);
+    // `return obj;` -- the same copy, into the slot the caller supplied.  Here
+    // it is the bytes; the C++ layer overrides it to run the constructor.
+    virtual void emitReturnObject(IRReg dest, Expr *e, int line);
     // A by-value argument that a copy constructor built lives in a temporary
     // of the caller's, and dies at the end of the expression that made it.
     // Nesting works because each call destroys only what it added.
     struct ArgTemp { int slot; Type *type; };
     std::vector<ArgTemp> argTemps;
     virtual void destroyArgTempsDownTo(std::size_t mark, int line);
+    // Where an object-valued expression should be BUILT, when whoever asked
+    // for it already has the space -- a variable being initialised from a
+    // call, say.  Set it, lower the expression, and the outermost thing that
+    // needed space takes it instead of declaring a temporary; anything nested
+    // inside makes its own, as usual.  IR_NoReg means "make your own".
+    // Taken at the TOP of whatever lowers a call, before its receiver and its
+    // arguments -- those are nested expressions, and the destination belongs
+    // to the outermost one.  Taking it later let  d = (a + b) * 2  give the
+    // inner addition the slot meant for the multiplication.
+    IRReg objectDest;
+    IRReg takeObjectDest();
     // Space for a call's object result, and the address the callee fills in.
-    IRReg allocReturnSlot(Function *target, int line);
+    // `given` is a destination already claimed by the caller, or IR_NoReg.
+    IRReg allocReturnSlot(Function *target, int line, IRReg given = IR_NoReg);
     int findSlot(const std::string &name) const;
     virtual bool isReferenceExpr(Expr *e);  // its slot holds an address
     // A reference binds to an object, so it is passed and stored as that
@@ -2051,11 +2113,15 @@ private:
     IRReg emitOperatorCall(cc::Function *op, cc::Expr *lhsExpr, cc::Expr *rhsExpr, int line);
     IRReg lowerOperandFor(cc::Type *want, cc::Expr *e, int line);
     virtual IRReg lowerByValueObject(cc::Type *want, cc::Expr *e, int line);
+    virtual void emitReturnObject(IRReg dest, cc::Expr *e, int line);
     virtual void destroyArgTempsDownTo(std::size_t mark, int line);
     virtual IRReg lowerIndexOperator(cc::IndexExpr *e);
     // Construct or destroy `count` objects laid end to end from `base`.
     void emitArrayConstruct(ClassDecl *cd, IRReg base, long count, int elemSize, int line);
     void emitArrayDestruct(ClassDecl *cd, IRReg base, long count, int elemSize, int line);
+    // An array member being copied: element i from the source's element i.
+    void emitArrayCopyConstruct(ClassDecl *cd, IRReg dst, IRReg src,
+                                long count, int elemSize, int line);
     virtual bool isBoolType(cc::Type *t);
     virtual void lowerDecl(cc::Decl *d);
     virtual void emitPrologue(cc::Function *f);
@@ -2077,6 +2143,12 @@ private:
     void emitDestruct(ClassDecl *cd, IRReg objectAddr, int line,
                       bool concreteType = false);
     void emitVPtrStore(ClassDecl *cd, IRReg objectAddr, int line);
+    // A heap array's length is a VALUE, so these are real loops rather than
+    // the unrolled runs used for an array whose bound the compiler knows.
+    void emitHeapArrayConstruct(ClassDecl *cd, IRReg base, IRReg count,
+                                int elemSize, int line);
+    void emitHeapArrayDestruct(ClassDecl *cd, IRReg base, IRReg count,
+                               int elemSize, int line);
     bool classHasDestructor(ClassDecl *cd) const;
     // A field that IS an object, as opposed to a pointer or reference to one.
     ClassDecl *classOfMemberType(cc::Type *t) const;
@@ -2113,6 +2185,27 @@ private:
 
 #include <string>
 #include <vector>
+
+// The VM's machine word.
+//
+// This compiler's type model fixes `long` at 8 bytes -- see the note on the
+// builtin table in AST.h -- and the VM's memory, addresses and operand stack
+// are all defined in those terms.  The HOST's `long` is not the same thing:
+// it is 8 bytes on macOS and Linux (LP64) but 4 on Windows (LLP64), and using
+// it here silently gave the VM a 32-bit word on MSVC.  Every value wider than
+// 32 bits was then truncated -- doubles through a register lost half their
+// bit pattern, and `(1UL << 32) - 1` became 0, so every 4-byte integer resize
+// masked its value away to nothing.
+//
+// C++98 has no <cstdint>, so the width is pinned per compiler.  Both spellings
+// are pre-C++11 extensions their compilers have always accepted.
+#if defined(_MSC_VER)
+typedef __int64          vmword;
+typedef unsigned __int64 uvmword;
+#else
+typedef long long          vmword;
+typedef unsigned long long uvmword;
+#endif
 
 enum OpCode {
     // --- operand stack ---
@@ -2164,18 +2257,30 @@ enum OpCode {
     OP_ReturnVoid,
 
     // --- free store ---
-    OP_Alloc,           // push the address of imm fresh bytes
-    OP_Free,            // pop an address and release it
+    OP_Alloc,           // push the address of imm fresh bytes; b = 1 for new[]
+    OP_Free,            // pop an address and release it; b = 1 for delete[]
 
-    OP_Halt
+    OP_Halt,
+
+    // Appended here rather than beside OP_Alloc so that no existing opcode's
+    // value moves: a .cxb written by an earlier build still means what it
+    // meant, and the malformed images in tests/images stay the exact bytes
+    // they were recorded as.
+    OP_AllocN,          // pop a size (and, when b = 1, an element count first),
+                        // push the address
+    OP_ArrayCount,      // pop an address from new[], push its element count
+
+    // Not an instruction: the count, so a byte read out of a file can be
+    // checked against the set of opcodes that actually exist.
+    OP_Count
 };
 
 const char *opCodeName(OpCode op);
 
 struct Instr {
     OpCode op;
-    long imm;
-    long b;
+    vmword imm;
+    vmword b;
     double fimm;
     int line;
     Instr(OpCode o = OP_Halt) : op(o), imm(0), b(0), fimm(0.0), line(0) {}
@@ -2223,7 +2328,11 @@ struct Image {
     bool read(const std::string &path, std::string &error);
 
     static const unsigned long Magic   = 0x31425843UL;  // "CXB1"
-    static const unsigned long Version = 4;   // v2 localFloat, v3 localObject, v4 fini
+    // v2 localFloat, v3 localObject, v4 fini, v5 the maths natives grew.
+    // A native is called by its INDEX, so inserting one renumbers every native
+    // after it: a v4 image would still load and would then call the wrong
+    // function.  The bump makes it say so instead.
+    static const unsigned long Version = 5;
 };
 
 // Functions the VM supplies.  A program gets them by DECLARING one without a
@@ -2243,9 +2352,24 @@ enum NativeId {
     // way everything else is: `double sqrt(double);` with no body.
     NAT_Sqrt, NAT_Sin, NAT_Cos, NAT_Tan,
     NAT_Asin, NAT_Acos, NAT_Atan, NAT_Atan2,
+    NAT_Sinh, NAT_Cosh, NAT_Tanh,
     NAT_Pow, NAT_Fabs, NAT_Floor, NAT_Ceil,
+    // `%` needs integer operands and says so, which left no way at all to take
+    // a remainder of two doubles.  fmod is that operation.
+    NAT_Fmod,
+    // Rounding to a whole number in the two directions floor and ceil cannot
+    // express: toward zero, and to the nearest.
+    NAT_Trunc, NAT_Round,
     NAT_Log, NAT_Log10, NAT_Exp,
     NAT_Abs,                    // the one that is integer in and integer out
+    // Input.  A read that fails leaves the destination alone and turns
+    // NAT_InputGood false, which is what `cin.good()` reports -- there are no
+    // exceptions to throw and no stream state object to carry one.
+    NAT_PrintPointer, NAT_ErrPointer,   // an address, which no other native takes
+    NAT_ReadInt, NAT_ReadDouble, NAT_ReadChar,
+    NAT_ReadString,             // one whitespace-delimited word
+    NAT_ReadLine,               // the rest of the line
+    NAT_InputGood,
     NAT_Count
 };
 
@@ -2306,7 +2430,7 @@ private:
 
     // IR labels are ids; bytecode branches are instruction offsets.
     void resolveLabels(const IRFunction &fn, FuncImage &out,
-                       const std::map<long, int> &labelAt);
+                       const std::map<vmword, int> &labelAt);
 
     CodeGen(const CodeGen &);
     CodeGen &operator=(const CodeGen &);
@@ -2322,7 +2446,7 @@ private:
 //
 // One flat byte memory holds static data, the frame stack and the heap, so an
 // address is an address wherever it points.  Values on the operand stack are 8
-// bytes and hold a long or a double; memory keeps each type at its declared
+// bytes and hold a vmword or a double; memory keeps each type at its declared
 // width, which is why loads and stores carry a size and a signedness.
 //
 // C++98 only.
@@ -2340,53 +2464,79 @@ public:
 
     // Runs main and returns its result.  `ok` reports whether execution
     // finished rather than trapping.
-    long run(const Image &image, bool &ok);
+    vmword run(const Image &image, bool &ok);
 
     const std::string &errorMessage() const { return error; }
-    long stepCount() const { return steps; }
+    vmword stepCount() const { return steps; }
 
 private:
     // A value is 8 bytes either way; which half is live depends on the
     // instruction that produced it, exactly as in a real register file.
     union Value {
-        long i;
+        vmword i;
         double d;
     };
 
     std::vector<unsigned char> mem;
     std::vector<Value> stack;       // the operand stack
     std::string error;
-    long steps;
+    vmword steps;
 
-    long stackBase;                 // frames grow from here
-    long stackTop;
-    long heapBase;
-    long heapTop;
-    long freeList;                  // singly linked, through each block's header
+    vmword stackBase;               // frames grow from here
+    vmword stackTop;
+    vmword heapBase;
+    vmword heapTop;
+    vmword freeList;                // singly linked, through each block's header
 
     struct Frame {
         int func;
         int pc;
-        long base;                  // byte offset of this frame in mem
+        vmword base;                // byte offset of this frame in mem
         int regBase;                // where registers start within the frame
         bool wantsResult;
     };
     std::vector<Frame> frames;
+    const Image *img;               // what is running, for the frame tables
 
     void trap(const std::string &msg);
     bool failed() const { return !error.empty(); }
 
-    void push(long v);
+    void push(vmword v);
     void pushD(double v);
     Value pop();
 
-    long readInt(long addr, int size, bool isSigned);
-    void writeInt(long addr, int size, long value);
-    double readFloat(long addr, int size);
-    void writeFloat(long addr, int size, double value);
+    vmword readInt(vmword addr, int size, bool isSigned);
+    void writeInt(vmword addr, int size, vmword value);
+    double readFloat(vmword addr, int size);
+    void writeFloat(vmword addr, int size, double value);
 
-    long allocate(long bytes);
-    void release(long addr);
+    // `arrayCount` is -1 for plain new and the element count for new[].  It is
+    // recorded in the block, so delete[] knows how many destructors to run and
+    // the matching form can be required rather than assumed.
+    vmword allocate(vmword bytes, vmword arrayCount);
+    void release(vmword addr, bool isArray);
+    // Is this the START of a block, as opposed to somewhere inside one?
+    bool isBlockStart(vmword block);
+    // Is it on the free list already?  Both forms of delete need to say so.
+    bool isOnFreeList(vmword block);
+    // How many bytes the block at `addr` can hold, without trapping when the
+    // address is not a heap block at all.  Input uses it to refuse a read into
+    // a buffer whose size nothing knows.
+    bool heapCapacity(vmword addr, vmword &cap);
+    // The same question of a local: the machine knows the layout of every
+    // frame it has pushed, so an address inside one has a known amount of room
+    // after it even though the array that owns it has decayed to a pointer.
+    bool frameCapacity(vmword addr, vmword &cap);
+    // Copy a string into the machine's memory, NUL-terminated, never writing
+    // more than `cap` bytes.
+    void writeCString(vmword addr, const std::string &s, vmword cap);
+    // False once a read has failed: what cin.good() reports.
+    bool inputGood;
+    // How many elements the new[] block at `addr` holds, or 0 with a trap set.
+    vmword arrayCount(vmword addr);
+    // The longest the free list could legitimately be; a walk past it is
+    // going round a cycle, so both walks stop instead of spinning.
+    vmword freeListLimit() const;
 
     void callNative(NativeId id, int argc);
 
@@ -2494,6 +2644,9 @@ const char *tokenName(TokenKind k) {
     case TOK_OROR:       return "'||'";
     case TOK_NOT:        return "'!'";
     case TOK_AMP:        return "'&'";
+    case TOK_QUESTION:   return "'?'";
+    case TOK_PIPE:       return "'|'";
+    case TOK_CARET:      return "'^'";
     case TOK_RESERVED:   return "a reserved keyword";
     case TOK_UNKNOWN:    return "unknown token";
     }
@@ -2810,8 +2963,10 @@ Token Lexer::nextToken() {
         break;
     case '|':
         if (peek() == '|') { get(); kind = TOK_OROR; }
-        else kind = TOK_UNKNOWN;
+        else kind = TOK_PIPE;
         break;
+    case '?': kind = TOK_QUESTION; break;
+    case '^': kind = TOK_CARET; break;
     case ':':
         if (peek() == ':') { get(); kind = TOK_COLONCOLON; }
         else kind = TOK_COLON;
@@ -2987,26 +3142,57 @@ const char *IOStreamPrelude =
     " public: int _;"
     " ostream() { _ = 0; }"
     " ostream operator<<(int n)      { print_int(n); return *this; }"
-    " ostream operator<<(long n)     { print_int((int)n); return *this; }"
+    " ostream operator<<(long n)     { print_int(n); return *this; }"
     " ostream operator<<(short n)    { print_int(n); return *this; }"
     " ostream operator<<(double d)   { print_double(d); return *this; }"
     " ostream operator<<(float f)    { print_double(f); return *this; }"
     " ostream operator<<(char c)     { print_char(c); return *this; }"
     " ostream operator<<(char* s)    { print_string(s); return *this; }"
+    // Any other pointer prints as an address.  Without this one the only
+    // overload a pointer could reach was the bool, and `cout << p` printed 1.
+    " ostream operator<<(void* p)    { print_pointer(p); return *this; }"
     " ostream operator<<(bool b)     { print_int(b); return *this; }"
     " ostream operator<<(__endl_t e) { print_line(); return *this; }"
     " };"
     " ostream cout;"
+    // istream is the same shape: no state of its own, every operator forwards
+    // to a native and returns *this so that  cin >> a >> b  chains.  Whether
+    // the last read worked lives in the machine rather than in the object,
+    // which is why a copy returned by value costs nothing -- and why
+    // cin.good() is right after a chain, not just after its first read.
+    " class istream {"
+    " public: int _;"
+    " istream() { _ = 0; }"
+    // A read that fails leaves its destination alone, which is what C++98
+    // says -- so every one of these asks whether the read worked before it
+    // assigns.  There are no exceptions here to throw instead.
+    " istream operator>>(int &n)    { long v = read_int(); if (input_good() != 0) n = (int) v; return *this; }"
+    " istream operator>>(long &n)   { long v = read_int(); if (input_good() != 0) n = v; return *this; }"
+    " istream operator>>(short &n)  { long v = read_int(); if (input_good() != 0) n = (short) v; return *this; }"
+    " istream operator>>(double &d) { double v = read_double(); if (input_good() != 0) d = v; return *this; }"
+    " istream operator>>(float &f)  { double v = read_double(); if (input_good() != 0) f = (float) v; return *this; }"
+    " istream operator>>(char &c)   { int v = read_char(); if (input_good() != 0) c = (char) v; return *this; }"
+    " istream operator>>(bool &b)   { long v = read_int(); if (input_good() != 0) b = v != 0; return *this; }"
+    // No width, so the buffer has to say how long it is: one from new[] does,
+    // and the machine asks it.  Anything else gets told to use getline rather
+    // than being written past the end of.
+    " istream operator>>(char* s)   { read_string(s, 0); return *this; }"
+    " bool good() { return input_good() != 0; }"
+    " bool eof() { return input_good() == 0; }"
+    " void getline(char* s, int max) { read_line(s, max); }"
+    " };"
+    " istream cin;"
     " class errstream {"
     " public: int _;"
     " errstream() { _ = 0; }"
     " errstream operator<<(int n)      { err_int(n); return *this; }"
-    " errstream operator<<(long n)     { err_int((int)n); return *this; }"
+    " errstream operator<<(long n)     { err_int(n); return *this; }"
     " errstream operator<<(short n)    { err_int(n); return *this; }"
     " errstream operator<<(double d)   { err_double(d); return *this; }"
     " errstream operator<<(float f)    { err_double(f); return *this; }"
     " errstream operator<<(char c)     { err_char(c); return *this; }"
     " errstream operator<<(char* s)    { err_string(s); return *this; }"
+    " errstream operator<<(void* p)    { err_pointer(p); return *this; }"
     " errstream operator<<(bool b)     { err_int(b); return *this; }"
     " errstream operator<<(__endl_t e) { err_line(); return *this; }"
     " };"
@@ -3015,16 +3201,24 @@ const char *IOStreamPrelude =
 // The natives the prelude leans on.  Declaring them here means a program that
 // includes <iostream> need not declare them itself.
 const char *IOStreamNatives =
-    "void print_int(int n);"
+    "void print_int(long n);"
     " void print_char(int c);"
     " void print_double(double d);"
     " void print_string(char* s);"
     " void print_line();"
-    " void err_int(int n);"
+    " void err_int(long n);"
     " void err_char(int c);"
     " void err_double(double d);"
     " void err_string(char* s);"
-    " void err_line();";
+    " void err_line();"
+    " void print_pointer(void* p);"
+    " void err_pointer(void* p);"
+    " long read_int();"
+    " double read_double();"
+    " int read_char();"
+    " void read_string(char* s, int max);"
+    " void read_line(char* s, int max);"
+    " int input_good();";
 
 // Does the source include the named header?  Only the spelling matters --
 // there is no file to look for.
@@ -3707,20 +3901,22 @@ void TempExpr::print(int indent) {
 
 NewExpr::~NewExpr() {
     delete allocType;
+    delete count;
     for (std::size_t i = 0; i < args.size(); ++i) delete args[i];
 }
 
 void NewExpr::print(int indent) {
     printIndent(indent);
-    std::cout << "New ";
+    std::cout << (count ? "New[] " : "New ");
     if (allocType) allocType->print(0);
     else std::cout << "<none>" << std::endl;
+    if (count) count->print(indent + 1);
     for (std::size_t i = 0; i < args.size(); ++i) args[i]->print(indent + 1);
 }
 
 void DeleteExpr::print(int indent) {
     printIndent(indent);
-    std::cout << "Delete" << std::endl;
+    std::cout << (isArray ? "Delete[]" : "Delete") << std::endl;
     if (operand) operand->print(indent + 1);
 }
 
@@ -4064,6 +4260,12 @@ void Parser::parseFunctionParamsAndBody(Function *fn) {
             while (cur.kind != TOK_COMMA && cur.kind != TOK_RPAREN &&
                    cur.kind != TOK_EOF) advance();
         }
+        if (cur.kind == TOK_LBRACKET) {
+            errorAtCurrent("array parameters are not supported in this version; "
+                           "pass a pointer");
+            while (cur.kind != TOK_COMMA && cur.kind != TOK_RPAREN &&
+                   cur.kind != TOK_EOF) advance();
+        }
         VarDecl *param = new VarDecl(pt, pname, 0);
         param->line = pline;
         param->col = pcol;
@@ -4080,6 +4282,15 @@ void Parser::parseFunctionParamsAndBody(Function *fn) {
         fn->body = parseBlock();
         return;
     }
+    // `= 0` is the one thing that plausibly follows a signature and is not a
+    // body, so it is worth its own sentence rather than a punctuation complaint.
+    if (cur.kind == TOK_ASSIGN) {
+        errorAtCurrent("pure virtual functions are not supported in this version; "
+                       "give the method a body");
+        while (cur.kind != TOK_SEMI && cur.kind != TOK_EOF) advance();
+        match(TOK_SEMI);
+        return;
+    }
     errorAtCurrent("expected ';' or '{' after function " + fn->name);
 }
 
@@ -4091,6 +4302,14 @@ VarDecl *Parser::parseVarDeclTail(Type *type, const std::string &name,
     vd->line = nameLine;
     vd->col = nameCol;
     parseVarInitializer(vd);            // virtual: C++ adds  (args)
+    // `int a = 1, b = 2;` -- one type, several names.  The comma is where it
+    // shows, so the comma is where it is named; without this the reader was
+    // told a semicolon was expected, which is true and unhelpful.
+    if (cur.kind == TOK_COMMA) {
+        errorAtCurrent("declaring more than one variable in a statement is not "
+                       "supported in this version; write a declaration each");
+        while (cur.kind != TOK_SEMI && cur.kind != TOK_EOF) advance();
+    }
     expect(TOK_SEMI, ("after declaration of " + name).c_str());
     return vd;
 }
@@ -4462,6 +4681,25 @@ Expr *Parser::parseExpression() {
     ++nesting;
     Expr *e = parseAssign();
     --nesting;
+
+    // An operator left out of the subset lands here, where a complete
+    // expression has been parsed and something follows it that no rule above
+    // accepts.  Naming it costs one message; leaving it produced a complaint
+    // about whichever bracket happened to be expected next, which never
+    // mentioned the operator the program was reaching for.  None of these can
+    // be a separator -- an argument list consumes its own commas in
+    // parseCallSuffix -- so seeing one here is always the operator itself.
+    if (cur.kind == TOK_QUESTION) {
+        errorAtCurrent("the conditional operator '?:' is not supported in this "
+                       "version; use an if statement");
+        while (cur.kind != TOK_SEMI && cur.kind != TOK_RPAREN &&
+               cur.kind != TOK_EOF) advance();
+    } else if (cur.kind == TOK_AMP || cur.kind == TOK_PIPE || cur.kind == TOK_CARET) {
+        errorAtCurrent("bitwise operators are not supported in this version; "
+                       "'<<' and '>>' are the only bit operations");
+        while (cur.kind != TOK_SEMI && cur.kind != TOK_RPAREN &&
+               cur.kind != TOK_EOF) advance();
+    }
     return e;
 }
 
@@ -4737,6 +4975,15 @@ Expr *Parser::parseCastOrParen() {
 
     advance();                                      // consume '(' again
     Expr *e = parseExpression();
+    // A comma HERE is the comma operator: an argument list consumes its own
+    // commas in parseCallSuffix, so this pair of brackets is grouping and
+    // nothing else.
+    if (cur.kind == TOK_COMMA) {
+        errorAtCurrent("the comma operator is not supported in this version; "
+                       "write the two expressions as separate statements");
+        while (cur.kind != TOK_RPAREN && cur.kind != TOK_SEMI &&
+               cur.kind != TOK_EOF) advance();
+    }
     expect(TOK_RPAREN, "after parenthesised expression");
     return e;
 }
@@ -5197,7 +5444,23 @@ cc::Type *Parser::parseType() {
     // then find no specifier it knows, so it is taken here for a class type.
     const bool leadingConst = (cur.kind == TOK_CONST);
 
+    // `const bool` -- the C layer's parseType would consume the const and then
+    // find no specifier it knows, so bool claims both tokens itself.  The
+    // lookahead is a probe because a lone `const` in front of anything else
+    // still belongs to the branches below.
+    if (leadingConst) {
+        const State probe = save();
+        advance();
+        if (cur.kind != TOK_BOOL) restore(probe);
+    }
+
+    cc::Type *t = 0;
+
     // bool is C++'s, so the C layer's specifier soup knows nothing about it.
+    // It joins the common path rather than returning from here: the reference
+    // suffix is handled once, at the bottom, and a `return` taken early meant
+    // `bool*` parsed while `bool&` did not.
+    bool isBool = false;
     if (cur.kind == TOK_BOOL) {
         const int line = cur.line, col = cur.col;
         advance();
@@ -5205,16 +5468,17 @@ cc::Type *Parser::parseType() {
         b->line = line;
         b->col = col;
         b->isConst = leadingConst;
-        return parsePointerSuffixes(b);
+        t = parsePointerSuffixes(b);
+        isBool = true;
     }
 
-    cc::Type *t = cc::Parser::parseType();      // int, char, void, and T*
+    if (!isBool) t = cc::Parser::parseType();   // int, char, void, and T*
 
     // a qualified / class name like A::B -- new in C++.  An identifier is a
     // type only when it names a class; otherwise it is somebody's variable,
     // and `(x)` is a parenthesised expression rather than a cast.
     bool isTypeName = false;
-    if (!t && cur.kind == TOK_IDENTIFIER) {
+    if (!isBool && !t && cur.kind == TOK_IDENTIFIER) {
         isTypeName = namesAClass(cur.text);
         if (!isTypeName) {
             // Two names in a row is a declaration even when the first is not a
@@ -5341,6 +5605,26 @@ QualifiedName *Parser::parseQualifiedName() {
 
 // Numbers, identifiers and parentheses are C's; these are not.
 cc::Expr *Parser::parsePrimary() {
+    // `std::cout` -- a namespace qualification, which this version does not
+    // have.  Without this it was an identifier followed by a stray '::', and
+    // three cascading errors that never said the word "namespace" -- in a
+    // language whose own <iostream> is the reason anyone types it.  The
+    // qualifier is dropped and the name kept, so one mistake costs one line
+    // and the rest of the expression still parses.
+    while (cur.kind == TOK_IDENTIFIER && !namesAClass(cur.text)) {
+        const State probe = save();
+        const int line = cur.line, col = cur.col;
+        const std::string qualifier = cur.text;
+        advance();
+        if (cur.kind != TOK_COLONCOLON) { restore(probe); break; }
+        advance();                              // '::'
+        if (cur.kind != TOK_IDENTIFIER) { restore(probe); break; }
+        diag.error(line, col,
+                   "namespaces are not supported in this version; write '"
+                   + cur.text + "', not '" + qualifier + "::" + cur.text + "'");
+        // Loop, so a::b::c is named once per qualifier rather than cascading.
+    }
+
     // ClassName ( args )  builds an unnamed object.  Only a name that IS a
     // class starts one, so an ordinary call is untouched.
     if (cur.kind == TOK_IDENTIFIER && namesAClass(cur.text)) {
@@ -5390,6 +5674,14 @@ cc::Expr *Parser::parsePrimary() {
         if (!t) { errorAtCurrent("expected a type after 'new'"); return 0; }
         NewExpr *ne = new NewExpr(t);
         ne->line = line; ne->col = col;
+        // new T[n].  parseType() stops at the '[' -- an array bound belongs to
+        // the declarator in this grammar, never to the type -- so the count is
+        // parsed here and hangs off the expression.
+        if (match(TOK_LBRACKET)) {
+            ne->count = parseExpression();
+            if (!ne->count) errorAtCurrent("expected an element count after '['");
+            expect(TOK_RBRACKET, "after the element count");
+        }
         if (match(TOK_LPAREN)) {                // constructor arguments
             while (cur.kind != TOK_RPAREN && cur.kind != TOK_EOF) {
                 cc::Expr *a = parseExpression();
@@ -5404,9 +5696,15 @@ cc::Expr *Parser::parsePrimary() {
 
     if (cur.kind == TOK_DELETE) {
         advance();
-        cc::Expr *e = new DeleteExpr(parseUnary());
-        e->line = line; e->col = col;
-        return e;
+        bool isArray = false;
+        if (match(TOK_LBRACKET)) {
+            isArray = true;
+            expect(TOK_RBRACKET, "after 'delete['");
+        }
+        DeleteExpr *de = new DeleteExpr(parseUnary());
+        de->isArray = isArray;
+        de->line = line; de->col = col;
+        return de;
     }
 
     return cc::Parser::parsePrimary();
@@ -5727,6 +6025,16 @@ cxx::ClassDecl *SemanticAnalyzer::classOf(cc::Type *t) {
     return ct ? findClass(ct->className) : 0;
 }
 
+// `T m` and `T m[2]` are both members made of T, and both are constructed --
+// the second one element at a time.  classOf answers a different question and
+// looks through a pointer to do it, which is exactly wrong here: a `T*` member
+// is a value to copy, not an object to construct.
+cxx::ClassDecl *SemanticAnalyzer::memberClassOf(cc::Type *t) {
+    while (cc::ArrayType *at = dynamic_cast<cc::ArrayType*>(t)) t = at->element;
+    cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(t);
+    return ct ? findClass(ct->className) : 0;
+}
+
 // A Derived object begins with its Base subobject at offset 0, so the upcast
 // costs nothing.  The reverse is not allowed: a Base* need not be a Derived.
 bool SemanticAnalyzer::canConvert(cc::Type *from, cc::Type *to) {
@@ -5743,10 +6051,13 @@ bool SemanticAnalyzer::canConvert(cc::Type *from, cc::Type *to) {
     // A pointer tests as a bool too:  if (p)
     if (isBoolType(t) && dynamic_cast<cc::PointerType*>(f)) return true;
 
-    // Derived* -> Base*
+    // Derived* -> Base*, and any object pointer -> void*
     cc::PointerType *pf = dynamic_cast<cc::PointerType*>(f);
     cc::PointerType *ptt = dynamic_cast<cc::PointerType*>(t);
     if (pf && ptt) {
+        // void* is the generic address, as in C++.  Not the reverse: coming
+        // back out needs a cast, because only the program knows what it is.
+        if (isVoid(ptt->base)) return true;
         cxx::ClassDecl *df = classOf(pf->base);
         cxx::ClassDecl *dt = classOf(ptt->base);
         if (df && dt) return isDerivedFrom(df, dt);
@@ -5963,7 +6274,7 @@ cc::Function *SemanticAnalyzer::findFreeOperator(cc::Expr *lhs, cc::Type *lt,
         if (f->params.size() != 2) continue;
         cc::Type *p0 = f->params[0]->type;
         cc::Type *p1 = f->params[1]->type;
-        if (sameType(lt, stripReference(p0)) && sameType(rt, stripReference(p1))) {
+        if (exactForOverload(lt, p0) && exactForOverload(rt, p1)) {
             if (!exact) exact = f;
             continue;
         }
@@ -6015,7 +6326,7 @@ cxx::MethodDecl *SemanticAnalyzer::findIndexOperator(cxx::ClassDecl *cd, cc::Exp
             if (!m || m->params.size() != 1) continue;
             if (m->isConstMethod != wantConst) continue;
             cc::Type *want = m->params[0]->type;
-            if (it && sameType(it, stripReference(want))) { if (!exact) exact = m; continue; }
+            if (it && exactForOverload(it, want)) { if (!exact) exact = m; continue; }
             if (convertible(index, it, want))             { if (!viable) viable = m; }
         }
     }
@@ -6056,7 +6367,7 @@ cxx::MethodDecl *SemanticAnalyzer::findMemberOperator(cc::Type *lt, cc::BinaryOp
         cxx::MethodDecl *m = dynamic_cast<cxx::MethodDecl*>(cands[i]);
         if (!m || m->params.size() != 1) continue;
         cc::Type *want = m->params[0]->type;
-        if (rt && sameType(rt, stripReference(want))) { if (!exact) exact = m; continue; }
+        if (rt && exactForOverload(rt, want)) { if (!exact) exact = m; continue; }
         if (convertible(rhs, rt, want))               { if (!viable) viable = m; }
     }
 
@@ -6254,6 +6565,195 @@ bool SemanticAnalyzer::needsDestructor(cxx::ClassDecl *cd) {
     return false;
 }
 
+// Exact ENOUGH to win outright, for overload resolution only.
+//
+// sameType, plus one rule: void* is exact for any pointer.  Conversions here
+// come in two tiers -- exact, then merely possible -- with no ranking inside
+// the second, and a pointer can become either a void* or a bool, because
+// `if (p)` is the reason bool takes a pointer at all.  So an overload set
+// holding both is ambiguous for every pointer, and ostream's holds both.
+// Calling void* the exact answer for a pointer settles it the way C++ settles
+// it, without a conversion-ranking pass this compiler does not have.
+//
+// The deviation, and it is a real one: f(Base*) beside f(void*), called with a
+// Derived*, picks void* here where C++ picks Base*.
+bool SemanticAnalyzer::exactForOverload(cc::Type *arg, cc::Type *param) {
+    cc::Type *p = stripReference(param);
+    if (sameType(arg, p)) return true;
+    cc::PointerType *pa = dynamic_cast<cc::PointerType*>(stripReference(arg));
+    cc::PointerType *pp = dynamic_cast<cc::PointerType*>(p);
+    return pa != 0 && pp != 0 && isVoid(pp->base);
+}
+
+cxx::MethodDecl *SemanticAnalyzer::copyConstructorOf(cxx::ClassDecl *cd) {
+    if (!cd) return 0;
+    for (std::size_t i = 0; i < cd->ctors.size(); ++i) {
+        cxx::MethodDecl *c = cd->ctors[i];
+        if (!c || c->params.size() != 1) continue;
+        // By reference, necessarily: taking the argument by value would need
+        // the very copy being defined.
+        cxx::ReferenceType *rt = dynamic_cast<cxx::ReferenceType*>(c->params[0]->type);
+        if (!rt) continue;
+        cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(rt->base);
+        if (ct && ct->className == cd->name) return c;
+    }
+    return 0;
+}
+
+// Can a copy constructor for this class be GENERATED?  Only if every part its
+// initialiser list will name can be constructed from one argument.  A part
+// that declares a copy constructor answers yes on the spot; otherwise it must
+// be one this same rule can generate, which makes the question recursive.
+//
+// An array member used to stop the recursion with a no, because no syntax puts
+// an array in an initialiser list.  That is true of the syntax and false of the
+// consequence: generating nothing left the WHOLE class on the byte copy, so a
+// sibling member that DID have a copy constructor never saw one either -- and
+// where that sibling owned memory, the two objects ended up holding one
+// pointer and the second destructor freed it twice.  An array member is now
+// named like any other and lowered as a whole-array move, which is what the
+// byte copy always did for it, so the array is copied exactly as before and
+// everything beside it is copied properly.
+bool SemanticAnalyzer::canSynthesiseCopy(cxx::ClassDecl *cd, int depth) {
+    if (!cd) return true;                       // no part is no obstacle
+    if (copyConstructorOf(cd)) return true;     // declared: nothing to generate
+    if (depth > 64) return false;               // a hierarchy this deep is broken
+
+    if (!canSynthesiseCopy(cd->base, depth + 1)) return false;
+    for (std::size_t i = 0; i < cd->members.size(); ++i) {
+        cxx::FieldDecl *fd = dynamic_cast<cxx::FieldDecl*>(cd->members[i]);
+        if (!fd) continue;
+        // Only a member made OF a class is constructed -- an array of them one
+        // element at a time.  A pointer or a scalar is copied as the value it is.
+        cxx::ClassDecl *fcd = memberClassOf(fd->type);
+        if (!fcd) continue;
+        if (!canSynthesiseCopy(fcd, depth + 1)) return false;
+    }
+    return true;
+}
+
+bool SemanticAnalyzer::needsCopyConstructor(cxx::ClassDecl *cd) {
+    if (!cd || copyConstructorOf(cd)) return false;
+    if (!canSynthesiseCopy(cd)) return false;
+
+    for (cxx::ClassDecl *b = cd->base; b; b = b->base) {
+        if (copyConstructorOf(b)) return true;
+    }
+    for (std::size_t i = 0; i < cd->members.size(); ++i) {
+        cxx::FieldDecl *fd = dynamic_cast<cxx::FieldDecl*>(cd->members[i]);
+        if (!fd) continue;
+        if (copyConstructorOf(memberClassOf(fd->type))) return true;
+    }
+    return false;
+}
+
+// The copy constructor the language says exists whether or not it is written.
+// Without it a derived object was copied with memcpy, so a base that counted
+// its copies never saw one -- the same silent wrong answer a declared copy
+// constructor was added to prevent, one level up.
+//
+// It is built as the initialiser list a reader would have written:
+//
+//     Derived(const Derived &__o) : Base(__o), extra(__o.extra) { }
+//
+// so nothing downstream needs to know it was generated.  selectConstructor
+// picks the base's and each member's copy constructor exactly as it would for
+// a written one, and Lowering::copyConstructorOf finds it in cd->ctors.
+//
+// Generates the constructor for cd, and FIRST for every base and class-typed
+// member its initialiser list will name -- otherwise the list calls a
+// constructor that does not exist, and a class whose parts were merely
+// default-constructible stopped compiling the moment one of its other parts
+// gained a copy constructor.  canSynthesiseCopy has already established that
+// the recursion succeeds all the way down.
+bool SemanticAnalyzer::synthesiseCopyFor(cxx::ClassDecl *cd) {
+    if (!cd || copyConstructorOf(cd) || !canSynthesiseCopy(cd)) return false;
+
+    if (cd->base) synthesiseCopyFor(cd->base);
+    for (std::size_t m = 0; m < cd->members.size(); ++m) {
+        cxx::FieldDecl *fd = dynamic_cast<cxx::FieldDecl*>(cd->members[m]);
+        if (!fd) continue;
+        // An array member's ELEMENT class needs one too: lowering calls it per
+        // element, so it must exist by the time lowering looks.
+        if (cxx::ClassDecl *fcd = memberClassOf(fd->type)) synthesiseCopyFor(fcd);
+    }
+
+    cxx::MethodDecl *c = new cxx::MethodDecl(0, cd->name, cxx::ACC_Public);
+    c->ownerClass = cd->name;
+    c->isConstructor = true;
+    c->isImplicit = true;
+    c->line = cd->line;
+    c->col = cd->col;
+
+    // const T &__o -- the const rides on the referenced type, which is
+    // where every check looks for it.
+    cxx::ClassType *arg = new cxx::ClassType(cd->name);
+    arg->isConst = true;
+    arg->line = cd->line;
+    arg->col = cd->col;
+    cxx::ReferenceType *ref = new cxx::ReferenceType(arg);
+    ref->line = cd->line;
+    ref->col = cd->col;
+    cc::VarDecl *param = new cc::VarDecl(ref, "__o", 0);
+    param->line = cd->line;
+    param->col = cd->col;
+    c->params.push_back(param);
+
+    // : Base(__o)
+    if (cd->base) {
+        cxx::MemberInit bi;
+        bi.name = cd->base->name;
+        bi.line = cd->line;
+        bi.col = cd->col;
+        cc::IdentExpr *src = new cc::IdentExpr("__o");
+        src->line = cd->line;
+        src->col = cd->col;
+        bi.args.push_back(src);
+        c->memberInits.push_back(bi);
+    }
+
+    // , each member as  m(__o.m)
+    for (std::size_t m = 0; m < cd->members.size(); ++m) {
+        cxx::FieldDecl *fd = dynamic_cast<cxx::FieldDecl*>(cd->members[m]);
+        if (!fd) continue;
+        cxx::MemberInit mi;
+        mi.name = fd->name;
+        mi.line = cd->line;
+        mi.col = cd->col;
+        cc::IdentExpr *base = new cc::IdentExpr("__o");
+        base->line = cd->line;
+        base->col = cd->col;
+        cxx::MemberAccessExpr *acc =
+            new cxx::MemberAccessExpr(base, fd->name, false);
+        acc->line = cd->line;
+        acc->col = cd->col;
+        mi.args.push_back(acc);
+        c->memberInits.push_back(mi);
+    }
+
+    c->body = new cc::CompoundStmt();    // the list is the whole of it
+    c->body->line = cd->line;
+    c->body->col = cd->col;
+
+    cd->members.push_back(c);
+    cd->ctors.push_back(c);
+    return true;
+}
+
+void SemanticAnalyzer::synthesiseCopyConstructors() {
+    // Repeat until nothing changes: giving one class a copy constructor can
+    // make a class that holds one need its own.
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        std::map<std::string, cxx::ClassDecl*>::iterator it;
+        for (it = classes.begin(); it != classes.end(); ++it) {
+            if (!it->second || !needsCopyConstructor(it->second)) continue;
+            if (synthesiseCopyFor(it->second)) changed = true;
+        }
+    }
+}
+
 void SemanticAnalyzer::synthesiseDestructors() {
     // Repeat until nothing changes: giving one class a destructor can make a
     // class that holds one need its own.
@@ -6411,6 +6911,19 @@ void SemanticAnalyzer::analyzeMemberInits(cxx::MethodDecl *ctor, cxx::ClassDecl 
         if (fieldIndex < lastFieldIndex) outOfOrder = true;
         lastFieldIndex = fieldIndex;
 
+        // An array member, which only a GENERATED constructor names: there is
+        // no syntax for it, so a user still reaches the checks below and the
+        // error they already gave.  What the entry means is a whole-array
+        // move, decided in lowering; here it needs only its source analysed,
+        // because lowering asks for that expression's type.
+        if (ctor->isImplicit && dynamic_cast<cc::ArrayType*>(field->type)) {
+            for (std::size_t a = 0; a < mi.args.size(); ++a) {
+                bool lv = false;
+                analyzeExpr(mi.args[a], lv);
+            }
+            continue;
+        }
+
         // A member that is itself an object is CONSTRUCTED here, with whatever
         // arguments are written -- `Outer() : in(7)` calls Inner(int).  Only a
         // scalar member is initialised from a single value.
@@ -6457,7 +6970,18 @@ cxx::MethodDecl *SemanticAnalyzer::selectConstructor(cxx::ClassDecl *cd,
     if (!cd) return 0;
     const std::size_t argCount = args.size();
 
-    // No constructors at all is legal: the fields are uninitialised, as in C.
+    // No constructor the USER wrote is legal: the fields are uninitialised, as
+    // in C.  A constructor the compiler generated does not change that.  The
+    // implicit copy constructor in particular must not take default
+    // construction away from a class that never declared anything -- writing
+    // nothing cannot be what makes `Derived a;` illegal.
+    bool userWritten = false;
+    for (std::size_t i = 0; i < cd->ctors.size(); ++i) {
+        if (cd->ctors[i] && !cd->ctors[i]->isImplicit) { userWritten = true; break; }
+    }
+
+    if (!userWritten && argCount == 0) return 0;
+
     if (cd->ctors.empty()) {
         if (argCount > 0) {
             error(at, "class '" + cd->name + "' has no constructor to take arguments");
@@ -6482,7 +7006,7 @@ cxx::MethodDecl *SemanticAnalyzer::selectConstructor(cxx::ClassDecl *cd,
         for (std::size_t k = 0; k < argCount; ++k) {
             if (!argTypes[k]) continue;
             cc::Type *want = c->params[k]->type;
-            if (!sameType(argTypes[k], stripReference(want))) allExact = false;
+            if (!exactForOverload(argTypes[k], want)) allExact = false;
             if (!convertible(args[k], argTypes[k], want)) allOk = false;
         }
         if (allExact) exact.push_back(c);
@@ -6519,6 +7043,11 @@ void SemanticAnalyzer::analyze(const std::vector<cc::Decl*> &units) {
     //     destructor of its own, whether or not one was written.  Without it
     //     emitEpilogue never runs and those members are never destroyed.
     synthesiseDestructors();
+    // 2d) and a class whose base or whose members have a copy constructor
+    //     needs one of its own, or copying it is a memcpy and those
+    //     constructors never run.  After the destructors, because both walk
+    //     the same members and neither depends on the other.
+    synthesiseCopyConstructors();
     // 3) work out which methods override which, so virtualness is known before
     //    any body is analysed
     for (std::size_t i = 0; i < units.size(); ++i) {
@@ -6828,7 +7357,15 @@ void SemanticAnalyzer::analyzeVarDecl(cc::VarDecl *vd, bool declareIt) {
         } else if (initType && !initIsLValue) {
             error(vd, "cannot bind reference '" + vd->name + "' of type "
                       + describe(vd->type) + " to a non-lvalue initialiser");
-        } else if (initType && !convertible(vd->init, initType, rt->base)) {
+        } else if (initType && !convertible(vd->init, initType, vd->type)) {
+            // The whole reference type, not rt->base: convertible() has the
+            // rule that binding a T& to a const object discards the const,
+            // and it can only apply that rule if it can SEE the reference.
+            // Passing the base type asked "does const int convert to int?",
+            // which is true -- for a copy.  A reference is not a copy, so
+            // `const int c; int &r = c;` slipped through and let a const
+            // object be assigned to.  The argument path already passes the
+            // parameter's own type and has always rejected this.
             error(vd, "cannot bind '" + describe(vd->type) + " " + vd->name
                       + "' to an initialiser of type " + describe(initType));
         }
@@ -7051,7 +7588,7 @@ cc::Function *SemanticAnalyzer::resolveOverload(const std::vector<cc::Function*>
         bool allExact = true, allOk = true;
         for (std::size_t i = 0; i < argTypes.size(); ++i) {
             if (!argTypes[i]) continue;
-            if (!sameType(argTypes[i], f->params[i]->type)) allExact = false;
+            if (!exactForOverload(argTypes[i], f->params[i]->type)) allExact = false;
             if (!convertible(call->args[i], argTypes[i], f->params[i]->type)) allOk = false;
         }
         if (allExact) exact.push_back(f);
@@ -7175,15 +7712,39 @@ cc::Type *SemanticAnalyzer::analyzeExprImpl(cc::Expr *e, bool &isLValue) {
     cxx::NewExpr *ne = dynamic_cast<cxx::NewExpr*>(e);
     if (ne) {
         checkTypeIsKnown(ne->allocType, ne, "'new' expression");
+        if (ne->count) {
+            bool lv = false;
+            cc::Type *nt = analyzeExpr(ne->count, lv);
+            cc::BuiltinKind nk;
+            if (nt && (!arithmeticKind(nt, nk) || !cc::builtinIsInteger(nk))) {
+                error(ne, "the element count of 'new[]' must be an integer, not "
+                          + describe(nt));
+            }
+        }
         for (std::size_t i = 0; i < ne->args.size(); ++i) {
             bool lv = false;
             analyzeExpr(ne->args[i], lv);
         }
         // new allocates AND constructs, so the arguments must match a ctor.
         cxx::ClassType *nct = dynamic_cast<cxx::ClassType*>(ne->allocType);
-        if (nct) ne->resolvedCtor = selectConstructor(findClass(nct->className),
-                                                     ne->args, ne, "'new'");
-        else if (!ne->args.empty()) {
+        if (ne->count) {
+            // Every element gets the same constructor and there is nowhere to
+            // write arguments for each, so the array form takes none and the
+            // elements are default-constructed -- as in C++.
+            if (!ne->args.empty()) {
+                error(ne, "'new " + describe(ne->allocType)
+                          + "[]' cannot take constructor arguments; its elements are"
+                            " default-constructed");
+            }
+            if (nct) {
+                std::vector<cc::Expr*> none;
+                ne->resolvedCtor = selectConstructor(findClass(nct->className), none, ne,
+                                                     "'new " + nct->className + "[]'");
+            }
+        } else if (nct) {
+            ne->resolvedCtor = selectConstructor(findClass(nct->className),
+                                                 ne->args, ne, "'new'");
+        } else if (!ne->args.empty()) {
             error(ne, "'new " + describe(ne->allocType) + "' cannot take constructor arguments");
         }
         // new T yields T*, and the T belongs to the AST node, so it is copied
@@ -7196,7 +7757,8 @@ cc::Type *SemanticAnalyzer::analyzeExprImpl(cc::Expr *e, bool &isLValue) {
         cc::Type *t = analyzeExpr(de->operand, lv);
         cc::PointerType *pt = t ? dynamic_cast<cc::PointerType*>(t) : 0;
         if (t && !pt) {
-            error(de, "'delete' applied to " + describe(t) + ", which is not a pointer");
+            error(de, std::string(de->isArray ? "'delete[]'" : "'delete'") + " applied to "
+                      + describe(t) + ", which is not a pointer");
         } else if (pt) {
             // Only a virtual destructor is found through the vtable.
             cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(pt->base);
@@ -7928,6 +8490,7 @@ const char *irOpName(IROp op) {
     case IR_CallIndirect: return "call.ind";
     case IR_VCallTarget:  return "vtable";
     case IR_Alloc:        return "alloc";
+    case IR_ArrayCount:   return "arraycount";
     case IR_Free:         return "free";
     case IR_Label:        return "label";
     case IR_Jump:         return "jump";
@@ -8198,9 +8761,29 @@ IRReg IRFunction::emitAlloc(long bytes, int line) {
     return i.dest;
 }
 
-void IRFunction::emitFree(IRReg ptr, int line) {
+IRReg IRFunction::emitAllocN(IRReg bytes, IRReg count, int line) {
+    IRInstr i(IR_Alloc);
+    i.dest = newReg();
+    i.a = bytes;                // a register here means "the size is this"
+    i.b = count;                // and a register here means "and it is new[]"
+    i.line = line;
+    push(i);
+    return i.dest;
+}
+
+IRReg IRFunction::emitArrayCount(IRReg ptr, int line) {
+    IRInstr i(IR_ArrayCount);
+    i.dest = newReg();
+    i.a = ptr;
+    i.line = line;
+    push(i);
+    return i.dest;
+}
+
+void IRFunction::emitFree(IRReg ptr, int line, bool isArray) {
     IRInstr i(IR_Free);
     i.a = ptr;
+    i.isArray = isArray;
     i.line = line;
     push(i);
 }
@@ -8276,8 +8859,14 @@ void IRModule::printInstr(const IRInstr &i) {
 
     switch (i.op) {
     case IR_Const:
-    case IR_Alloc:
         std::cout << " " << i.imm;
+        break;
+    case IR_Alloc:
+        // The size is a constant or a register, and a count beside it says the
+        // instruction is a new[]; both show in the dump.
+        if (i.a != IR_NoReg) std::cout << " " << regName(i.a);
+        else                 std::cout << " " << i.imm;
+        if (i.b != IR_NoReg) std::cout << " [" << regName(i.b) << "]";
         break;
     case IR_FConst:
         std::cout << " " << i.fimm;
@@ -8343,6 +8932,7 @@ void IRModule::printInstr(const IRInstr &i) {
         break;
     case IR_Free:
         std::cout << " " << regName(i.a);
+        if (i.isArray) std::cout << " []";
         break;
     default:
         if (i.a != IR_NoReg) std::cout << " " << regName(i.a);
@@ -8401,7 +8991,8 @@ void IRModule::print() const {
 namespace cc {
 
 Lowering::Lowering(IRModule &module, const Layout &l, Diagnostics &d)
-    : mod(module), layout(l), diag(d), fn(0), currentReturnType(0) {}
+    : mod(module), layout(l), diag(d), fn(0), objectDest(IR_NoReg),
+      currentReturnType(0) {}
 
 Lowering::~Lowering() {
     for (std::map<int, Type*>::iterator it = builtinCache.begin();
@@ -8679,10 +9270,25 @@ bool Lowering::returnsObject(Function *f) {
     return f && isObjectType(f->retType);
 }
 
-IRReg Lowering::allocReturnSlot(Function *target, int line) {
+IRReg Lowering::takeObjectDest() {
+    const IRReg d = objectDest;
+    objectDest = IR_NoReg;      // at most once: the outermost expression gets it
+    return d;
+}
+
+IRReg Lowering::allocReturnSlot(Function *target, int line, IRReg given) {
+    // Given a destination, the callee writes the result straight into it: no
+    // temporary to copy out of, and none to destroy afterwards.
+    if (given != IR_NoReg) return given;
+
     const int size = sizeOfType(target->retType);
     const int slot = declareLocal("$result", size > 0 ? size : Layout::PointerSize, false);
     return fn->emitLocalAddr(slot, line);
+}
+
+// The C layer has no constructors: a returned object is its bytes.
+void Lowering::emitReturnObject(IRReg dest, Expr *e, int line) {
+    fn->emitMemCopy(dest, lowerObjectValue(e), sizeOfType(currentReturnType), line);
 }
 
 IRReg Lowering::lowerByValueObject(Type *, Expr *e, int) {
@@ -8905,8 +9511,7 @@ void Lowering::lowerStmt(Stmt *s) {
             if (slot >= 0) {
                 const IRReg dest = fn->emitLoad(fn->emitLocalAddr(slot, rs->line),
                                                 Layout::PointerSize, false, rs->line);
-                fn->emitMemCopy(dest, lowerObjectValue(rs->expr),
-                                sizeOfType(currentReturnType), rs->line);
+                emitReturnObject(dest, rs->expr, rs->line);
                 v = dest;
             }
         } else if (rs->expr && isReferenceType(currentReturnType)) {
@@ -9476,9 +10081,10 @@ IRReg Lowering::lowerCall(CallExpr *e, bool wantsResult) {
         if (it != functions.end()) target = it->second;
     }
     const std::string sym = target ? symbolFor(target, "") : callee->name;
+    const IRReg dest = takeObjectDest();
     const std::size_t mark = argTemps.size();
     std::vector<IRReg> args;
-    if (returnsObject(target)) args.push_back(allocReturnSlot(target, e->line));
+    if (returnsObject(target)) args.push_back(allocReturnSlot(target, e->line, dest));
     const std::vector<IRReg> rest = lowerArgs(e, target, 0);
     args.insert(args.end(), rest.begin(), rest.end());
     const IRReg out = fn->emitCall(sym, args, wantsResult, e->line);
@@ -9757,9 +10363,12 @@ bool Lowering::lowerLayerValue(cc::Expr *e, IRReg &out) {
     // its address, which is what every object-valued expression yields here.
     if (TempExpr *te = dynamic_cast<TempExpr*>(e)) {
         ClassDecl *cd = classOfMemberType(te->type);
-        const int size = layout.sizeOf(te->type);
-        const int slot = declareLocal("$temp", size > 0 ? size : Layout::PointerSize, false);
-        const IRReg addr = fn->emitLocalAddr(slot, e->line);
+        IRReg addr = takeObjectDest();
+        if (addr == IR_NoReg) {
+            const int size = layout.sizeOf(te->type);
+            const int slot = declareLocal("$temp", size > 0 ? size : Layout::PointerSize, false);
+            addr = fn->emitLocalAddr(slot, e->line);
+        }
         if (cd) emitConstruct(cd, addr, te->args, e->line, te->resolvedCtor);
         out = addr;
         return true;
@@ -9768,9 +10377,31 @@ bool Lowering::lowerLayerValue(cc::Expr *e, IRReg &out) {
     // Allocate, then construct -- two steps, in the order the language says.
     if (NewExpr *ne = dynamic_cast<NewExpr*>(e)) {
         ClassDecl *cd = classOfType(ne->allocType);
-        const int size = cd ? layout.sizeOf(ne->allocType) : layout.sizeOf(ne->allocType);
-        out = fn->emitAlloc(size > 0 ? size : Layout::IntSize, e->line);
-        if (cd) emitConstruct(cd, out, ne->args, e->line, ne->resolvedCtor);
+        int elemSize = layout.sizeOf(ne->allocType);
+        if (elemSize <= 0) elemSize = Layout::IntSize;
+
+        if (!ne->count) {
+            out = fn->emitAlloc(elemSize, e->line);
+            if (cd) emitConstruct(cd, out, ne->args, e->line, ne->resolvedCtor);
+            return true;
+        }
+
+        // new T[n].  A literal bound is multiplied out here -- there is no
+        // reason to compute at run time a product the compiler already knows --
+        // and anything else is multiplied at run time, because the bound of a
+        // heap array is a value like any other.  Either way the count ends up
+        // in a register, because the constructor loop needs it.
+        cc::NumberExpr *lit = dynamic_cast<cc::NumberExpr*>(ne->count);
+        IRReg count, bytes;
+        if (lit && lit->value >= 0) {
+            count = fn->emitConst(lit->value, e->line);
+            bytes = fn->emitConst(lit->value * elemSize, e->line);
+        } else {
+            count = lowerValue(ne->count);
+            bytes = fn->emitBinary(IR_Mul, count, fn->emitConst(elemSize, e->line), e->line);
+        }
+        out = fn->emitAllocN(bytes, count, e->line);
+        if (cd) emitHeapArrayConstruct(cd, out, count, elemSize, e->line);
         return true;
     }
 
@@ -9779,6 +10410,26 @@ bool Lowering::lowerLayerValue(cc::Expr *e, IRReg &out) {
     if (DeleteExpr *de = dynamic_cast<DeleteExpr*>(e)) {
         const IRReg ptr = lowerValue(de->operand);
         ClassDecl *cd = classOfType(typeOf(de->operand));
+        if (de->isArray) {
+            // How many elements?  Not in the type -- the pointer is a T* -- and
+            // not in a cookie either: new[] wrote the count into the block's
+            // header, in the field the free list only uses while the block is
+            // free.  A real ABI has to put a cookie in front of the payload
+            // because free() cannot be asked anything; this machine can be
+            // asked.
+            if (cd) {
+                int elemSize = Layout::PointerSize;
+                if (cc::PointerType *pt = dynamic_cast<cc::PointerType*>(typeOf(de->operand))) {
+                    elemSize = layout.sizeOf(pt->base);
+                }
+                if (elemSize <= 0) elemSize = Layout::IntSize;
+                emitHeapArrayDestruct(cd, ptr, fn->emitArrayCount(ptr, e->line),
+                                      elemSize, e->line);
+            }
+            fn->emitFree(ptr, e->line, true);
+            out = ptr;
+            return true;
+        }
         if (cd) emitDestruct(cd, ptr, e->line);
         fn->emitFree(ptr, e->line);
         out = ptr;              // delete has no value; reusing ptr emits nothing
@@ -9877,6 +10528,21 @@ void Lowering::lowerVarDecl(cc::VarDecl *vd) {
     const int slot = declareLocal(vd->name, size > 0 ? size : Layout::PointerSize, false);
     localTypes[vd->name] = vd->type;
 
+    // T b = f();  or  T b = T(1);  -- the expression has an object to build and
+    // b is where it belongs, so it is built THERE.  Copying it out of a
+    // temporary afterwards would run the copy constructor a second time and
+    // leave the temporary's own destructor unrun.
+    if (vd->init && !vd->hasCtorArgs && yieldsObject(vd->init)) {
+        const IRReg dest = fn->emitLocalAddr(slot, vd->line);
+        objectDest = dest;
+        const IRReg got = lowerObjectValue(vd->init);
+        const bool builtInPlace = (objectDest == IR_NoReg);
+        objectDest = IR_NoReg;
+        // A shape that made its own space anyway still has to reach b.
+        if (!builtInPlace) fn->emitMemCopy(dest, got, size, vd->line);
+        return;
+    }
+
     // P b = a;  copies a.  A declared copy constructor is the copy if there is
     // one; otherwise the copy is memberwise, which carries the vptr and is
     // right for two objects of one class.
@@ -9937,6 +10603,53 @@ ClassDecl *Lowering::elementClassOf(cc::Type *t, long &count) const {
     return ct ? findClass(ct->className) : 0;
 }
 
+// The same two runs as emitArrayConstruct/emitArrayDestruct below, but as
+// loops: a heap array's length is not known until the program says it, so the
+// run cannot be unrolled -- and should not be even for `new C[1000]`, where
+// unrolling would emit a thousand calls.
+void Lowering::emitHeapArrayConstruct(ClassDecl *cd, IRReg base, IRReg count,
+                                      int elemSize, int line) {
+    const int i = declareLocal("$i", 8, false);
+    const IRReg slot = fn->emitLocalAddr(i, line);
+    fn->emitStore(slot, fn->emitConst(0, line), 8, false, line);
+
+    const int top = fn->newLabel();
+    const int end = fn->newLabel();
+    fn->emitLabel(top);
+    const IRReg iv = fn->emitLoad(fn->emitLocalAddr(i, line), 8, false, line);
+    fn->emitBranchZero(fn->emitBinary(IR_CmpLT, iv, count, line), end, line);
+
+    const IRReg off = fn->emitBinary(IR_Mul, iv, fn->emitConst(elemSize, line), line);
+    std::vector<cc::Expr*> none;
+    emitConstruct(cd, fn->emitBinary(IR_Add, base, off, line), none, line);
+
+    const IRReg next = fn->emitBinary(IR_Add, iv, fn->emitConst(1, line), line);
+    fn->emitStore(fn->emitLocalAddr(i, line), next, 8, false, line);
+    fn->emitJump(top, line);
+    fn->emitLabel(end);
+}
+
+// Backwards, for the same reason the unrolled one runs backwards: the last
+// element built is the first destroyed.
+void Lowering::emitHeapArrayDestruct(ClassDecl *cd, IRReg base, IRReg count,
+                                     int elemSize, int line) {
+    const int i = declareLocal("$i", 8, false);
+    fn->emitStore(fn->emitLocalAddr(i, line), count, 8, false, line);
+
+    const int top = fn->newLabel();
+    const int end = fn->newLabel();
+    fn->emitLabel(top);
+    const IRReg iv = fn->emitLoad(fn->emitLocalAddr(i, line), 8, false, line);
+    fn->emitBranchZero(iv, end, line);
+
+    const IRReg prev = fn->emitBinary(IR_Sub, iv, fn->emitConst(1, line), line);
+    fn->emitStore(fn->emitLocalAddr(i, line), prev, 8, false, line);
+    const IRReg off = fn->emitBinary(IR_Mul, prev, fn->emitConst(elemSize, line), line);
+    emitDestruct(cd, fn->emitBinary(IR_Add, base, off, line), line, true);
+    fn->emitJump(top, line);
+    fn->emitLabel(end);
+}
+
 // Element 0 first, exactly as a single object is built before the next one.
 void Lowering::emitArrayConstruct(ClassDecl *cd, IRReg base, long count,
                                   int elemSize, int line) {
@@ -9944,6 +10657,25 @@ void Lowering::emitArrayConstruct(ClassDecl *cd, IRReg base, long count,
     for (long i = 0; i < count; ++i) {
         emitConstruct(cd, fn->emitFieldAddr(base, static_cast<int>(i) * elemSize, line),
                       none, line);
+    }
+}
+
+// Each element from the element it corresponds to.  No syntax reaches inside
+// an array member, so an initialiser list cannot say this -- but the copy
+// constructor can still be CALLED on every element, which is what a copy of an
+// array member is.  Unrolled for the same reason the default form is: the
+// bound is a constant here.
+void Lowering::emitArrayCopyConstruct(ClassDecl *cd, IRReg dst, IRReg src,
+                                      long count, int elemSize, int line) {
+    MethodDecl *copyCtor = copyConstructorOf(cd);
+    if (!copyCtor) return;
+    for (long i = 0; i < count; ++i) {
+        const int off = static_cast<int>(i) * elemSize;
+        std::vector<IRReg> callArgs;
+        callArgs.push_back(fn->emitFieldAddr(dst, off, line));
+        // A reference parameter receives the address, exactly as a call does.
+        callArgs.push_back(fn->emitFieldAddr(src, off, line));
+        fn->emitCall(mangleConstructor(cd->name, copyCtor->params), callArgs, false, line);
     }
 }
 
@@ -10042,6 +10774,26 @@ bool Lowering::isBoolType(cc::Type *t) {
 // A copy is a construction, so a declared copy constructor makes it.  Without
 // this the bytes were copied and the constructor never ran, which is a silent
 // wrong answer for any class whose copy does more than move bytes.
+// `return obj;` is a copy into the caller's slot, and a copy is a construction:
+// a declared copy constructor is what has to make it.  Copying the bytes was a
+// silent wrong answer for any class whose copy does more than move them, and a
+// dangerous one for a class that owns memory -- the destructors that run
+// immediately after this then free what the caller has just been handed.
+//
+// The construction goes straight into `dest`, so there is no temporary to
+// destroy, and it happens before emitAllOpenScopeExits() for the same reason
+// the byte copy did: the object being returned is one of the locals about to
+// be torn down.
+void Lowering::emitReturnObject(IRReg dest, cc::Expr *e, int line) {
+    ClassDecl *cd = classOfMemberType(currentReturnType);
+    MethodDecl *copyCtor = copyConstructorOf(cd);
+    if (!cd || !copyCtor) { cc::Lowering::emitReturnObject(dest, e, line); return; }
+
+    std::vector<cc::Expr*> one;
+    one.push_back(e);
+    emitConstruct(cd, dest, one, line, copyCtor);
+}
+
 IRReg Lowering::lowerByValueObject(cc::Type *want, cc::Expr *e, int line) {
     ClassDecl *cd = classOfMemberType(want);
     MethodDecl *copyCtor = copyConstructorOf(cd);
@@ -10090,6 +10842,7 @@ IRReg Lowering::lowerOperandFor(cc::Type *want, cc::Expr *e, int line) {
 // argument.  A reference return makes the RESULT an address, which is what
 // lets  t[1] = 42;  assign through it.
 IRReg Lowering::lowerIndexOperator(cc::IndexExpr *e) {
+    const IRReg dest = takeObjectDest();   // before any operand is lowered
     MethodDecl *op = dynamic_cast<MethodDecl*>(e->resolvedOperator);
     if (!op) {
         diag.error(e->line, e->col, "internal: operator[] was not resolved");
@@ -10097,7 +10850,7 @@ IRReg Lowering::lowerIndexOperator(cc::IndexExpr *e) {
     }
     std::vector<IRReg> args;
     args.push_back(lowerObjectValue(e->base));
-    if (returnsObject(op)) args.push_back(allocReturnSlot(op, e->line));
+    if (returnsObject(op)) args.push_back(allocReturnSlot(op, e->line, dest));
     args.push_back(lowerOperandFor(op->params.empty() ? 0 : op->params[0]->type,
                                    e->index, e->line));
     return fn->emitCall(mangleOverload(op->ownerClass, op->name, op->params, op->isConstMethod),
@@ -10109,19 +10862,20 @@ IRReg Lowering::lowerIndexOperator(cc::IndexExpr *e) {
 // RIGHT, which is what makes  3 * v  work.
 IRReg Lowering::emitOperatorCall(cc::Function *op, cc::Expr *lhsExpr,
                                  cc::Expr *rhsExpr, int line) {
+    const IRReg dest = takeObjectDest();   // before any operand is lowered
     MethodDecl *asMember = dynamic_cast<MethodDecl*>(op);
     std::vector<IRReg> args;
 
     if (asMember) {
         args.push_back(lowerObjectValue(lhsExpr));          // `this`
-        if (returnsObject(op)) args.push_back(allocReturnSlot(op, line));
+        if (returnsObject(op)) args.push_back(allocReturnSlot(op, line, dest));
         args.push_back(lowerOperandFor(op->params.empty() ? 0 : op->params[0]->type,
                                        rhsExpr, line));
         return fn->emitCall(mangleOverload(asMember->ownerClass, op->name, op->params, asMember->isConstMethod),
                             args, true, line);
     }
 
-    if (returnsObject(op)) args.push_back(allocReturnSlot(op, line));
+    if (returnsObject(op)) args.push_back(allocReturnSlot(op, line, dest));
     args.push_back(lowerOperandFor(op->params.size() > 0 ? op->params[0]->type : 0,
                                    lhsExpr, line));
     args.push_back(lowerOperandFor(op->params.size() > 1 ? op->params[1]->type : 0,
@@ -10130,6 +10884,7 @@ IRReg Lowering::emitOperatorCall(cc::Function *op, cc::Expr *lhsExpr,
 }
 
 IRReg Lowering::lowerCall(cc::CallExpr *e, bool wantsResult) {
+    const IRReg dest = takeObjectDest();   // before any operand is lowered
     MemberAccessExpr *ma = dynamic_cast<MemberAccessExpr*>(e->callee);
 
     // obj(args) -- the callee is an OBJECT, and the analysis resolved the call
@@ -10141,7 +10896,7 @@ IRReg Lowering::lowerCall(cc::CallExpr *e, bool wantsResult) {
             const std::size_t mark = argTemps.size();
             std::vector<IRReg> args;
             args.push_back(lowerObjectValue(e->callee));
-            if (returnsObject(callOp)) args.push_back(allocReturnSlot(callOp, e->line));
+            if (returnsObject(callOp)) args.push_back(allocReturnSlot(callOp, e->line, dest));
             const std::vector<IRReg> rest = lowerArgs(e, callOp, 0);
             args.insert(args.end(), rest.begin(), rest.end());
             const IRReg out = fn->emitCall(
@@ -10163,13 +10918,16 @@ IRReg Lowering::lowerCall(cc::CallExpr *e, bool wantsResult) {
             if (m) {
                 std::vector<IRReg> args;
                 args.push_back(loadThis(e->line));
-                if (returnsObject(m)) args.push_back(allocReturnSlot(m, e->line));
+                if (returnsObject(m)) args.push_back(allocReturnSlot(m, e->line, dest));
                 const std::vector<IRReg> rest = lowerArgs(e, m, 0);
                 args.insert(args.end(), rest.begin(), rest.end());
                 return fn->emitCall(mangleOverload(m->ownerClass, m->name, m->params, m->isConstMethod),
                                     args, wantsResult, e->line);
             }
         }
+        // Not a C++ call after all.  Hand the destination back, or the C
+        // layer makes a temporary for a result that already has a home.
+        objectDest = dest;
         return cc::Lowering::lowerCall(e, wantsResult);
     }
 
@@ -10188,7 +10946,7 @@ IRReg Lowering::lowerCall(cc::CallExpr *e, bool wantsResult) {
     // function runs, not how it is called.
     std::vector<IRReg> args;
     args.push_back(object);
-    if (returnsObject(m)) args.push_back(allocReturnSlot(m, e->line));
+    if (returnsObject(m)) args.push_back(allocReturnSlot(m, e->line, dest));
     const std::vector<IRReg> rest = lowerArgs(e, m, 0);
     args.insert(args.end(), rest.begin(), rest.end());
 
@@ -10243,12 +11001,6 @@ void Lowering::emitVPtrStore(ClassDecl *cd, IRReg objectAddr, int line) {
 void Lowering::emitConstruct(ClassDecl *cd, IRReg objectAddr,
                              const std::vector<cc::Expr*> &args, int line,
                              cc::Function *chosen) {
-    if (cd->ctors.empty()) {
-        // No constructor, but a polymorphic object still needs its vptr.
-        emitVPtrStore(cd, objectAddr, line);
-        return;
-    }
-
     // The semantic pass chose, by signature.  The fallback by argument count
     // is for the constructions lowering makes itself -- a member, an array
     // element, a base -- which are always the no-argument one.
@@ -10258,7 +11010,17 @@ void Lowering::emitConstruct(ClassDecl *cd, IRReg objectAddr,
             if (cd->ctors[i]->params.size() == args.size()) { ctor = cd->ctors[i]; break; }
         }
     }
-    if (!ctor) return;                  // the analysis already reported why
+    if (!ctor) {
+        // Nothing to call: either the class declares no constructor, or it
+        // declares none that takes these arguments and the analysis has
+        // already said so.  A default construction still has to set the vptr,
+        // which is the one thing an object needs before anything can be
+        // called on it.  Testing for a missing constructor rather than for an
+        // EMPTY constructor list matters now that a class may hold nothing but
+        // constructors the compiler generated.
+        if (args.empty()) emitVPtrStore(cd, objectAddr, line);
+        return;
+    }
 
     std::vector<IRReg> callArgs;
     callArgs.push_back(objectAddr);
@@ -10362,13 +11124,33 @@ void Lowering::emitPrologue(cc::Function *f) {
             const IRReg addr = fn->emitFieldAddr(loadThis(f->line), fl->offset, line);
             if (memberCount != 1) {
                 const ClassLayout *ml = layout.forClass(member->name);
-                if (ml) emitArrayConstruct(member, addr, memberCount, ml->size, line);
+                if (!mi || mi->args.empty()) {
+                    if (ml) emitArrayConstruct(member, addr, memberCount, ml->size, line);
+                } else if (ml && copyConstructorOf(member)) {
+                    // Named by a generated copy constructor: every element is
+                    // copy-constructed from its opposite number.
+                    emitArrayCopyConstruct(member, addr, lowerAddress(mi->args[0]),
+                                           memberCount, ml->size, line);
+                } else {
+                    // Elements with no copy constructor to call are their
+                    // bytes, and a whole-array move is the copy.
+                    fn->emitMemCopy(addr, lowerAddress(mi->args[0]), fl->size, line);
+                }
             } else if (mi) {
                 emitConstruct(member, addr, mi->args, line, mi->resolvedCtor);
             } else {
                 std::vector<cc::Expr*> none;
                 emitConstruct(member, addr, none, line);
             }
+            continue;
+        }
+
+        // An array of scalars, named by a generated copy constructor: the same
+        // whole-array move, and for these it is the whole answer -- the
+        // elements are values, and their bytes are what a copy of them is.
+        if (mi && !mi->args.empty() && dynamic_cast<cc::ArrayType*>(fd->type)) {
+            const IRReg addr = fn->emitFieldAddr(loadThis(f->line), fl->offset, line);
+            fn->emitMemCopy(addr, lowerAddress(mi->args[0]), fl->size, line);
             continue;
         }
 
@@ -10553,6 +11335,9 @@ const char *opCodeName(OpCode op) {
     case OP_Alloc:        return "alloc";
     case OP_Free:         return "free";
     case OP_Halt:         return "halt";
+    case OP_AllocN:       return "alloc.n";
+    case OP_ArrayCount:   return "arraycount";
+    case OP_Count:        break;         // not an instruction
     }
     return "?";
 }
@@ -10578,14 +11363,28 @@ const NativeEntry NativeTable[] = {
     { "acos",         NAT_Acos,        1, true  },
     { "atan",         NAT_Atan,        1, true  },
     { "atan2",        NAT_Atan2,       2, true  },
+    { "sinh",         NAT_Sinh,        1, true  },
+    { "cosh",         NAT_Cosh,        1, true  },
+    { "tanh",         NAT_Tanh,        1, true  },
     { "pow",          NAT_Pow,         2, true  },
     { "fabs",         NAT_Fabs,        1, true  },
     { "floor",        NAT_Floor,       1, true  },
     { "ceil",         NAT_Ceil,        1, true  },
+    { "fmod",         NAT_Fmod,        2, true  },
+    { "trunc",        NAT_Trunc,       1, true  },
+    { "round",        NAT_Round,       1, true  },
     { "log",          NAT_Log,         1, true  },
     { "log10",        NAT_Log10,       1, true  },
     { "exp",          NAT_Exp,         1, true  },
-    { "abs",          NAT_Abs,         1, false }
+    { "abs",          NAT_Abs,         1, false },
+    { "print_pointer", NAT_PrintPointer, 1, false },
+    { "err_pointer",   NAT_ErrPointer,   1, false },
+    { "read_int",     NAT_ReadInt,     0, false },
+    { "read_double",  NAT_ReadDouble,  0, true  },
+    { "read_char",    NAT_ReadChar,    0, false },
+    { "read_string",  NAT_ReadString,  2, false },
+    { "read_line",    NAT_ReadLine,    2, false },
+    { "input_good",   NAT_InputGood,   0, false }
 };
 const int NativeCount = static_cast<int>(sizeof(NativeTable) / sizeof(NativeTable[0]));
 }
@@ -10626,12 +11425,12 @@ bool nativeReturnsFloat(NativeId id) {
 
 namespace {
 
-void putU(std::string &out, unsigned long v, int bytes) {
+void putU(std::string &out, uvmword v, int bytes) {
     for (int i = 0; i < bytes; ++i) out += static_cast<char>((v >> (i * 8)) & 0xFF);
 }
 
-void putI64(std::string &out, long v) {
-    putU(out, static_cast<unsigned long>(v), 8);
+void putI64(std::string &out, vmword v) {
+    putU(out, static_cast<uvmword>(v), 8);
 }
 
 void putF64(std::string &out, double v) {
@@ -10656,16 +11455,16 @@ struct Reader {
         if (!ok || at + n > data.size()) { ok = false; return false; }
         return true;
     }
-    unsigned long getU(int bytes) {
+    uvmword getU(int bytes) {
         if (!need(static_cast<std::size_t>(bytes))) return 0;
-        unsigned long v = 0;
+        uvmword v = 0;
         for (int i = bytes - 1; i >= 0; --i) {
             v = (v << 8) | static_cast<unsigned char>(data[at + i]);
         }
         at += bytes;
         return v;
     }
-    long getI64() { return static_cast<long>(getU(8)); }
+    vmword getI64() { return static_cast<vmword>(getU(8)); }
     double getF64() {
         if (!need(8)) return 0.0;
         double v = 0.0;
@@ -10674,7 +11473,7 @@ struct Reader {
         return v;
     }
     std::string getStr() {
-        const unsigned long n = getU(4);
+        const uvmword n = getU(4);
         if (!need(n)) return std::string();
         const std::string s = data.substr(at, n);
         at += n;
@@ -10691,12 +11490,12 @@ bool Image::write(const std::string &path, std::string &error) const {
     putI64(out, entry);
     putI64(out, fini);
 
-    putU(out, static_cast<unsigned long>(staticData.size()), 4);
+    putU(out, static_cast<uvmword>(staticData.size()), 4);
     for (std::size_t i = 0; i < staticData.size(); ++i) {
         out += static_cast<char>(staticData[i]);
     }
 
-    putU(out, static_cast<unsigned long>(functions.size()), 4);
+    putU(out, static_cast<uvmword>(functions.size()), 4);
     for (std::size_t f = 0; f < functions.size(); ++f) {
         const FuncImage &fi = functions[f];
         putStr(out, fi.name);
@@ -10704,19 +11503,19 @@ bool Image::write(const std::string &path, std::string &error) const {
         putI64(out, fi.frameSize);
         putI64(out, fi.registerCount);
 
-        putU(out, static_cast<unsigned long>(fi.localOffset.size()), 4);
+        putU(out, static_cast<uvmword>(fi.localOffset.size()), 4);
         for (std::size_t i = 0; i < fi.localOffset.size(); ++i) putI64(out, fi.localOffset[i]);
-        putU(out, static_cast<unsigned long>(fi.localSize.size()), 4);
+        putU(out, static_cast<uvmword>(fi.localSize.size()), 4);
         for (std::size_t i = 0; i < fi.localSize.size(); ++i) putI64(out, fi.localSize[i]);
-        putU(out, static_cast<unsigned long>(fi.localFloat.size()), 4);
+        putU(out, static_cast<uvmword>(fi.localFloat.size()), 4);
         for (std::size_t i = 0; i < fi.localFloat.size(); ++i) putU(out, fi.localFloat[i], 1);
-        putU(out, static_cast<unsigned long>(fi.localObject.size()), 4);
+        putU(out, static_cast<uvmword>(fi.localObject.size()), 4);
         for (std::size_t i = 0; i < fi.localObject.size(); ++i) putU(out, fi.localObject[i], 1);
 
-        putU(out, static_cast<unsigned long>(fi.code.size()), 4);
+        putU(out, static_cast<uvmword>(fi.code.size()), 4);
         for (std::size_t i = 0; i < fi.code.size(); ++i) {
             const Instr &n = fi.code[i];
-            putU(out, static_cast<unsigned long>(n.op), 1);
+            putU(out, static_cast<uvmword>(n.op), 1);
             putI64(out, n.imm);
             putI64(out, n.b);
             putF64(out, n.fimm);
@@ -10740,7 +11539,7 @@ bool Image::read(const std::string &path, std::string &error) {
 
     Reader r(data);
     if (r.getU(4) != Magic) { error = "'" + path + "' is not a Compiler++ image"; return false; }
-    const unsigned long ver = r.getU(4);
+    const uvmword ver = r.getU(4);
     if (ver != Version) {
         std::ostringstream m;
         m << "'" << path << "' is version " << ver << ", this build reads version " << Version;
@@ -10750,37 +11549,37 @@ bool Image::read(const std::string &path, std::string &error) {
     entry = static_cast<int>(r.getI64());
     fini  = static_cast<int>(r.getI64());
 
-    const unsigned long dataLen = r.getU(4);
+    const uvmword dataLen = r.getU(4);
     staticData.clear();
     if (!r.need(dataLen)) { error = "'" + path + "' is truncated"; return false; }
     staticData.reserve(dataLen);
-    for (unsigned long i = 0; i < dataLen; ++i) {
+    for (uvmword i = 0; i < dataLen; ++i) {
         staticData.push_back(static_cast<unsigned char>(data[r.at + i]));
     }
     r.at += dataLen;
 
-    const unsigned long funcCount = r.getU(4);
+    const uvmword funcCount = r.getU(4);
     functions.clear();
-    for (unsigned long f = 0; f < funcCount && r.ok; ++f) {
+    for (uvmword f = 0; f < funcCount && r.ok; ++f) {
         FuncImage fi;
         fi.name = r.getStr();
         fi.paramCount = static_cast<int>(r.getI64());
         fi.frameSize = static_cast<int>(r.getI64());
         fi.registerCount = static_cast<int>(r.getI64());
 
-        unsigned long n = r.getU(4);
-        for (unsigned long i = 0; i < n && r.ok; ++i) fi.localOffset.push_back(static_cast<int>(r.getI64()));
+        uvmword n = r.getU(4);
+        for (uvmword i = 0; i < n && r.ok; ++i) fi.localOffset.push_back(static_cast<int>(r.getI64()));
         n = r.getU(4);
-        for (unsigned long i = 0; i < n && r.ok; ++i) fi.localSize.push_back(static_cast<int>(r.getI64()));
+        for (uvmword i = 0; i < n && r.ok; ++i) fi.localSize.push_back(static_cast<int>(r.getI64()));
         n = r.getU(4);
-        for (unsigned long i = 0; i < n && r.ok; ++i)
+        for (uvmword i = 0; i < n && r.ok; ++i)
             fi.localFloat.push_back(static_cast<unsigned char>(r.getU(1)));
         n = r.getU(4);
-        for (unsigned long i = 0; i < n && r.ok; ++i)
+        for (uvmword i = 0; i < n && r.ok; ++i)
             fi.localObject.push_back(static_cast<unsigned char>(r.getU(1)));
 
         n = r.getU(4);
-        for (unsigned long i = 0; i < n && r.ok; ++i) {
+        for (uvmword i = 0; i < n && r.ok; ++i) {
             Instr in;
             in.op = static_cast<OpCode>(r.getU(1));
             in.imm = r.getI64();
@@ -10856,13 +11655,13 @@ namespace {
 // Every value on the operand stack is 8 bytes, so a register slot is too.
 const int RegSize = 8;
 
-void put64(std::vector<unsigned char> &mem, std::size_t at, long value) {
+void put64(std::vector<unsigned char> &mem, std::size_t at, vmword value) {
     for (int i = 0; i < 8; ++i) {
         mem[at + i] = static_cast<unsigned char>((value >> (i * 8)) & 0xFF);
     }
 }
 
-Instr make(OpCode op, long imm = 0, long b = 0, int line = 0) {
+Instr make(OpCode op, vmword imm = 0, vmword b = 0, int line = 0) {
     Instr n(op);
     n.imm = imm;
     n.b = b;
@@ -10963,7 +11762,7 @@ void CodeGen::generateFunction(const IRFunction &fn, FuncImage &out) {
     // recorded here rather than folded into every instruction.
     out.localOffset.push_back(regBase);         // sentinel: where registers start
 
-    std::map<long, int> labelAt;                // IR label id -> instruction index
+    std::map<vmword, int> labelAt;                // IR label id -> instruction index
 
     for (std::size_t i = 0; i < fn.code.size(); ++i) {
         const IRInstr &in = fn.code[i];
@@ -11062,11 +11861,23 @@ void CodeGen::generateFunction(const IRFunction &fn, FuncImage &out) {
             break;
 
         case IR_Alloc:
-            out.code.push_back(make(OP_Alloc, in.imm, 0, line));
+            if (in.a != IR_NoReg) {
+                // The count goes on first, so the size is on top: the machine
+                // pops the size it always pops, and the count only when told.
+                if (in.b != IR_NoReg) out.code.push_back(make(OP_LoadReg, in.b, 0, line));
+                out.code.push_back(make(OP_LoadReg, in.a, 0, line));
+                out.code.push_back(make(OP_AllocN, 0, in.b != IR_NoReg ? 1 : 0, line));
+            } else {
+                out.code.push_back(make(OP_Alloc, in.imm, 0, line));
+            }
+            break;
+        case IR_ArrayCount:
+            out.code.push_back(make(OP_LoadReg, in.a, 0, line));
+            out.code.push_back(make(OP_ArrayCount, 0, 0, line));
             break;
         case IR_Free:
             out.code.push_back(make(OP_LoadReg, in.a, 0, line));
-            out.code.push_back(make(OP_Free, 0, 0, line));
+            out.code.push_back(make(OP_Free, 0, in.isArray ? 1 : 0, line));
             continue;
 
         case IR_Jump:
@@ -11171,11 +11982,11 @@ void CodeGen::generateFunction(const IRFunction &fn, FuncImage &out) {
 
 // IR labels are ids that mean nothing to the VM; branches need offsets.
 void CodeGen::resolveLabels(const IRFunction &, FuncImage &out,
-                            const std::map<long, int> &labelAt) {
+                            const std::map<vmword, int> &labelAt) {
     for (std::size_t i = 0; i < out.code.size(); ++i) {
         Instr &n = out.code[i];
         if (n.op != OP_Jump && n.op != OP_BranchZero && n.op != OP_BranchNZ) continue;
-        std::map<long, int>::const_iterator it = labelAt.find(n.imm);
+        std::map<vmword, int>::const_iterator it = labelAt.find(n.imm);
         if (it == labelAt.end()) {
             diag.error(n.line, 0, "internal: branch to an unplaced label");
             n.imm = static_cast<long>(out.code.size() - 1);
@@ -11191,6 +12002,7 @@ void CodeGen::resolveLabels(const IRFunction &, FuncImage &out,
 // C++98 only.
 
 
+#include <algorithm>
 #include <cstddef>
 #include <cmath>
 #include <cstring>
@@ -11198,20 +12010,29 @@ void CodeGen::resolveLabels(const IRFunction &, FuncImage &out,
 #include <sstream>
 
 namespace {
-const long MemorySize   = 4L * 1024 * 1024;
-const long StackSize    = 1L * 1024 * 1024;
-const long MaxSteps     = 50L * 1000 * 1000;   // a runaway program stops itself
+const vmword MemorySize   = 4L * 1024 * 1024;
+const vmword StackSize    = 1L * 1024 * 1024;
+const vmword MaxSteps     = 50L * 1000 * 1000;   // a runaway program stops itself
 const int  HeaderSize   = 16;                  // [size][next] before each block
+
+// -MIN and MIN / -1 have no answer in the range, and signed overflow is
+// undefined in C++ -- on x86-64 the divide instruction faults and takes the
+// whole process with it.  The VM defines them the way the hardware would if
+// it were allowed to: wrap, like every other signed operation here.
+vmword negate(vmword v) {
+    return static_cast<vmword>(~static_cast<uvmword>(v) + 1);
+}
 }
 
 VM::VM()
-    : steps(0), stackBase(0), stackTop(0), heapBase(0), heapTop(0), freeList(0) {}
+    : steps(0), stackBase(0), stackTop(0), heapBase(0), heapTop(0), freeList(0),
+      img(0), inputGood(true) {}
 
 void VM::trap(const std::string &msg) {
     if (error.empty()) error = msg;
 }
 
-void VM::push(long v)    { Value x; x.i = v; stack.push_back(x); }
+void VM::push(vmword v)    { Value x; x.i = v; stack.push_back(x); }
 void VM::pushD(double v) { Value x; x.d = v; stack.push_back(x); }
 
 VM::Value VM::pop() {
@@ -11226,39 +12047,50 @@ VM::Value VM::pop() {
 
 // --- memory ---
 
-long VM::readInt(long addr, int size, bool isSigned) {
-    if (addr <= 0 || addr + size > static_cast<long>(mem.size())) {
+vmword VM::readInt(vmword addr, int size, bool isSigned) {
+    // A width the word cannot hold would shift by 64 or more, which is
+    // undefined -- and `size` comes out of the file.
+    if (size > 8) { trap("read of a width this machine has no word for"); return 0; }
+    if (addr <= 0 || size < 0 || size > static_cast<vmword>(mem.size()) ||
+        addr > static_cast<vmword>(mem.size()) - size) {
         std::ostringstream ss;
         ss << "read of " << size << " bytes at invalid address " << addr;
         trap(ss.str());
         return 0;
     }
-    unsigned long raw = 0;
+    uvmword raw = 0;
     for (int i = size - 1; i >= 0; --i) {
         raw = (raw << 8) | mem[addr + i];
     }
     if (isSigned && size < 8) {
-        const unsigned long signBit = 1UL << (size * 8 - 1);
-        if (raw & signBit) raw |= ~((1UL << (size * 8)) - 1);
+        const uvmword signBit = static_cast<uvmword>(1) << (size * 8 - 1);
+        if (raw & signBit) raw |= ~((static_cast<uvmword>(1) << (size * 8)) - 1);
     }
-    return static_cast<long>(raw);
+    return static_cast<vmword>(raw);
 }
 
-void VM::writeInt(long addr, int size, long value) {
-    if (addr <= 0 || addr + size > static_cast<long>(mem.size())) {
+void VM::writeInt(vmword addr, int size, vmword value) {
+    if (size > 8) { trap("write of a width this machine has no word for"); return; }
+    if (addr <= 0 || size < 0 || size > static_cast<vmword>(mem.size()) ||
+        addr > static_cast<vmword>(mem.size()) - size) {
         std::ostringstream ss;
         ss << "write of " << size << " bytes at invalid address " << addr;
         trap(ss.str());
         return;
     }
-    unsigned long raw = static_cast<unsigned long>(value);
+    uvmword raw = static_cast<uvmword>(value);
     for (int i = 0; i < size; ++i) {
         mem[addr + i] = static_cast<unsigned char>((raw >> (i * 8)) & 0xFF);
     }
 }
 
-double VM::readFloat(long addr, int size) {
-    if (addr <= 0 || addr + size > static_cast<long>(mem.size())) {
+double VM::readFloat(vmword addr, int size) {
+    // Only two widths exist.  Any other passed the bounds check on `size` and
+    // then moved eight bytes regardless, reading past the end of memory for
+    // every size below eight.
+    if (size != 4 && size != 8) { trap("floating read of an unsupported width"); return 0.0; }
+    if (addr <= 0 || size < 0 || size > static_cast<vmword>(mem.size()) ||
+        addr > static_cast<vmword>(mem.size()) - size) {
         trap("floating read at an invalid address");
         return 0.0;
     }
@@ -11272,8 +12104,10 @@ double VM::readFloat(long addr, int size) {
     return d;
 }
 
-void VM::writeFloat(long addr, int size, double value) {
-    if (addr <= 0 || addr + size > static_cast<long>(mem.size())) {
+void VM::writeFloat(vmword addr, int size, double value) {
+    if (size != 4 && size != 8) { trap("floating write of an unsupported width"); return; }
+    if (addr <= 0 || size < 0 || size > static_cast<vmword>(mem.size()) ||
+        addr > static_cast<vmword>(mem.size()) - size) {
         trap("floating write at an invalid address");
         return;
     }
@@ -11285,42 +12119,200 @@ void VM::writeFloat(long addr, int size, double value) {
     std::memcpy(&mem[addr], &value, 8);
 }
 
+// Every block on the free list needs a header of its own, so the list cannot
+// be longer than the heap holds headers.  A walk that goes further is going
+// round a cycle rather than along a list, and must stop rather than spin.
+vmword VM::freeListLimit() const {
+    return (heapTop - heapBase) / HeaderSize + 1;
+}
+
 // A block carries its size, so `delete` knows how much it is releasing, and a
 // next pointer, so a released block can be reused.  First fit, because the
 // simplest allocator that reuses memory is enough to run a loop.
-long VM::allocate(long bytes) {
+// The block's `next` field is only a free-list link while the block is FREE.
+// While it is allocated it is spare, so what made the block lives there: 0 for
+// plain new, and the element count plus one for new[].  One word, no cookie in
+// front of the payload, and every address the program sees is still the address
+// the allocator returned.
+//
+// The block's SIZE cannot stand in for the count: a block is rounded up to a
+// multiple of eight, so five four-byte elements come back as six.
+vmword VM::allocate(vmword bytes, vmword arrayCount) {
+    const vmword mark = arrayCount < 0 ? 0 : arrayCount + 1;
     if (bytes <= 0) bytes = 1;
+    // Round up AFTER the size is known to fit, or the rounding itself wraps.
+    if (bytes > static_cast<vmword>(mem.size())) { trap("out of heap memory"); return 0; }
     if (bytes % 8) bytes += 8 - (bytes % 8);
 
-    long prev = 0;
-    for (long b = freeList; b != 0; ) {
-        const long size = readInt(b, 8, true);
-        const long next = readInt(b + 8, 8, true);
+    vmword prev = 0;
+    vmword walked = 0;
+    const vmword limit = freeListLimit();
+    for (vmword b = freeList; b != 0; ) {
+        if (++walked > limit) { trap("heap free list is corrupt"); return 0; }
+        const vmword size = readInt(b, 8, true);
+        const vmword next = readInt(b + 8, 8, true);
         if (size >= bytes) {
             if (prev) writeInt(prev + 8, 8, next);
             else      freeList = next;
+            writeInt(b + 8, 8, mark);
             return b + HeaderSize;
         }
         prev = b;
         b = next;
     }
 
-    if (heapTop + HeaderSize + bytes > static_cast<long>(mem.size())) {
+    // As a difference: the sum overflows for a size near the top of the range
+    // and wraps back under the limit.
+    if (heapTop > static_cast<vmword>(mem.size()) - HeaderSize - bytes) {
         trap("out of heap memory");
         return 0;
     }
-    const long block = heapTop;
+    const vmword block = heapTop;
     heapTop += HeaderSize + bytes;
     writeInt(block, 8, bytes);
-    writeInt(block + 8, 8, 0);
+    writeInt(block + 8, 8, mark);
     return block + HeaderSize;
 }
 
-void VM::release(long addr) {
+// Walking from the bottom of the heap: every block says how long it is, so the
+// starts are exactly the addresses this walk lands on.
+bool VM::isBlockStart(vmword block) {
+    vmword walk = heapBase;
+    vmword steppedOver = 0;
+    const vmword guard = freeListLimit();
+    while (walk < heapTop) {
+        if (++steppedOver > guard) { trap("heap is corrupt"); return false; }
+        if (walk == block) return true;
+        const vmword size = readInt(walk, 8, true);
+        if (size <= 0) { trap("heap is corrupt"); return false; }
+        walk += HeaderSize + size;
+    }
+    return false;
+}
+
+bool VM::isOnFreeList(vmword block) {
+    vmword walked = 0;
+    const vmword limit = freeListLimit();
+    for (vmword b = freeList; b != 0; b = readInt(b + 8, 8, true)) {
+        if (++walked > limit) { trap("heap free list is corrupt"); return false; }
+        if (b == block) return true;
+    }
+    return false;
+}
+
+// The same question arrayCount asks, without the trap: a pointer that is not a
+// heap block is a legitimate answer here, not an error.
+// The array a `char buf[32]` names has decayed to a pointer by the time it
+// reaches a native, and the type went with it.  The SLOT is still described,
+// though, by the frame table of whichever function declared it -- so the
+// machine looks the address up in the frames it has pushed and answers how
+// much room is left from there to the end of that slot.
+bool VM::frameCapacity(vmword addr, vmword &cap) {
+    if (!img || addr <= 0) return false;
+    for (std::size_t f = frames.size(); f-- > 0; ) {
+        const Frame &fr = frames[f];
+        if (fr.func < 0 || fr.func >= static_cast<int>(img->functions.size())) continue;
+        const FuncImage &fi = img->functions[fr.func];
+        for (std::size_t k = 0; k < fi.localSize.size(); ++k) {
+            const vmword start = fr.base + fi.localOffset[k];
+            const vmword end   = start + fi.localSize[k];
+            if (addr >= start && addr < end) { cap = end - addr; return cap > 0; }
+        }
+    }
+    return false;
+}
+
+bool VM::heapCapacity(vmword addr, vmword &cap) {
+    if (addr <= 0) return false;
+    const vmword block = addr - HeaderSize;
+    if (block < heapBase || block >= heapTop) return false;
+    if (!isBlockStart(block) || isOnFreeList(block)) return false;
+    cap = readInt(block, 8, true);
+    return cap > 0;
+}
+
+void VM::writeCString(vmword addr, const std::string &s, vmword cap) {
+    if (cap <= 0) return;
+    const vmword limit = static_cast<vmword>(mem.size());
+    if (addr <= 0 || cap > limit || addr > limit - cap) {
+        trap("input written to an invalid address");
+        return;
+    }
+    vmword n = static_cast<vmword>(s.size());
+    if (n > cap - 1) n = cap - 1;               // room for the terminator
+    for (vmword i = 0; i < n; ++i) {
+        mem[addr + i] = static_cast<unsigned char>(s[static_cast<std::size_t>(i)]);
+    }
+    mem[addr + n] = 0;
+}
+
+vmword VM::arrayCount(vmword addr) {
+    if (addr == 0) return 0;                    // delete[] of null: nothing to do
+    const vmword block = addr - HeaderSize;
+    if (block < heapBase || block >= heapTop || !isBlockStart(block)) {
+        trap("delete[] of a pointer that did not come from new[]");
+        return 0;
+    }
+    // Asked BEFORE the mark is read: releasing a block overwrites the mark with
+    // a free-list link, so a second delete[] would otherwise be reported as a
+    // form mismatch rather than as the double delete it is.
+    if (isOnFreeList(block)) {
+        trap("delete[] of a pointer that was already deleted");
+        return 0;
+    }
+    const vmword mark = readInt(block + 8, 8, true);
+    if (mark <= 0) {
+        trap("delete[] applied to a pointer from plain 'new'");
+        return 0;
+    }
+    return mark - 1;
+}
+
+void VM::release(vmword addr, bool isArray) {
     if (addr == 0) return;                      // deleting null is harmless
-    const long block = addr - HeaderSize;
+    const vmword block = addr - HeaderSize;
     if (block < heapBase || block >= heapTop) {
         trap("delete of a pointer that did not come from new");
+        return;
+    }
+    // Being INSIDE the heap is not the same as being a block.  `delete` of a
+    // pointer to a field of an object landed here, and the bytes of that field
+    // then became a header: a size and a next of the program's own choosing,
+    // which the next allocation followed.  So the blocks are walked from the
+    // bottom -- each one says how long it is -- and only a block START counts.
+    // Linear in the number of blocks, which is what a first-fit allocator with
+    // a single free list already costs.
+    if (!isBlockStart(block)) {
+        if (!failed()) {
+            trap(isArray ? "delete[] of a pointer that did not come from new[]"
+                         : "delete of a pointer that did not come from new");
+        }
+        return;
+    }
+    // Deleting a block that is already free would link it to ITSELF, and the
+    // next allocation too big to satisfy from it would then follow `next`
+    // round that loop forever -- inside allocate(), where the interpreter's
+    // step limit does not reach.  A double delete is a fault in the program,
+    // so it is reported as one instead of hanging the machine.
+    //
+    // Asked before the form is read, because releasing a block overwrites the
+    // form with a free-list link: a second delete[] would otherwise be
+    // reported as a mismatch rather than as the double delete it is.
+    if (isOnFreeList(block)) {
+        if (!failed()) {
+            trap(isArray ? "delete[] of a pointer that was already deleted"
+                         : "delete of a pointer that was already deleted");
+        }
+        return;
+    }
+    // The two forms are not interchangeable: delete[] runs a destructor for
+    // every element and delete runs one.  The language leaves the mismatch
+    // undefined because a real allocator has nowhere to record which was used.
+    // This one does, so it is an error rather than a mystery.
+    const vmword wasArray = readInt(block + 8, 8, true);
+    if ((wasArray != 0) != isArray) {
+        trap(isArray ? "delete[] applied to a pointer from plain 'new'"
+                     : "delete applied to a pointer from 'new[]'; use delete[]");
         return;
     }
     writeInt(block + 8, 8, freeList);
@@ -11346,8 +12338,8 @@ void VM::callNative(NativeId id, int argc) {
     case NAT_PrintDouble: std::cout << a[0].d; break;
     case NAT_PrintLine:   std::cout << std::endl; break;
     case NAT_PrintString: {
-        long p = a[0].i;
-        while (p > 0 && p < static_cast<long>(mem.size()) && mem[p]) {
+        vmword p = a[0].i;
+        while (p > 0 && p < static_cast<vmword>(mem.size()) && mem[p]) {
             std::cout << static_cast<char>(mem[p]);
             ++p;
         }
@@ -11360,8 +12352,8 @@ void VM::callNative(NativeId id, int argc) {
     case NAT_ErrDouble: std::cerr << a[0].d; break;
     case NAT_ErrLine:   std::cerr << std::endl; break;
     case NAT_ErrString: {
-        long p = a[0].i;
-        while (p > 0 && p < static_cast<long>(mem.size()) && mem[p]) {
+        vmword p = a[0].i;
+        while (p > 0 && p < static_cast<vmword>(mem.size()) && mem[p]) {
             std::cerr << static_cast<char>(mem[p]);
             ++p;
         }
@@ -11378,23 +12370,112 @@ void VM::callNative(NativeId id, int argc) {
     case NAT_Acos:  pushD(std::acos(a[0].d));  return;
     case NAT_Atan:  pushD(std::atan(a[0].d));  return;
     case NAT_Atan2: pushD(std::atan2(a[0].d, a[1].d)); return;
+    case NAT_Sinh:  pushD(std::sinh(a[0].d));  return;
+    case NAT_Cosh:  pushD(std::cosh(a[0].d));  return;
+    case NAT_Tanh:  pushD(std::tanh(a[0].d));  return;
     case NAT_Pow:   pushD(std::pow(a[0].d, a[1].d));   return;
     case NAT_Fabs:  pushD(std::fabs(a[0].d));  return;
     case NAT_Floor: pushD(std::floor(a[0].d)); return;
     case NAT_Ceil:  pushD(std::ceil(a[0].d));  return;
+    case NAT_Fmod:  pushD(std::fmod(a[0].d, a[1].d));  return;
+    // trunc and round are C99; this is C++98, so they are written in terms of
+    // the two roundings C++98 does have.  Both go away from zero the way the
+    // C99 versions do: trunc(-2.7) is -2, round(-2.5) is -3.
+    case NAT_Trunc:
+        pushD(a[0].d < 0.0 ? std::ceil(a[0].d) : std::floor(a[0].d));
+        return;
+    case NAT_Round:
+        pushD(a[0].d < 0.0 ? std::ceil(a[0].d - 0.5) : std::floor(a[0].d + 0.5));
+        return;
     case NAT_Log:   pushD(std::log(a[0].d));   return;
     case NAT_Log10: pushD(std::log10(a[0].d)); return;
     case NAT_Exp:   pushD(std::exp(a[0].d));   return;
-    case NAT_Abs:   push(a[0].i < 0 ? -a[0].i : a[0].i); return;
+    case NAT_Abs:   push(a[0].i < 0 ? negate(a[0].i) : a[0].i); return;
 
-    case NAT_Count: break;
+    // An address, printed the way C++ prints one: as a number in hex, which
+    // is what makes two pointers comparable by eye.  It is this machine's
+    // address, not the host's, and that is the useful one -- it is where the
+    // object actually lives in the memory this program can see.
+    case NAT_PrintPointer:
+    case NAT_ErrPointer: {
+        std::ostream &out = (id == NAT_PrintPointer) ? std::cout : std::cerr;
+        if (a[0].i == 0) { out << "0"; break; }
+        std::ostringstream ss;
+        ss << "0x" << std::hex << a[0].i;
+        out << ss.str();
+        break;
+    }
+
+    // --- input ---
+    // A failed read leaves the destination alone and turns inputGood false.
+    // There are no exceptions here and no stream-state object to carry one, so
+    // that flag is the whole of the mechanism and cin.good() reads it.
+    case NAT_ReadInt: {
+        long v = 0;
+        inputGood = (std::cin >> v) ? true : false;
+        push(inputGood ? static_cast<vmword>(v) : 0);
+        return;
+    }
+    case NAT_ReadDouble: {
+        double v = 0.0;
+        inputGood = (std::cin >> v) ? true : false;
+        pushD(inputGood ? v : 0.0);
+        return;
+    }
+    case NAT_ReadChar: {
+        char c = 0;
+        inputGood = (std::cin >> c) ? true : false;   // leading space skipped, as >> does
+        push(inputGood ? static_cast<vmword>(c) : 0);
+        return;
+    }
+    case NAT_ReadString: {
+        std::string w;
+        inputGood = (std::cin >> w) ? true : false;
+        vmword cap = a[1].i;
+        if (cap <= 0) {
+            // `cin >> s` gives no width.  If the buffer came from new[] the
+            // machine knows how long it is; otherwise nothing does, and a read
+            // into a buffer of unknown length is the overflow this VM refuses
+            // everywhere else.
+            if (!heapCapacity(a[0].i, cap) && !frameCapacity(a[0].i, cap)) {
+                trap("reading a word into a buffer of unknown size; "
+                     "use cin.getline(buffer, size)");
+                push(0);
+                return;
+            }
+        }
+        if (inputGood) writeCString(a[0].i, w, cap);
+        push(0);
+        return;
+    }
+    case NAT_ReadLine: {
+        std::string l;
+        inputGood = std::getline(std::cin, l) ? true : false;
+        vmword cap = a[1].i;
+        if (cap <= 0 && !heapCapacity(a[0].i, cap) && !frameCapacity(a[0].i, cap)) {
+            trap("reading a line into a buffer of unknown size; "
+                 "give cin.getline a size");
+            push(0);
+            return;
+        }
+        if (inputGood) writeCString(a[0].i, l, cap);
+        push(0);
+        return;
+    }
+    case NAT_InputGood: push(inputGood ? 1 : 0); return;
+
+    // Not a native: the caller range-checks the id, and this keeps the switch
+    // exhaustive so the compiler goes on checking it too.
+    case NAT_Count:
+        trap("call to a native this machine does not have");
+        break;
     }
     push(0);                                    // a print yields a value too
 }
 
 // --- the loop ---
 
-long VM::run(const Image &image, bool &ok) {
+vmword VM::run(const Image &image, bool &ok) {
     ok = false;
     error.clear();
     steps = 0;
@@ -11408,16 +12489,43 @@ long VM::run(const Image &image, bool &ok) {
         return 0;
     }
     for (std::size_t i = 0; i < image.functions.size(); ++i) {
-        if (image.functions[i].localOffset.empty()) {
-            trap("function '" + image.functions[i].name + "' has no frame layout");
+        const FuncImage &fi = image.functions[i];
+        if (fi.localOffset.empty()) {
+            trap("function '" + fi.name + "' has no frame layout");
+            return 0;
+        }
+        // The four per-local tables describe the same slots and are written
+        // that way -- one entry each, plus a sentinel on localOffset saying
+        // where the registers start.  They are READ back as four independent
+        // length-prefixed arrays, so a file that disagrees with itself would
+        // send the argument loop past the end of the short one and use
+        // whatever it found there as a frame offset.  They have to agree
+        // before any of them is indexed.
+        if (fi.localOffset.size() != fi.localSize.size() + 1 ||
+            fi.localFloat.size()  != fi.localSize.size() ||
+            fi.localObject.size() != fi.localSize.size()) {
+            trap("function '" + fi.name + "' has an inconsistent frame layout");
+            return 0;
+        }
+        if (fi.frameSize < 0 || fi.paramCount < 0 || fi.registerCount < 0) {
+            trap("function '" + fi.name + "' has a negative frame size");
             return 0;
         }
     }
 
+    // The length is the file's to claim, and the memory is a fixed size: a
+    // claim larger than the machine wrote past the end of the vector's buffer
+    // and corrupted the host's heap, which is not a fault the program can be
+    // blamed for.
+    if (static_cast<vmword>(image.staticData.size()) > MemorySize) {
+        trap("static data does not fit in this machine's memory");
+        return 0;
+    }
+    img = &image;                   // the frame tables, for frameCapacity
     mem.assign(MemorySize, 0);
     std::copy(image.staticData.begin(), image.staticData.end(), mem.begin());
 
-    stackBase = static_cast<long>(image.staticData.size());
+    stackBase = static_cast<vmword>(image.staticData.size());
     if (stackBase % 8) stackBase += 8 - (stackBase % 8);
     stackTop = stackBase;
     heapBase = stackBase + StackSize;
@@ -11431,10 +12539,17 @@ long VM::run(const Image &image, bool &ok) {
     top.base = stackTop;
     top.regBase = image.functions[image.entry].localOffset.back();
     top.wantsResult = true;
+    // The same bound every other call gets.  The entry frame was pushed
+    // without one, so a frame size the file made up slid the whole stack past
+    // the heap before a single instruction ran.
+    if (stackTop > heapBase - image.functions[image.entry].frameSize) {
+        trap("the entry function's frame does not fit on the stack");
+        return 0;
+    }
     stackTop += image.functions[image.entry].frameSize;
     frames.push_back(top);
 
-    long result = 0;
+    vmword result = 0;
     bool finiDone = false;
 
     while (!frames.empty() && !failed()) {
@@ -11454,14 +12569,25 @@ long VM::run(const Image &image, bool &ok) {
         case OP_Pop:        pop(); break;
 
         case OP_LoadReg:
+            // The frame declares how many it has.  Without this the index was
+            // multiplied by eight and added to the frame base unchecked, which
+            // both overflows and reaches anywhere in memory.
+            if (in.imm < 0 || in.imm >= fi.registerCount) {
+                trap("register out of range");
+                break;
+            }
             push(readInt(fr.base + fr.regBase + in.imm * 8, 8, true));
             break;
         case OP_StoreReg:
+            if (in.imm < 0 || in.imm >= fi.registerCount) {
+                trap("register out of range");
+                break;
+            }
             writeInt(fr.base + fr.regBase + in.imm * 8, 8, pop().i);
             break;
 
         case OP_LocalAddr:
-            if (in.imm < 0 || in.imm >= static_cast<long>(fi.localOffset.size()) - 1) {
+            if (in.imm < 0 || in.imm >= static_cast<vmword>(fi.localOffset.size()) - 1) {
                 trap("local slot out of range");
                 break;
             }
@@ -11472,26 +12598,31 @@ long VM::run(const Image &image, bool &ok) {
         case OP_FieldAddr:  push(pop().i + in.imm); break;
 
         case OP_Load: {
-            const long addr = pop().i;
+            const vmword addr = pop().i;
             if (in.b & 2) pushD(readFloat(addr, static_cast<int>(in.imm)));
             else          push(readInt(addr, static_cast<int>(in.imm), (in.b & 1) != 0));
             break;
         }
         case OP_Store: {
             const Value v = pop();
-            const long addr = pop().i;
+            const vmword addr = pop().i;
             if (in.b & 2) writeFloat(addr, static_cast<int>(in.imm), v.d);
             else          writeInt(addr, static_cast<int>(in.imm), v.i);
             break;
         }
 
         case OP_MemCopy: {
-            const long src = pop().i;
-            const long dst = pop().i;
-            const long n   = in.imm;
-            if (src <= 0 || dst <= 0 || n < 0 ||
-                src + n > static_cast<long>(mem.size()) ||
-                dst + n > static_cast<long>(mem.size())) {
+            const vmword src = pop().i;
+            const vmword dst = pop().i;
+            const vmword n   = in.imm;
+            // As differences: `src + n` overflows for a count near the top of
+            // the range and wraps back under the limit, which is how a copy of
+            // nine million million bytes passed this check.  The by-value
+            // argument copy below was written this way already; this one was
+            // not.
+            const vmword limit = static_cast<vmword>(mem.size());
+            if (src <= 0 || dst <= 0 || n < 0 || n > limit ||
+                src > limit - n || dst > limit - n) {
                 trap("object copy at an invalid address");
                 break;
             }
@@ -11502,54 +12633,56 @@ long VM::run(const Image &image, bool &ok) {
         // A shift by a silly amount is undefined in C++, so the VM defines it:
         // out of range yields 0 rather than whatever the host would do.
         case OP_Shl: {
-            long b = pop().i, a = pop().i;
-            push((b < 0 || b > 63) ? 0 : static_cast<long>(
-                     static_cast<unsigned long>(a) << b));
+            vmword b = pop().i, a = pop().i;
+            push((b < 0 || b > 63) ? 0 : static_cast<vmword>(
+                     static_cast<uvmword>(a) << b));
             break;
         }
         case OP_Shr: {
-            long b = pop().i, a = pop().i;
+            vmword b = pop().i, a = pop().i;
             if (b < 0 || b > 63) { push(a < 0 ? -1 : 0); break; }
             push(a >> b);                       // arithmetic: the sign is kept
             break;
         }
         case OP_UShr: {
-            long b = pop().i, a = pop().i;
-            push((b < 0 || b > 63) ? 0 : static_cast<long>(
-                     static_cast<unsigned long>(a) >> b));
+            vmword b = pop().i, a = pop().i;
+            push((b < 0 || b > 63) ? 0 : static_cast<vmword>(
+                     static_cast<uvmword>(a) >> b));
             break;
         }
 
-        case OP_Add: { long b = pop().i, a = pop().i; push(a + b); break; }
-        case OP_Sub: { long b = pop().i, a = pop().i; push(a - b); break; }
-        case OP_Mul: { long b = pop().i, a = pop().i; push(a * b); break; }
+        case OP_Add: { vmword b = pop().i, a = pop().i; push(a + b); break; }
+        case OP_Sub: { vmword b = pop().i, a = pop().i; push(a - b); break; }
+        case OP_Mul: { vmword b = pop().i, a = pop().i; push(a * b); break; }
         case OP_Div: {
-            long b = pop().i, a = pop().i;
+            vmword b = pop().i, a = pop().i;
             if (b == 0) { trap("division by zero"); break; }
+            if (b == -1) { push(negate(a)); break; }
             push(a / b);
             break;
         }
         case OP_Mod: {
-            long b = pop().i, a = pop().i;
+            vmword b = pop().i, a = pop().i;
             if (b == 0) { trap("remainder by zero"); break; }
+            if (b == -1) { push(0); break; }
             push(a % b);
             break;
         }
         case OP_UDiv: {
-            unsigned long b = static_cast<unsigned long>(pop().i);
-            unsigned long a = static_cast<unsigned long>(pop().i);
+            uvmword b = static_cast<uvmword>(pop().i);
+            uvmword a = static_cast<uvmword>(pop().i);
             if (b == 0) { trap("division by zero"); break; }
-            push(static_cast<long>(a / b));
+            push(static_cast<vmword>(a / b));
             break;
         }
         case OP_UMod: {
-            unsigned long b = static_cast<unsigned long>(pop().i);
-            unsigned long a = static_cast<unsigned long>(pop().i);
+            uvmword b = static_cast<uvmword>(pop().i);
+            uvmword a = static_cast<uvmword>(pop().i);
             if (b == 0) { trap("remainder by zero"); break; }
-            push(static_cast<long>(a % b));
+            push(static_cast<vmword>(a % b));
             break;
         }
-        case OP_Neg: push(-pop().i); break;
+        case OP_Neg: push(negate(pop().i)); break;
         case OP_Not: push(pop().i == 0 ? 1 : 0); break;
 
         case OP_FAdd: { double b = pop().d, a = pop().d; pushD(a + b); break; }
@@ -11558,16 +12691,16 @@ long VM::run(const Image &image, bool &ok) {
         case OP_FDiv: { double b = pop().d, a = pop().d; pushD(a / b); break; }
         case OP_FNeg: pushD(-pop().d); break;
 
-        case OP_CmpEQ: { long b = pop().i, a = pop().i; push(a == b); break; }
-        case OP_CmpNE: { long b = pop().i, a = pop().i; push(a != b); break; }
-        case OP_CmpLT: { long b = pop().i, a = pop().i; push(a <  b); break; }
-        case OP_CmpGT: { long b = pop().i, a = pop().i; push(a >  b); break; }
-        case OP_CmpLE: { long b = pop().i, a = pop().i; push(a <= b); break; }
-        case OP_CmpGE: { long b = pop().i, a = pop().i; push(a >= b); break; }
-        case OP_UCmpLT: { unsigned long b = pop().i, a = pop().i; push(a <  b); break; }
-        case OP_UCmpGT: { unsigned long b = pop().i, a = pop().i; push(a >  b); break; }
-        case OP_UCmpLE: { unsigned long b = pop().i, a = pop().i; push(a <= b); break; }
-        case OP_UCmpGE: { unsigned long b = pop().i, a = pop().i; push(a >= b); break; }
+        case OP_CmpEQ: { vmword b = pop().i, a = pop().i; push(a == b); break; }
+        case OP_CmpNE: { vmword b = pop().i, a = pop().i; push(a != b); break; }
+        case OP_CmpLT: { vmword b = pop().i, a = pop().i; push(a <  b); break; }
+        case OP_CmpGT: { vmword b = pop().i, a = pop().i; push(a >  b); break; }
+        case OP_CmpLE: { vmword b = pop().i, a = pop().i; push(a <= b); break; }
+        case OP_CmpGE: { vmword b = pop().i, a = pop().i; push(a >= b); break; }
+        case OP_UCmpLT: { uvmword b = pop().i, a = pop().i; push(a <  b); break; }
+        case OP_UCmpGT: { uvmword b = pop().i, a = pop().i; push(a >  b); break; }
+        case OP_UCmpLE: { uvmword b = pop().i, a = pop().i; push(a <= b); break; }
+        case OP_UCmpGE: { uvmword b = pop().i, a = pop().i; push(a >= b); break; }
         case OP_FCmpEQ: { double b = pop().d, a = pop().d; push(a == b); break; }
         case OP_FCmpNE: { double b = pop().d, a = pop().d; push(a != b); break; }
         case OP_FCmpLT: { double b = pop().d, a = pop().d; push(a <  b); break; }
@@ -11576,27 +12709,28 @@ long VM::run(const Image &image, bool &ok) {
         case OP_FCmpGE: { double b = pop().d, a = pop().d; push(a >= b); break; }
 
         case OP_IntToFloat: {
-            const long v = pop().i;
-            pushD(in.imm ? static_cast<double>(static_cast<unsigned long>(v))
+            const vmword v = pop().i;
+            pushD(in.imm ? static_cast<double>(static_cast<uvmword>(v))
                          : static_cast<double>(v));
             break;
         }
-        case OP_FloatToInt: push(static_cast<long>(pop().d)); break;
+        case OP_FloatToInt: push(static_cast<vmword>(pop().d)); break;
         case OP_FloatResize: {
             const double v = pop().d;
             pushD(in.imm == 4 ? static_cast<double>(static_cast<float>(v)) : v);
             break;
         }
         case OP_IntResize: {
-            const long v = pop().i;
+            const vmword v = pop().i;
             const int size = static_cast<int>(in.imm);
+            if (size <= 0) { trap("integer resize to an impossible width"); break; }
             if (size >= 8) { push(v); break; }
-            unsigned long masked = static_cast<unsigned long>(v) & ((1UL << (size * 8)) - 1);
+            uvmword masked = static_cast<uvmword>(v) & ((static_cast<uvmword>(1) << (size * 8)) - 1);
             if (in.b) {
-                const unsigned long signBit = 1UL << (size * 8 - 1);
-                if (masked & signBit) masked |= ~((1UL << (size * 8)) - 1);
+                const uvmword signBit = static_cast<uvmword>(1) << (size * 8 - 1);
+                if (masked & signBit) masked |= ~((static_cast<uvmword>(1) << (size * 8)) - 1);
             }
-            push(static_cast<long>(masked));
+            push(static_cast<vmword>(masked));
             break;
         }
 
@@ -11605,24 +12739,44 @@ long VM::run(const Image &image, bool &ok) {
         case OP_BranchNZ:   if (pop().i != 0) fr.pc = static_cast<int>(in.imm); break;
 
         case OP_VTableLoad: {
-            const long obj = pop().i;
-            const long vtable = readInt(obj, 8, true);
+            const vmword obj = pop().i;
+            const vmword vtable = readInt(obj, 8, true);
             push(readInt(vtable + in.imm * 8, 8, true));
             break;
         }
 
-        case OP_Native: callNative(static_cast<NativeId>(in.imm),
-                                   static_cast<int>(in.b)); break;
+        case OP_Native:
+            if (in.imm < 0 || in.imm >= NAT_Count) {
+                trap("call to a native this machine does not have");
+                break;
+            }
+            // The count says how many to pop.  Unvalidated it popped for as
+            // long as it liked -- setting the trap on the first empty pop and
+            // then carrying on for two thousand million more.
+            if (in.b < 0 || static_cast<std::size_t>(in.b) > stack.size()) {
+                trap("native call wants more arguments than the stack holds");
+                break;
+            }
+            callNative(static_cast<NativeId>(in.imm), static_cast<int>(in.b));
+            break;
 
         case OP_Call:
         case OP_CallIndirect: {
             const int argc = static_cast<int>(in.b);
-            long target = in.imm;
+            // This sizes a vector.  Negative became an enormous size_t and
+            // threw length_error; large positive threw bad_alloc.  Nothing
+            // catches either, so a single flipped byte in a .cxb aborted the
+            // process.  The stack is the true bound: the arguments are on it.
+            if (argc < 0 || static_cast<std::size_t>(argc) > stack.size()) {
+                trap("call wants more arguments than the stack holds");
+                break;
+            }
+            vmword target = in.imm;
             std::vector<Value> args(argc);
             for (int k = argc - 1; k >= 0; --k) args[k] = pop();
             if (in.op == OP_CallIndirect) target = pop().i;
 
-            if (target < 0 || target >= static_cast<long>(image.functions.size())) {
+            if (target < 0 || target >= static_cast<vmword>(image.functions.size())) {
                 trap("call to an undefined function");
                 break;
             }
@@ -11648,11 +12802,18 @@ long VM::run(const Image &image, bool &ok) {
                 if (obj) {
                     // By value: the argument is the source address, and the
                     // parameter's own slot is the copy the callee owns.
-                    const long src = args[k].i;
-                    const long dst = nf.base + callee.localOffset[k];
-                    const long n = callee.localSize[k];
-                    if (src <= 0 || n < 0 || src + n > static_cast<long>(mem.size()) ||
-                        dst + n > static_cast<long>(mem.size())) {
+                    const vmword src = args[k].i;
+                    const vmword dst = nf.base + callee.localOffset[k];
+                    const vmword n = callee.localSize[k];
+                    // dst is bounded below as well as above: the offset comes
+                    // out of the image, so it can be negative, and a negative
+                    // dst passes an upper bound on its own and then writes in
+                    // FRONT of memory.  The sums are written as differences
+                    // for the same reason -- src + n overflows for an address
+                    // near the top of the range and wraps past the check.
+                    const vmword limit = static_cast<vmword>(mem.size());
+                    if (src <= 0 || dst <= 0 || n < 0 || n > limit ||
+                        src > limit - n || dst > limit - n) {
                         trap("object argument at an invalid address");
                         break;
                     }
@@ -11702,9 +12863,37 @@ long VM::run(const Image &image, bool &ok) {
             break;
         }
 
-        case OP_Alloc: push(allocate(in.imm)); break;
-        case OP_Free:  release(pop().i); break;
+        case OP_Alloc:  push(allocate(in.imm, -1)); break;
+        case OP_AllocN: {
+            const vmword bytes = pop().i;
+            vmword count = -1;
+            if (in.b != 0) {
+                count = pop().i;
+                // new T[-1] is not a mistake the language catches for you.
+                // Here the size is about to be a negative number of bytes, so
+                // it is caught before it becomes one.
+                if (count < 0) { trap("negative element count in 'new[]'"); break; }
+            }
+            push(allocate(bytes, count));
+            break;
+        }
+        case OP_ArrayCount: push(arrayCount(pop().i)); break;
+        case OP_Free:   release(pop().i, in.b != 0); break;
         case OP_Halt:  frames.clear(); break;
+
+        // Bytecode.cpp casts a byte straight to OpCode, and 195 of the 256
+        // values are not opcodes.  Without this they fell out of the switch as
+        // silent no-ops, so a corrupt image RAN, quietly did nothing, and
+        // reported success -- the one outcome an untrusted file should never
+        // get.  OP_Count is not an instruction; it is here so the switch is
+        // exhaustive and the compiler keeps it that way.
+        case OP_Count:
+        default: {
+            std::ostringstream ss;
+            ss << "unknown instruction " << static_cast<int>(in.op);
+            trap(ss.str());
+            break;
+        }
         }
     }
 
@@ -11722,23 +12911,18 @@ long VM::run(const Image &image, bool &ok) {
 //  Reads a source file and runs it through the front end:
 //      Parser -> Semantic -> Layout -> Lower, reporting via Diagnostics.
 //
-//  Usage:   Compiler++ [options] [source-file]
-//             -ast        print the syntax tree
-//             -layout     print each class's object layout and vtable
-//             -ir         print the lowered intermediate representation
-//             -bc         print the generated bytecode
-//             -run        compile and run, returning the program's own result
-//             -o FILE     write the compiled image to FILE (a .cxb object file)
+//  `usage()` below is the one statement of what the arguments are; this
+//  comment used to be the other, and the two had already drifted apart.
 //
 //  A .cxb given as the input is loaded and run directly, with no compiling --
 //  which is what makes the output a real artifact rather than a print-out.
-//             -q          diagnostics only, no banner
 //
-//  With no file it reads DEFAULT_INPUT below: Xcode runs the binary from the
-//  build products folder, so the default is an absolute path.  Pass a path via
-//  Product > Scheme > Edit Scheme > Arguments to analyse a different file.
+//  There is no default input.  Running an Xcode scheme with no arguments now
+//  prints usage instead of compiling one developer's scratch file; pass a path
+//  via Product > Scheme > Edit Scheme > Arguments.
 //
-//  Exit status: 0 clean, 1 errors, 2 the file could not be read.
+//  Exit status: 0 clean, 1 errors, 2 the arguments or the file, 3 the VM
+//  stopped the program.
 //
 //  C++98 only.
 //
@@ -11752,10 +12936,48 @@ long VM::run(const Image &image, bool &ok) {
 #include <vector>
 
 
-// Outside the Compiler++ source folder on purpose: that folder is a
-// synchronized group, so any .cpp inside it would be compiled into the target.
-static const char *DEFAULT_INPUT =
-    "/Users/g.r.akhtar/Documents/Compiler++/point_input.cpp";
+// Windows translates '\n' into "\r\n" on a text-mode stream, so the compiler
+// wrote CRLF there while every golden file is LF -- and the whole suite failed
+// against a correct compiler, 120 cases out of 120, which reads as a compiler
+// fault and is not.  .gitattributes settled this for the bytes going IN; this
+// settles it for the bytes coming out, so the compiler writes '\n' on every
+// platform it builds on and the suites compare byte for byte wherever they run.
+//
+// It has to run before anything is written, which is why it is main's first
+// statement.  The .cxb path never needed it: Bytecode.cpp opens those streams
+// with ios::binary already.
+#if defined(_WIN32)
+#include <fcntl.h>
+#include <io.h>
+static void writeUntranslatedOutput() {
+    _setmode(_fileno(stdout), _O_BINARY);
+    _setmode(_fileno(stderr), _O_BINARY);
+}
+#else
+static void writeUntranslatedOutput() { }
+#endif
+
+// The one statement of what the arguments are.  An unrecognised switch used to
+// become the input path, so `--help` was reported as a file that could not be
+// opened -- and with nothing to report at all, the compiler read an absolute
+// path inside one developer's home directory.
+static void usage(std::ostream &out) {
+    out << "usage: compilerpp [options] <file.cpp | file.cxb>\n"
+        << "\n"
+        << "  -ast      print the syntax tree\n"
+        << "  -layout   print each class's object layout and vtable\n"
+        << "  -ir       print the lowered intermediate representation\n"
+        << "  -bc       print the generated bytecode\n"
+        << "  -run      compile and run, returning the program's own result\n"
+        << "  -o FILE   write the compiled image to FILE, a .cxb object file\n"
+        << "  -q        diagnostics only, no banner\n"
+        << "  -h        print this and stop\n"
+        << "\n"
+        << "A .cxb given as the input is run directly, with nothing compiled.\n"
+        << "\n"
+        << "Exit status: 0 clean, 1 errors, 2 the arguments or the file,\n"
+        << "3 the VM stopped the program.\n";
+}
 
 static bool readFile(const std::string &path, std::string &out) {
     std::ifstream in(path.c_str());
@@ -11773,6 +12995,8 @@ static std::string baseName(const std::string &path) {
 }
 
 int main(int argc, char **argv) {
+    writeUntranslatedOutput();
+
     bool showAst = false;
     bool showLayout = false;
     bool showIR = false;
@@ -11789,11 +13013,35 @@ int main(int argc, char **argv) {
         else if (arg == "-ir")     showIR = true;
         else if (arg == "-bc")     showBC = true;
         else if (arg == "-run")    doRun = true;
-        else if (arg == "-o" && i + 1 < argc) outPath = argv[++i];
         else if (arg == "-q")      quiet = true;
-        else                       path = arg;
+        else if (arg == "-h" || arg == "--help") { usage(std::cout); return 0; }
+        else if (arg == "-o") {
+            // `-o` last on the line used to fall through and become the input
+            // path, so the compiler reported "-o" as a file it could not open.
+            if (i + 1 >= argc) {
+                std::cerr << "-o needs a file to write" << std::endl;
+                return 2;
+            }
+            outPath = argv[++i];
+        }
+        else if (!arg.empty() && arg[0] == '-') {
+            std::cerr << "Unknown option: " << arg << std::endl;
+            usage(std::cerr);
+            return 2;
+        }
+        // A second input silently replaced the first, so a mistyped option
+        // took the place of the file it was written beside.
+        else if (!path.empty()) {
+            std::cerr << "Only one input file, and '" << path << "' is already it: "
+                      << arg << std::endl;
+            return 2;
+        }
+        else path = arg;
     }
-    if (path.empty()) path = DEFAULT_INPUT;
+    if (path.empty()) {
+        usage(std::cerr);
+        return 2;
+    }
 
     std::string source;
     if (!readFile(path, source)) {
@@ -11816,7 +13064,7 @@ int main(int argc, char **argv) {
         if (!doRun) return 0;
         VM vm;
         bool ok = false;
-        const long result = vm.run(image, ok);
+        const vmword result = vm.run(image, ok);
         std::cout.flush();
         if (!ok) {
             std::cerr << baseName(path) << ": runtime error: " << vm.errorMessage() << std::endl;
@@ -11909,7 +13157,7 @@ int main(int argc, char **argv) {
                     if (!quiet) std::cout << "=== RUN: " << baseName(path) << " ===" << std::endl;
                     VM vm;
                     bool ok = false;
-                    const long result = vm.run(image, ok);
+                    const vmword result = vm.run(image, ok);
                     if (!ok) {
                         std::cout.flush();
                         std::cerr << baseName(path) << ": runtime error: "
