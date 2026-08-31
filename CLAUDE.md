@@ -21,7 +21,8 @@ tests/
   expected_run/    golden program output, for run_ and trap_ cases
   input/           stdin for a case that reads cin (optional, by name)
   images/          malformed .cxb files the VM must refuse, with their messages
-  run_tests.sh run_exec.sh run_roundtrip.sh
+  differential_shim.h  the natives a case calls, over the real <iostream>
+  run_tests.sh run_exec.sh run_roundtrip.sh run_differential.sh
 dist/              amalgamate.py and a single-file build of the whole compiler
 _backup_*/         pre-git snapshots, gitignored, superseded by history
 ```
@@ -62,11 +63,13 @@ g++ -o /tmp/b/compilerpp /tmp/b/*.o
 sh tests/run_tests.sh     /tmp/b/compilerpp     # dumps + exit status
 sh tests/run_exec.sh      /tmp/b/compilerpp     # program output
 sh tests/run_roundtrip.sh /tmp/b/compilerpp     # same output through a .cxb
+sh tests/run_differential.sh /tmp/b/compilerpp  # same answer as a real compiler
 ```
 
-All three must pass before anything is committed. Add `--accept` to a runner to
+All four must pass before anything is committed. Add `--accept` to a runner to
 re-record its golden files — and then **read the diff**, because `--accept`
-happily records a bug.
+happily records a bug. `run_differential.sh` has no golden files to record: the
+host compiler is the answer, which is the point of it.
 
 `-pedantic` is clean except for twelve `-Wlong-long` warnings from the VM's
 fixed 64-bit word (`Bytecode.h`). That is the one knowing departure from the
@@ -158,11 +161,16 @@ the message it must produce. Their README explains how they were built.
 - **`Layout` computes a `constructionPlan` nothing consumes.** `Lower1` re-derives
   the same ordering by hand, and the hand copy is where a bug lived.
 - **The suite passes while the compiler is wrong.** It is an inventory of what
-  was built, not a specification of the language. Every defect in KNOWN-GAPS.md
-  was found by reading or by adversarial probing, never by the suite. The
-  highest-value addition is a differential harness: the `run_` cases are valid
-  C++98, so compiling each with a real compiler and comparing catches most of
-  the "wrong answers" section automatically.
+  was built, not a specification of the language: every defect in KNOWN-GAPS.md
+  was found by reading or by adversarial probing, never by the suite.
+  `run_differential.sh` is the answer to that, and the array-member copy is the
+  first defect it found on its own. It works because a `run_` case is valid
+  C++98 EXCEPT for the natives it calls — `print_int`, `print_line` and the
+  rest, which no real toolchain has — so `differential_shim.h` defines them
+  over the real `<iostream>` and the host compiles the case unchanged. Two
+  cases are listed in the runner as allowed to differ, both because the host
+  elides a return copy and this compiler does not; both are conforming. Add to
+  that list only for a claim about the STANDARD, never to quiet a failure.
 - **Line endings.** The whole tree is LF, pinned by `.gitattributes`, because
   the golden files are compared byte for byte against output written with `\n`.
   A CRLF checkout fails twelve of them against a correct compiler.

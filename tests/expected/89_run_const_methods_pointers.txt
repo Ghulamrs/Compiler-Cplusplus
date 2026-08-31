@@ -81,9 +81,28 @@ Function main returns int
             arg 0:
               Unary &
                 c
+    Var buf : array[3] of char
+    ExprStmt
+      Binary =
+        Index
+          buf
+          0
+        97 : char
+    ExprStmt
+      Binary =
+        Index
+          buf
+          1
+        98 : char
+    ExprStmt
+      Binary =
+        Index
+          buf
+          2
+        0
     Var p : pointer to char
       init:
-        "ab"
+        buf
     ExprStmt
       Call
         print_int
@@ -136,9 +155,8 @@ class A  size=4 align=4
     construct: field x -> A() body
     destroy:   ~A() body -> field x
 
-string str0  "ab"
-string str1  "cd"
-string str2  "ef"
+string str0  "cd"
+string str1  "ef"
 
 function A__ctor$v   ; A::A
   #0 this  8 bytes  (param)
@@ -190,8 +208,9 @@ function viaPtr$PK1A   ; viaPtr
 function main
   #0 a  4 bytes
   #1 c  4 bytes
-  #2 p  8 bytes
-  #3 q  8 bytes
+  #2 buf  3 bytes
+  #3 p  8 bytes
+  #4 q  8 bytes
             call __global_init()
     %0 = local #0
             call A__ctor$v(%0)
@@ -213,52 +232,68 @@ function main
     %10 = local #1
     %11 = call viaPtr$PK1A(%10)
             call print_int(%11)
-    %12 = straddr str0
+    %12 = const 97
     %13 = local #2
-            store [%13] <- %12 :8
-    %14 = local #2
-    %15 = load [%14] :8
-    %16 = const 0
-    %17 = add %15, %16
-    %18 = load [%17] :1
-    %19 = iresize %18 :4 signed
-            call print_int(%19)
-    %20 = const 122
-    %21 = local #2
-    %22 = load [%21] :8
-    %23 = const 0
+    %14 = const 0
+    %15 = add %13, %14
+            store [%15] <- %12 :1
+    %16 = const 98
+    %17 = local #2
+    %18 = const 1
+    %19 = add %17, %18
+            store [%19] <- %16 :1
+    %20 = const 0
+    %21 = iresize %20 :1 signed
+    %22 = local #2
+    %23 = const 2
     %24 = add %22, %23
-            store [%24] <- %20 :1
+            store [%24] <- %21 :1
     %25 = local #2
-    %26 = load [%25] :8
-    %27 = const 0
-    %28 = add %26, %27
-    %29 = load [%28] :1
-    %30 = iresize %29 :4 signed
-            call print_int(%30)
-    %31 = straddr str1
-    %32 = local #3
-            store [%32] <- %31 :8
-    %33 = local #3
-    %34 = load [%33] :8
-    %35 = const 0
-    %36 = add %34, %35
-    %37 = load [%36] :1
-    %38 = iresize %37 :4 signed
-            call print_int(%38)
-    %39 = straddr str2
-    %40 = local #3
-            store [%40] <- %39 :8
-    %41 = local #3
-    %42 = load [%41] :8
-    %43 = const 0
-    %44 = add %42, %43
-    %45 = load [%44] :1
-    %46 = iresize %45 :4 signed
-            call print_int(%46)
+    %26 = local #3
+            store [%26] <- %25 :8
+    %27 = local #3
+    %28 = load [%27] :8
+    %29 = const 0
+    %30 = add %28, %29
+    %31 = load [%30] :1
+    %32 = iresize %31 :4 signed
+            call print_int(%32)
+    %33 = const 122
+    %34 = local #3
+    %35 = load [%34] :8
+    %36 = const 0
+    %37 = add %35, %36
+            store [%37] <- %33 :1
+    %38 = local #3
+    %39 = load [%38] :8
+    %40 = const 0
+    %41 = add %39, %40
+    %42 = load [%41] :1
+    %43 = iresize %42 :4 signed
+            call print_int(%43)
+    %44 = straddr str0
+    %45 = local #4
+            store [%45] <- %44 :8
+    %46 = local #4
+    %47 = load [%46] :8
+    %48 = const 0
+    %49 = add %47, %48
+    %50 = load [%49] :1
+    %51 = iresize %50 :4 signed
+            call print_int(%51)
+    %52 = straddr str1
+    %53 = local #4
+            store [%53] <- %52 :8
+    %54 = local #4
+    %55 = load [%54] :8
+    %56 = const 0
+    %57 = add %55, %56
+    %58 = load [%57] :1
+    %59 = iresize %58 :4 signed
+            call print_int(%59)
             call print_line()
-    %47 = const 0
-            ret %47
+    %60 = const 0
+            ret %60
 
 function __global_init
             ret

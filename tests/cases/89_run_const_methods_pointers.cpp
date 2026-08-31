@@ -22,7 +22,11 @@ int main() {
   print_int(c.get());
   print_int(readIt(c));
   print_int(viaPtr(&c));
-  char* const p = "ab";
+  char buf[3];               /* writable storage; a literal is not, and
+                                writing through one is undefined -- which
+                                makes it the wrong thing to assert here */
+  buf[0] = 'a'; buf[1] = 'b'; buf[2] = 0;
+  char* const p = buf;
   print_int(p[0]);
   p[0] = 'z';                /* the chars are NOT const */
   print_int(p[0]);
