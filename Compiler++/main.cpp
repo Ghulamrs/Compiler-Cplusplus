@@ -50,6 +50,27 @@
 #include "Semantic.h"
 #include "VM.h"
 
+// Windows translates '\n' into "\r\n" on a text-mode stream, so the compiler
+// wrote CRLF there while every golden file is LF -- and the whole suite failed
+// against a correct compiler, 120 cases out of 120, which reads as a compiler
+// fault and is not.  .gitattributes settled this for the bytes going IN; this
+// settles it for the bytes coming out, so the compiler writes '\n' on every
+// platform it builds on and the suites compare byte for byte wherever they run.
+//
+// It has to run before anything is written, which is why it is main's first
+// statement.  The .cxb path never needed it: Bytecode.cpp opens those streams
+// with ios::binary already.
+#if defined(_WIN32)
+#include <fcntl.h>
+#include <io.h>
+static void writeUntranslatedOutput() {
+    _setmode(_fileno(stdout), _O_BINARY);
+    _setmode(_fileno(stderr), _O_BINARY);
+}
+#else
+static void writeUntranslatedOutput() { }
+#endif
+
 // Outside the Compiler++ source folder on purpose: that folder is a
 // synchronized group, so any .cpp inside it would be compiled into the target.
 static const char *DEFAULT_INPUT =
@@ -71,6 +92,8 @@ static std::string baseName(const std::string &path) {
 }
 
 int main(int argc, char **argv) {
+    writeUntranslatedOutput();
+
     bool showAst = false;
     bool showLayout = false;
     bool showIR = false;

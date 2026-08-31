@@ -171,9 +171,14 @@ the message it must produce. Their README explains how they were built.
   cases are listed in the runner as allowed to differ, both because the host
   elides a return copy and this compiler does not; both are conforming. Add to
   that list only for a claim about the STANDARD, never to quiet a failure.
-- **Line endings.** The whole tree is LF, pinned by `.gitattributes`, because
-  the golden files are compared byte for byte against output written with `\n`.
-  A CRLF checkout fails twelve of them against a correct compiler.
+- **Line endings, both directions.** The whole tree is LF, pinned by
+  `.gitattributes`, because the golden files are compared byte for byte against
+  output written with `\n`. A CRLF checkout fails twelve of them against a
+  correct compiler. The other direction is `main.cpp`'s
+  `writeUntranslatedOutput`: Windows translates `'\n'` on a text-mode stream, so
+  without it the compiler writes CRLF there and **every** case fails — 120 of
+  120, on a compiler that is entirely correct. Pinning the checkout settles the
+  bytes going in; that call settles the bytes coming out.
 
 ## Commits
 
