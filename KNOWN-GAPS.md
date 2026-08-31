@@ -5,10 +5,71 @@ source. Each names the file and the shape of program that shows it, so a fix
 starts from a failing case rather than from a description.
 
 They are gaps, not surprises: the language this compiler accepts is a subset by
-design, and the exclusions (multiple inheritance, exceptions, templates, `goto`,
-`sizeof`, array initialiser lists) are stated in `Lexer.cpp` and reported by
-name. What follows is the list of places where the compiler accepts a program
-and then does something other than what the program says.
+design, every exclusion is lexed, named once and skipped, and what follows is
+the separate list of places where the compiler accepts a program and then does
+something other than what the program says.
+
+## What is excluded
+
+This section used to name six exclusions — multiple inheritance, exceptions,
+templates, `goto`, `sizeof`, array initialiser lists — in a way that read like
+the whole list. It was not the whole list. There are about two dozen, and the
+six left out the ones a reader is most likely to write by accident: `?:` and
+`&` are both refused, and neither was mentioned.
+
+The diagnostics are where this is decided. To re-derive the list:
+
+```sh
+grep -h 'not supported in this version' Compiler++/*.cpp
+```
+
+**Keywords**, from `reservedWordHelp` in `Lexer.cpp`:
+
+| | |
+|---|---|
+| templates | `template` `typename` `export` |
+| exceptions | `throw` `try` `catch` |
+| namespaces | `namespace` `using`, and any `a::b` |
+| named casts | `static_cast` `const_cast` `dynamic_cast` `reinterpret_cast` — *use `(T)value`* |
+| storage classes | `volatile` `register` `extern` `auto` |
+| each on its own | `static` `mutable` `explicit` `inline` `goto` `sizeof` `enum` `union` `typedef` `wchar_t` `asm` |
+
+**Syntax**, named where it is parsed:
+
+| | |
+|---|---|
+| declarations | `long long`, default arguments, array parameters, variadic functions, function pointers, bit-fields, more than one declarator in a statement |
+| initialisation | brace initialisers, which is also what an array initialiser list is |
+| expressions | the comma operator, the conditional operator `?:`, bitwise `&` `\|` `^` |
+| classes | multiple inheritance, nested classes, a friend *class*, pure virtual functions |
+| statements | labels |
+| preprocessor | function-like macros |
+
+**That keyword table belongs to the C layer, and the C++ layer is not bound by
+it.** `cxx::Parser` derives from `cc::Parser` and adds classes, references,
+`bool`, `new`/`delete`, **operator overloading** and **friend functions** — so
+the table's `operator` and `friend` rows say "not supported" about two things
+this compiler supports. `operator+` compiles, a friend *function* compiles, and
+the corpus has cases for both. Those two messages are reachable only where the
+C++ layer has not handled the construct first, which is exactly why
+`operator int()` is refused with "operator overloading is not supported": the
+reserved-construct skip runs before the `operator` handling. That one is a real
+defect and is recorded below.
+
+`bool` is the same rule seen from the other side. It is `cxx::BoolType` in
+`AST1.h`, deliberately not a `cc::BuiltinKind` — a C++-layer type with no C-layer
+entry — but it was given a token rather than a reserved word, so it never
+produced a misleading row here at all. Which is the point: whether a construct
+appears in this table says where it was *refused*, not what the compiler
+accepts.
+
+**So grep to find the list, then ask a build before believing any one line of
+it.** Every row above was checked that way rather than read off the source, and
+that is how the `operator` and `friend` rows were caught.
+
+`<<=`, `>>=` and `~` are excluded and have no named diagnostic at all; they are
+in the diagnostics section below rather than here, because a construct that is
+refused without being named is a defect in the refusing, not an entry in a list.
 
 ## Closed
 
