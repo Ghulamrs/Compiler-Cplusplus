@@ -534,6 +534,25 @@ void Lowering::emitArrayConstruct(ClassDecl *cd, IRReg base, long count,
     }
 }
 
+// Each element from the element it corresponds to.  No syntax reaches inside
+// an array member, so an initialiser list cannot say this -- but the copy
+// constructor can still be CALLED on every element, which is what a copy of an
+// array member is.  Unrolled for the same reason the default form is: the
+// bound is a constant here.
+void Lowering::emitArrayCopyConstruct(ClassDecl *cd, IRReg dst, IRReg src,
+                                      long count, int elemSize, int line) {
+    MethodDecl *copyCtor = copyConstructorOf(cd);
+    if (!copyCtor) return;
+    for (long i = 0; i < count; ++i) {
+        const int off = static_cast<int>(i) * elemSize;
+        std::vector<IRReg> callArgs;
+        callArgs.push_back(fn->emitFieldAddr(dst, off, line));
+        // A reference parameter receives the address, exactly as a call does.
+        callArgs.push_back(fn->emitFieldAddr(src, off, line));
+        fn->emitCall(mangleConstructor(cd->name, copyCtor->params), callArgs, false, line);
+    }
+}
+
 // Reverse, for the same reason members are destroyed in reverse.
 void Lowering::emitArrayDestruct(ClassDecl *cd, IRReg base, long count,
                                  int elemSize, int line) {
@@ -979,13 +998,33 @@ void Lowering::emitPrologue(cc::Function *f) {
             const IRReg addr = fn->emitFieldAddr(loadThis(f->line), fl->offset, line);
             if (memberCount != 1) {
                 const ClassLayout *ml = layout.forClass(member->name);
-                if (ml) emitArrayConstruct(member, addr, memberCount, ml->size, line);
+                if (!mi || mi->args.empty()) {
+                    if (ml) emitArrayConstruct(member, addr, memberCount, ml->size, line);
+                } else if (ml && copyConstructorOf(member)) {
+                    // Named by a generated copy constructor: every element is
+                    // copy-constructed from its opposite number.
+                    emitArrayCopyConstruct(member, addr, lowerAddress(mi->args[0]),
+                                           memberCount, ml->size, line);
+                } else {
+                    // Elements with no copy constructor to call are their
+                    // bytes, and a whole-array move is the copy.
+                    fn->emitMemCopy(addr, lowerAddress(mi->args[0]), fl->size, line);
+                }
             } else if (mi) {
                 emitConstruct(member, addr, mi->args, line, mi->resolvedCtor);
             } else {
                 std::vector<cc::Expr*> none;
                 emitConstruct(member, addr, none, line);
             }
+            continue;
+        }
+
+        // An array of scalars, named by a generated copy constructor: the same
+        // whole-array move, and for these it is the whole answer -- the
+        // elements are values, and their bytes are what a copy of them is.
+        if (mi && !mi->args.empty() && dynamic_cast<cc::ArrayType*>(fd->type)) {
+            const IRReg addr = fn->emitFieldAddr(loadThis(f->line), fl->offset, line);
+            fn->emitMemCopy(addr, lowerAddress(mi->args[0]), fl->size, line);
             continue;
         }
 

@@ -4,9 +4,9 @@
 // it made a class that used to compile stop compiling.
 //
 // The rule now runs downwards: a part that will be named gets a generated copy
-// constructor of its own first.  Where that is impossible -- an array member,
-// which cannot be written in an initialiser list -- the class keeps the byte
-// copy it always had, and so does anything holding it.
+// constructor of its own first.  An array member is named too, though no list
+// can reach its elements: what its entry means is settled in lowering, where
+// each element is copy-constructed from its opposite number.
 
 void print_int(int);
 void print_line();
@@ -46,8 +46,11 @@ public:
     Derived() {}
 };
 
-// An array member cannot be copied by a list: this class keeps the byte copy,
-// which does reproduce the array but does NOT run Counted's copy constructor.
+// An array member no list can name.  It used to cost the WHOLE class its
+// generated copy constructor, so Counted's never ran either -- and a Counted
+// that owned memory would have been shared between the two objects and freed
+// twice.  Both parts are copied properly now: c by its constructor, a by a
+// whole-array move.
 class HasArray {
 public:
     Counted c;
@@ -81,15 +84,15 @@ int main() {
     HasArray x;
     x.c.n = 5;
     HasArray y = x;
-    print_int(y.a[2]);          // 3   -- the byte copy reproduces the array
-    print_int(y.c.n);           // 5   -- and does not run a copy constructor
+    print_int(y.a[2]);          // 3   -- the array arrives
+    print_int(y.c.n);           // 6   -- and Counted's copy constructor ran
     print_line();
 
     Holder h;
     h.c.n = 1;
     Holder h2 = h;
     print_int(h2.h.a[0]);       // 1
-    print_int(h2.c.n);          // 1   -- the exemption propagates
+    print_int(h2.c.n);          // 2   -- and it propagates through the holder
     print_line();
     return 0;
 }

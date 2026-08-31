@@ -132,6 +132,14 @@ the message it must produce. Their README explains how they were built.
 - **`OP_AllocN` and `OP_ArrayCount` sit after `OP_Halt`**, out of category, so
   that no existing opcode's value moves. Committed `.cxb` fixtures depend on
   that. Append new opcodes at the end; do not tidy the enum.
+- **A generated copy constructor names its array members**, which C++ has no
+  syntax for and a user still cannot write — `analyzeMemberInits` admits the
+  entry only when the constructor `isImplicit`. What the entry means is settled
+  in lowering: elements that are objects are copy-constructed one at a time,
+  and anything else is a whole-array move. Refusing to name them was the
+  earlier design, and it cost the class its copy constructor altogether — so a
+  member beside the array never ran its own, and one owning memory was freed
+  twice. The list is not where to look for what an array member does.
 
 ## Traps
 

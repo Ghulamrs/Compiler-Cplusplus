@@ -102,10 +102,30 @@ Class HasArray
             a
             2
           3
+  Constructor public HasArray::HasArray
+    param:
+      Var __o : reference to class HasArray
+    init member c
+      Member .c
+        __o
+    init member a
+      Member .a
+        __o
+    Block
 Class Holder
   Field public c : class Counted
   Field public h : class HasArray
   Constructor public Holder::Holder
+    Block
+  Constructor public Holder::Holder
+    param:
+      Var __o : reference to class Holder
+    init member c
+      Member .c
+        __o
+    init member h
+      Member .h
+        __o
     Block
 Function main returns int
   Block
@@ -441,6 +461,27 @@ function HasArray__ctor$v   ; HasArray::HasArray
             store [%28] <- %21 :4
             ret
 
+function HasArray__ctor$RK8HasArray   ; HasArray::HasArray
+  #0 this  8 bytes  (param)
+  #1 __o  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = local #0
+    %3 = load [%2] :8
+    %4 = field %3 +0
+    %5 = local #1
+    %6 = load [%5] :8
+    %7 = field %6 +0
+            call Counted__ctor$RK7Counted(%4, %7)
+    %8 = local #0
+    %9 = load [%8] :8
+    %10 = field %9 +4
+    %11 = local #1
+    %12 = load [%11] :8
+    %13 = field %12 +4
+            memcpy [%10] <- [%13] :12
+            ret
+
 function Holder__ctor$v   ; Holder::Holder
   #0 this  8 bytes  (param)
     %0 = local #0
@@ -453,6 +494,27 @@ function Holder__ctor$v   ; Holder::Holder
     %6 = load [%5] :8
     %7 = field %6 +4
             call HasArray__ctor$v(%7)
+            ret
+
+function Holder__ctor$RK6Holder   ; Holder::Holder
+  #0 this  8 bytes  (param)
+  #1 __o  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = local #0
+    %3 = load [%2] :8
+    %4 = field %3 +0
+    %5 = local #1
+    %6 = load [%5] :8
+    %7 = field %6 +0
+            call Counted__ctor$RK7Counted(%4, %7)
+    %8 = local #0
+    %9 = load [%8] :8
+    %10 = field %9 +4
+    %11 = local #1
+    %12 = load [%11] :8
+    %13 = field %12 +4
+            call HasArray__ctor$RK8HasArray(%10, %13)
             ret
 
 function main
@@ -513,9 +575,9 @@ function main
     %32 = field %31 +0
     %33 = field %32 +0
             store [%33] <- %30 :4
-    %34 = local #4
-    %35 = local #5
-            memcpy [%35] <- [%34] :16
+    %34 = local #5
+    %35 = local #4
+            call HasArray__ctor$RK8HasArray(%34, %35)
     %36 = local #5
     %37 = field %36 +4
     %38 = const 2
@@ -537,9 +599,9 @@ function main
     %50 = field %49 +0
     %51 = field %50 +0
             store [%51] <- %48 :4
-    %52 = local #6
-    %53 = local #7
-            memcpy [%53] <- [%52] :20
+    %52 = local #7
+    %53 = local #6
+            call Holder__ctor$RK6Holder(%52, %53)
     %54 = local #7
     %55 = field %54 +4
     %56 = field %55 +4

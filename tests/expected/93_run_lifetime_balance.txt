@@ -73,6 +73,19 @@ Class Holder
           5
   Destructor public Holder::~Holder
     Block
+  Constructor public Holder::Holder
+    param:
+      Var __o : reference to class Holder
+    init member one
+      Member .one
+        __o
+    init member many
+      Member .many
+        __o
+    init member tag
+      Member .tag
+        __o
+    Block
 Function byValue returns int
   param:
     Var t : class T
@@ -364,6 +377,40 @@ function Holder__dtor   ; Holder::~Holder
     %6 = load [%5] :8
     %7 = field %6 +0
             call T__dtor(%7)
+            ret
+
+function Holder__ctor$RK6Holder   ; Holder::Holder
+  #0 this  8 bytes  (param)
+  #1 __o  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = local #0
+    %3 = load [%2] :8
+    %4 = field %3 +0
+    %5 = local #1
+    %6 = load [%5] :8
+    %7 = field %6 +0
+            call T__ctor$RK1T(%4, %7)
+    %8 = local #0
+    %9 = load [%8] :8
+    %10 = field %9 +4
+    %11 = local #1
+    %12 = load [%11] :8
+    %13 = field %12 +4
+    %14 = field %10 +0
+    %15 = field %13 +0
+            call T__ctor$RK1T(%14, %15)
+    %16 = field %10 +4
+    %17 = field %13 +4
+            call T__ctor$RK1T(%16, %17)
+    %18 = local #1
+    %19 = load [%18] :8
+    %20 = field %19 +12
+    %21 = load [%20] :4
+    %22 = local #0
+    %23 = load [%22] :8
+    %24 = field %23 +12
+            store [%24] <- %21 :4
             ret
 
 function byValue$1T   ; byValue

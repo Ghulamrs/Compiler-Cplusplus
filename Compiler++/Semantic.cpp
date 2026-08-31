@@ -293,6 +293,16 @@ cxx::ClassDecl *SemanticAnalyzer::classOf(cc::Type *t) {
     return ct ? findClass(ct->className) : 0;
 }
 
+// `T m` and `T m[2]` are both members made of T, and both are constructed --
+// the second one element at a time.  classOf answers a different question and
+// looks through a pointer to do it, which is exactly wrong here: a `T*` member
+// is a value to copy, not an object to construct.
+cxx::ClassDecl *SemanticAnalyzer::memberClassOf(cc::Type *t) {
+    while (cc::ArrayType *at = dynamic_cast<cc::ArrayType*>(t)) t = at->element;
+    cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(t);
+    return ct ? findClass(ct->className) : 0;
+}
+
 // A Derived object begins with its Base subobject at offset 0, so the upcast
 // costs nothing.  The reverse is not allowed: a Base* need not be a Derived.
 bool SemanticAnalyzer::canConvert(cc::Type *from, cc::Type *to) {
@@ -863,32 +873,29 @@ cxx::MethodDecl *SemanticAnalyzer::copyConstructorOf(cxx::ClassDecl *cd) {
 // that declares a copy constructor answers yes on the spot; otherwise it must
 // be one this same rule can generate, which makes the question recursive.
 //
-// An array member is where the recursion stops with a no.  An array cannot be
-// written in an initialiser list, and a member the list leaves out is
-// default-constructed -- or, for an array of scalars, left as it lies.  Either
-// way the source's elements would not arrive, so a generated constructor would
-// copy the class WORSE than the byte copy it already gets.  Such a class keeps
-// that byte copy, and so does anything that holds one: those members' copy
-// constructors still do not run, which is the same gap as before rather than a
-// new one.
+// An array member used to stop the recursion with a no, because no syntax puts
+// an array in an initialiser list.  That is true of the syntax and false of the
+// consequence: generating nothing left the WHOLE class on the byte copy, so a
+// sibling member that DID have a copy constructor never saw one either -- and
+// where that sibling owned memory, the two objects ended up holding one
+// pointer and the second destructor freed it twice.  An array member is now
+// named like any other and lowered as a whole-array move, which is what the
+// byte copy always did for it, so the array is copied exactly as before and
+// everything beside it is copied properly.
 bool SemanticAnalyzer::canSynthesiseCopy(cxx::ClassDecl *cd, int depth) {
     if (!cd) return true;                       // no part is no obstacle
     if (copyConstructorOf(cd)) return true;     // declared: nothing to generate
     if (depth > 64) return false;               // a hierarchy this deep is broken
 
-    for (std::size_t i = 0; i < cd->members.size(); ++i) {
-        cxx::FieldDecl *fd = dynamic_cast<cxx::FieldDecl*>(cd->members[i]);
-        if (fd && dynamic_cast<cc::ArrayType*>(fd->type)) return false;
-    }
     if (!canSynthesiseCopy(cd->base, depth + 1)) return false;
     for (std::size_t i = 0; i < cd->members.size(); ++i) {
         cxx::FieldDecl *fd = dynamic_cast<cxx::FieldDecl*>(cd->members[i]);
         if (!fd) continue;
-        // Only a member declared AS a class is constructed by the list; a
-        // pointer or a scalar is copied as the value it is.
-        cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(fd->type);
-        if (!ct) continue;
-        if (!canSynthesiseCopy(findClass(ct->className), depth + 1)) return false;
+        // Only a member made OF a class is constructed -- an array of them one
+        // element at a time.  A pointer or a scalar is copied as the value it is.
+        cxx::ClassDecl *fcd = memberClassOf(fd->type);
+        if (!fcd) continue;
+        if (!canSynthesiseCopy(fcd, depth + 1)) return false;
     }
     return true;
 }
@@ -903,7 +910,7 @@ bool SemanticAnalyzer::needsCopyConstructor(cxx::ClassDecl *cd) {
     for (std::size_t i = 0; i < cd->members.size(); ++i) {
         cxx::FieldDecl *fd = dynamic_cast<cxx::FieldDecl*>(cd->members[i]);
         if (!fd) continue;
-        if (copyConstructorOf(classOf(fd->type))) return true;
+        if (copyConstructorOf(memberClassOf(fd->type))) return true;
     }
     return false;
 }
@@ -934,8 +941,9 @@ bool SemanticAnalyzer::synthesiseCopyFor(cxx::ClassDecl *cd) {
     for (std::size_t m = 0; m < cd->members.size(); ++m) {
         cxx::FieldDecl *fd = dynamic_cast<cxx::FieldDecl*>(cd->members[m]);
         if (!fd) continue;
-        cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(fd->type);
-        if (ct) synthesiseCopyFor(findClass(ct->className));
+        // An array member's ELEMENT class needs one too: lowering calls it per
+        // element, so it must exist by the time lowering looks.
+        if (cxx::ClassDecl *fcd = memberClassOf(fd->type)) synthesiseCopyFor(fcd);
     }
 
     cxx::MethodDecl *c = new cxx::MethodDecl(0, cd->name, cxx::ACC_Public);
@@ -1170,6 +1178,19 @@ void SemanticAnalyzer::analyzeMemberInits(cxx::MethodDecl *ctor, cxx::ClassDecl 
 
         if (fieldIndex < lastFieldIndex) outOfOrder = true;
         lastFieldIndex = fieldIndex;
+
+        // An array member, which only a GENERATED constructor names: there is
+        // no syntax for it, so a user still reaches the checks below and the
+        // error they already gave.  What the entry means is a whole-array
+        // move, decided in lowering; here it needs only its source analysed,
+        // because lowering asks for that expression's type.
+        if (ctor->isImplicit && dynamic_cast<cc::ArrayType*>(field->type)) {
+            for (std::size_t a = 0; a < mi.args.size(); ++a) {
+                bool lv = false;
+                analyzeExpr(mi.args[a], lv);
+            }
+            continue;
+        }
 
         // A member that is itself an object is CONSTRUCTED here, with whatever
         // arguments are written -- `Outer() : in(7)` calls Inner(int).  Only a

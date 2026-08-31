@@ -1,0 +1,737 @@
+Function print_int returns void
+  param:
+    Var  : int
+Function print_string returns void
+  param:
+    Var  : pointer to char
+Function print_line returns void
+Var live : int
+  init:
+    0
+Class Owner
+  Field public p : pointer to int
+  Constructor public Owner::Owner
+    Block
+      ExprStmt
+        Binary =
+          p
+          New int
+      ExprStmt
+        Binary =
+          Unary *
+            p
+          1
+      ExprStmt
+        Binary =
+          live
+          Binary +
+            live
+            1
+  Constructor public Owner::Owner
+    param:
+      Var o : reference to class Owner
+    Block
+      ExprStmt
+        Binary =
+          p
+          New int
+      ExprStmt
+        Binary =
+          Unary *
+            p
+          Binary +
+            Unary *
+              Member .p
+                o
+            1
+      ExprStmt
+        Binary =
+          live
+          Binary +
+            live
+            1
+  Destructor public Owner::~Owner
+    Block
+      ExprStmt
+        Delete
+          p
+      ExprStmt
+        Binary =
+          live
+          Binary -
+            live
+            1
+Class WithScalarArray
+  Field public o : class Owner
+  Field public a : array[3] of int
+  Constructor public WithScalarArray::WithScalarArray
+    Block
+      ExprStmt
+        Binary =
+          Index
+            a
+            0
+          7
+      ExprStmt
+        Binary =
+          Index
+            a
+            1
+          8
+      ExprStmt
+        Binary =
+          Index
+            a
+            2
+          9
+  Destructor public WithScalarArray::~WithScalarArray
+    Block
+  Constructor public WithScalarArray::WithScalarArray
+    param:
+      Var __o : reference to class WithScalarArray
+    init member o
+      Member .o
+        __o
+    init member a
+      Member .a
+        __o
+    Block
+Class WithObjectArray
+  Field public many : array[2] of class Owner
+  Field public tag : int
+  Constructor public WithObjectArray::WithObjectArray
+    Block
+      ExprStmt
+        Binary =
+          tag
+          4
+  Destructor public WithObjectArray::~WithObjectArray
+    Block
+  Constructor public WithObjectArray::WithObjectArray
+    param:
+      Var __o : reference to class WithObjectArray
+    init member many
+      Member .many
+        __o
+    init member tag
+      Member .tag
+        __o
+    Block
+Class Holder
+  Field public o : class Owner
+  Field public inner : class WithScalarArray
+  Constructor public Holder::Holder
+    Block
+  Destructor public Holder::~Holder
+    Block
+  Constructor public Holder::Holder
+    param:
+      Var __o : reference to class Holder
+    init member o
+      Member .o
+        __o
+    init member inner
+      Member .inner
+        __o
+    Block
+Function main returns int
+  Block
+    ExprStmt
+      Call
+        print_string
+        arg 0:
+          "start "
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          live
+    ExprStmt
+      Call
+        print_line
+    Block
+      Var a : class WithScalarArray
+      Var b : class WithScalarArray
+        init:
+          a
+      ExprStmt
+        Call
+          print_string
+          arg 0:
+            "scalar array "
+      ExprStmt
+        Call
+          print_int
+          arg 0:
+            Unary *
+              Member .p
+                Member .o
+                  b
+      ExprStmt
+        Call
+          print_int
+          arg 0:
+            Index
+              Member .a
+                b
+              2
+      ExprStmt
+        Call
+          print_int
+          arg 0:
+            live
+      ExprStmt
+        Call
+          print_line
+      [on exit: destroy b]
+      [on exit: destroy a]
+    ExprStmt
+      Call
+        print_string
+        arg 0:
+          "after "
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          live
+    ExprStmt
+      Call
+        print_line
+    Block
+      Var a : class WithObjectArray
+      Var b : class WithObjectArray
+        init:
+          a
+      ExprStmt
+        Call
+          print_string
+          arg 0:
+            "object array "
+      ExprStmt
+        Call
+          print_int
+          arg 0:
+            Unary *
+              Member .p
+                Index
+                  Member .many
+                    b
+                  0
+      ExprStmt
+        Call
+          print_int
+          arg 0:
+            Unary *
+              Member .p
+                Index
+                  Member .many
+                    b
+                  1
+      ExprStmt
+        Call
+          print_int
+          arg 0:
+            Member .tag
+              b
+      ExprStmt
+        Call
+          print_int
+          arg 0:
+            live
+      ExprStmt
+        Call
+          print_line
+      [on exit: destroy b]
+      [on exit: destroy a]
+    ExprStmt
+      Call
+        print_string
+        arg 0:
+          "after "
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          live
+    ExprStmt
+      Call
+        print_line
+    Block
+      Var a : class Holder
+      Var b : class Holder
+        init:
+          a
+      ExprStmt
+        Call
+          print_string
+          arg 0:
+            "through a holder "
+      ExprStmt
+        Call
+          print_int
+          arg 0:
+            Unary *
+              Member .p
+                Member .o
+                  b
+      ExprStmt
+        Call
+          print_int
+          arg 0:
+            Unary *
+              Member .p
+                Member .o
+                  Member .inner
+                    b
+      ExprStmt
+        Call
+          print_int
+          arg 0:
+            Index
+              Member .a
+                Member .inner
+                  b
+              0
+      ExprStmt
+        Call
+          print_int
+          arg 0:
+            live
+      ExprStmt
+        Call
+          print_line
+      [on exit: destroy b]
+      [on exit: destroy a]
+    ExprStmt
+      Call
+        print_string
+        arg 0:
+          "after "
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          live
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+class Holder  size=32 align=8
+    +0  o (8 bytes)
+    +8  inner (24 bytes)
+    construct: field o -> field inner -> Holder() body
+    destroy:   ~Holder() body -> field inner -> field o
+
+class Owner  size=8 align=8
+    +0  p (8 bytes)
+    construct: field p -> Owner() body
+    destroy:   ~Owner() body -> field p
+
+class WithObjectArray  size=24 align=8
+    +0  many (16 bytes)
+    +16  tag (4 bytes)
+    construct: field many -> field tag -> WithObjectArray() body
+    destroy:   ~WithObjectArray() body -> field tag -> field many
+
+class WithScalarArray  size=24 align=8
+    +0  o (8 bytes)
+    +8  a (12 bytes)
+    construct: field o -> field a -> WithScalarArray() body
+    destroy:   ~WithScalarArray() body -> field a -> field o
+
+string str0  "start "
+string str1  "scalar array "
+string str2  "after "
+string str3  "object array "
+string str4  "through a holder "
+
+global live  4 bytes
+
+function Owner__ctor$v   ; Owner::Owner
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = alloc 4
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+            store [%5] <- %2 :8
+    %6 = const 1
+    %7 = local #0
+    %8 = load [%7] :8
+    %9 = field %8 +0
+    %10 = load [%9] :8
+            store [%10] <- %6 :4
+    %11 = global live
+    %12 = load [%11] :4
+    %13 = const 1
+    %14 = add %12, %13
+    %15 = global live
+            store [%15] <- %14 :4
+            ret
+
+function Owner__ctor$RK5Owner   ; Owner::Owner
+  #0 this  8 bytes  (param)
+  #1 o  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = alloc 4
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+            store [%5] <- %2 :8
+    %6 = local #1
+    %7 = load [%6] :8
+    %8 = field %7 +0
+    %9 = load [%8] :8
+    %10 = load [%9] :4
+    %11 = const 1
+    %12 = add %10, %11
+    %13 = local #0
+    %14 = load [%13] :8
+    %15 = field %14 +0
+    %16 = load [%15] :8
+            store [%16] <- %12 :4
+    %17 = global live
+    %18 = load [%17] :4
+    %19 = const 1
+    %20 = add %18, %19
+    %21 = global live
+            store [%21] <- %20 :4
+            ret
+
+function Owner__dtor   ; Owner::~Owner
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +0
+    %3 = load [%2] :8
+            free %3
+    %4 = global live
+    %5 = load [%4] :4
+    %6 = const 1
+    %7 = sub %5, %6
+    %8 = global live
+            store [%8] <- %7 :4
+            ret
+
+function WithScalarArray__ctor$v   ; WithScalarArray::WithScalarArray
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = local #0
+    %3 = load [%2] :8
+    %4 = field %3 +0
+            call Owner__ctor$v(%4)
+    %5 = const 7
+    %6 = local #0
+    %7 = load [%6] :8
+    %8 = field %7 +8
+    %9 = const 0
+    %10 = const 4
+    %11 = mul %9, %10
+    %12 = add %8, %11
+            store [%12] <- %5 :4
+    %13 = const 8
+    %14 = local #0
+    %15 = load [%14] :8
+    %16 = field %15 +8
+    %17 = const 1
+    %18 = const 4
+    %19 = mul %17, %18
+    %20 = add %16, %19
+            store [%20] <- %13 :4
+    %21 = const 9
+    %22 = local #0
+    %23 = load [%22] :8
+    %24 = field %23 +8
+    %25 = const 2
+    %26 = const 4
+    %27 = mul %25, %26
+    %28 = add %24, %27
+            store [%28] <- %21 :4
+            ret
+
+function WithScalarArray__dtor   ; WithScalarArray::~WithScalarArray
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +0
+            call Owner__dtor(%2)
+            ret
+
+function WithScalarArray__ctor$RK15WithScalarArray   ; WithScalarArray::WithScalarArray
+  #0 this  8 bytes  (param)
+  #1 __o  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = local #0
+    %3 = load [%2] :8
+    %4 = field %3 +0
+    %5 = local #1
+    %6 = load [%5] :8
+    %7 = field %6 +0
+            call Owner__ctor$RK5Owner(%4, %7)
+    %8 = local #0
+    %9 = load [%8] :8
+    %10 = field %9 +8
+    %11 = local #1
+    %12 = load [%11] :8
+    %13 = field %12 +8
+            memcpy [%10] <- [%13] :12
+            ret
+
+function WithObjectArray__ctor$v   ; WithObjectArray::WithObjectArray
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = local #0
+    %3 = load [%2] :8
+    %4 = field %3 +0
+    %5 = field %4 +0
+            call Owner__ctor$v(%5)
+    %6 = field %4 +8
+            call Owner__ctor$v(%6)
+    %7 = const 4
+    %8 = local #0
+    %9 = load [%8] :8
+    %10 = field %9 +16
+            store [%10] <- %7 :4
+            ret
+
+function WithObjectArray__dtor   ; WithObjectArray::~WithObjectArray
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +0
+    %3 = field %2 +8
+            call Owner__dtor(%3)
+    %4 = field %2 +0
+            call Owner__dtor(%4)
+            ret
+
+function WithObjectArray__ctor$RK15WithObjectArray   ; WithObjectArray::WithObjectArray
+  #0 this  8 bytes  (param)
+  #1 __o  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = local #0
+    %3 = load [%2] :8
+    %4 = field %3 +0
+    %5 = local #1
+    %6 = load [%5] :8
+    %7 = field %6 +0
+    %8 = field %4 +0
+    %9 = field %7 +0
+            call Owner__ctor$RK5Owner(%8, %9)
+    %10 = field %4 +8
+    %11 = field %7 +8
+            call Owner__ctor$RK5Owner(%10, %11)
+    %12 = local #1
+    %13 = load [%12] :8
+    %14 = field %13 +16
+    %15 = load [%14] :4
+    %16 = local #0
+    %17 = load [%16] :8
+    %18 = field %17 +16
+            store [%18] <- %15 :4
+            ret
+
+function Holder__ctor$v   ; Holder::Holder
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = local #0
+    %3 = load [%2] :8
+    %4 = field %3 +0
+            call Owner__ctor$v(%4)
+    %5 = local #0
+    %6 = load [%5] :8
+    %7 = field %6 +8
+            call WithScalarArray__ctor$v(%7)
+            ret
+
+function Holder__dtor   ; Holder::~Holder
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = field %1 +8
+            call WithScalarArray__dtor(%2)
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+            call Owner__dtor(%5)
+            ret
+
+function Holder__ctor$RK6Holder   ; Holder::Holder
+  #0 this  8 bytes  (param)
+  #1 __o  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = local #0
+    %3 = load [%2] :8
+    %4 = field %3 +0
+    %5 = local #1
+    %6 = load [%5] :8
+    %7 = field %6 +0
+            call Owner__ctor$RK5Owner(%4, %7)
+    %8 = local #0
+    %9 = load [%8] :8
+    %10 = field %9 +8
+    %11 = local #1
+    %12 = load [%11] :8
+    %13 = field %12 +8
+            call WithScalarArray__ctor$RK15WithScalarArray(%10, %13)
+            ret
+
+function main
+  #0 a  24 bytes
+  #1 b  24 bytes
+  #2 a  24 bytes
+  #3 b  24 bytes
+  #4 a  32 bytes
+  #5 b  32 bytes
+            call __global_init()
+    %0 = straddr str0
+            call print_string(%0)
+    %1 = global live
+    %2 = load [%1] :4
+            call print_int(%2)
+            call print_line()
+    %3 = local #0
+            call WithScalarArray__ctor$v(%3)
+    %4 = local #1
+    %5 = local #0
+            call WithScalarArray__ctor$RK15WithScalarArray(%4, %5)
+    %6 = straddr str1
+            call print_string(%6)
+    %7 = local #1
+    %8 = field %7 +0
+    %9 = field %8 +0
+    %10 = load [%9] :8
+    %11 = load [%10] :4
+            call print_int(%11)
+    %12 = local #1
+    %13 = field %12 +8
+    %14 = const 2
+    %15 = const 4
+    %16 = mul %14, %15
+    %17 = add %13, %16
+    %18 = load [%17] :4
+            call print_int(%18)
+    %19 = global live
+    %20 = load [%19] :4
+            call print_int(%20)
+            call print_line()
+    %21 = local #1
+            call WithScalarArray__dtor(%21)
+    %22 = local #0
+            call WithScalarArray__dtor(%22)
+    %23 = straddr str2
+            call print_string(%23)
+    %24 = global live
+    %25 = load [%24] :4
+            call print_int(%25)
+            call print_line()
+    %26 = local #2
+            call WithObjectArray__ctor$v(%26)
+    %27 = local #3
+    %28 = local #2
+            call WithObjectArray__ctor$RK15WithObjectArray(%27, %28)
+    %29 = straddr str3
+            call print_string(%29)
+    %30 = local #3
+    %31 = field %30 +0
+    %32 = const 0
+    %33 = const 8
+    %34 = mul %32, %33
+    %35 = add %31, %34
+    %36 = field %35 +0
+    %37 = load [%36] :8
+    %38 = load [%37] :4
+            call print_int(%38)
+    %39 = local #3
+    %40 = field %39 +0
+    %41 = const 1
+    %42 = const 8
+    %43 = mul %41, %42
+    %44 = add %40, %43
+    %45 = field %44 +0
+    %46 = load [%45] :8
+    %47 = load [%46] :4
+            call print_int(%47)
+    %48 = local #3
+    %49 = field %48 +16
+    %50 = load [%49] :4
+            call print_int(%50)
+    %51 = global live
+    %52 = load [%51] :4
+            call print_int(%52)
+            call print_line()
+    %53 = local #3
+            call WithObjectArray__dtor(%53)
+    %54 = local #2
+            call WithObjectArray__dtor(%54)
+    %55 = straddr str2
+            call print_string(%55)
+    %56 = global live
+    %57 = load [%56] :4
+            call print_int(%57)
+            call print_line()
+    %58 = local #4
+            call Holder__ctor$v(%58)
+    %59 = local #5
+    %60 = local #4
+            call Holder__ctor$RK6Holder(%59, %60)
+    %61 = straddr str4
+            call print_string(%61)
+    %62 = local #5
+    %63 = field %62 +0
+    %64 = field %63 +0
+    %65 = load [%64] :8
+    %66 = load [%65] :4
+            call print_int(%66)
+    %67 = local #5
+    %68 = field %67 +8
+    %69 = field %68 +0
+    %70 = field %69 +0
+    %71 = load [%70] :8
+    %72 = load [%71] :4
+            call print_int(%72)
+    %73 = local #5
+    %74 = field %73 +8
+    %75 = field %74 +8
+    %76 = const 0
+    %77 = const 4
+    %78 = mul %76, %77
+    %79 = add %75, %78
+    %80 = load [%79] :4
+            call print_int(%80)
+    %81 = global live
+    %82 = load [%81] :4
+            call print_int(%82)
+            call print_line()
+    %83 = local #5
+            call Holder__dtor(%83)
+    %84 = local #4
+            call Holder__dtor(%84)
+    %85 = straddr str2
+            call print_string(%85)
+    %86 = global live
+    %87 = load [%86] :4
+            call print_int(%87)
+            call print_line()
+    %88 = const 0
+            ret %88
+
+function __global_init
+    %0 = global live
+    %1 = const 0
+            store [%0] <- %1 :4
+            ret
+
+function __global_fini
+            ret

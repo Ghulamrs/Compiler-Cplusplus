@@ -90,6 +90,9 @@ private:
     // Construct or destroy `count` objects laid end to end from `base`.
     void emitArrayConstruct(ClassDecl *cd, IRReg base, long count, int elemSize, int line);
     void emitArrayDestruct(ClassDecl *cd, IRReg base, long count, int elemSize, int line);
+    // An array member being copied: element i from the source's element i.
+    void emitArrayCopyConstruct(ClassDecl *cd, IRReg dst, IRReg src,
+                                long count, int elemSize, int line);
     virtual bool isBoolType(cc::Type *t);
     virtual void lowerDecl(cc::Decl *d);
     virtual void emitPrologue(cc::Function *f);

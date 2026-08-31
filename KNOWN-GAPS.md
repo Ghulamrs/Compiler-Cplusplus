@@ -17,6 +17,7 @@ and then does something other than what the program says.
 | A generated copy constructor suppressed the implicit default one, so `Derived a;` on a class declaring nothing became an error | `Semantic::selectConstructor`, `cxx::Lowering::emitConstruct` |
 | The generated initialiser list named bases and members that had no constructor taking one argument, rejecting code that had always compiled | `Semantic::synthesiseCopyConstructors` |
 | A class returned by value was copied with `memcpy`, so its copy constructor never ran — and for a class owning memory the caller was handed a pointer the returning frame then freed | `cc::Lowering::lowerStmt` |
+| A class holding an array was copied byte for byte, whole, so a member beside the array never ran its copy constructor -- and a member owning memory was shared between the two objects and freed twice | `Semantic::canSynthesiseCopy`, `cxx::Lowering::emitPrologue` |
 | A `.cxb` could corrupt the host heap (static-data length), segfault (`OP_MemCopy` count), abort the process (call and native argument counts), read and write past memory (floating widths), or run silently to a false success (unknown opcodes) | `VM::load`, the dispatch switch |
 | `delete` of a pointer inside a block forged a free-list header out of program data | `VM::release` |
 | `MIN / -1` and `-MIN` were undefined; on x86-64 the divide faults | `OP_Div`, `OP_Mod`, `OP_Neg` |

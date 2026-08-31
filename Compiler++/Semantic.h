@@ -180,6 +180,9 @@ private:
     bool convertible(cc::Expr *fromExpr, cc::Type *from, cc::Type *to);
     static bool isNullPointerConstant(cc::Expr *e);
     cxx::ClassDecl *classOf(cc::Type *t);   // through one pointer or reference
+    // The class a MEMBER is made of, through any number of array dimensions.
+    // Not through a pointer: a pointer member is copied as the value it is.
+    cxx::ClassDecl *memberClassOf(cc::Type *t);
     static bool isVoid(cc::Type *t);
     // The builtin kind a type names, or BK_Void when it names none.
     static bool builtinKindOf(cc::Type *t, cc::BuiltinKind &out);
