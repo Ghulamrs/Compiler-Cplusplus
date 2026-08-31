@@ -59,6 +59,8 @@ protected:
 
     void skipParenGroup();
     bool peekIsStar();
+    // `vector<int> v;` named as a template rather than read as a comparison.
+    bool skipTemplateDeclaration();
     // Set by skipReservedConstruct so the caller does not resynchronise on top
     // of a skip that already landed cleanly.
     bool suppressSync;

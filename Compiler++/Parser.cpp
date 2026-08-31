@@ -73,6 +73,52 @@ bool Parser::skipReservedConstruct() {
     return true;
 }
 
+// `vector<int> v;` -- a template instantiation, which this version does not
+// have and which nothing recognised.  The '<' was read as a comparison, so the
+// type never existed and what came out was five errors about expressions, not
+// one about templates, in the shape a beginner is most likely to type.
+//
+// It has to be a probe, because `a < b;` is an ordinary comparison and looks
+// identical up to the '<'.  What separates them is what comes AFTER the
+// matching '>': a name being declared.  That is the same test the class-name
+// path already makes for `Widget w;`.
+bool Parser::skipTemplateDeclaration() {
+    if (cur.kind != TOK_IDENTIFIER) return false;
+    const State probe = save();
+
+    // Past any qualifier first: the name a user writes is `std::vector<int>`
+    // far more often than `vector<int>`, and the qualifier is handled in the
+    // expression parser, which this never reaches.
+    while (cur.kind == TOK_IDENTIFIER) {
+        advance();
+        if (cur.kind != TOK_COLONCOLON) break;
+        advance();
+    }
+    if (cur.kind != TOK_LT) { restore(probe); return false; }
+
+    int depth = 0;
+    while (cur.kind != TOK_EOF && cur.kind != TOK_SEMI &&
+           cur.kind != TOK_LBRACE && cur.kind != TOK_RBRACE) {
+        if (cur.kind == TOK_LT) ++depth;
+        else if (cur.kind == TOK_GT) {
+            --depth;
+            advance();
+            if (depth == 0) break;
+            continue;
+        }
+        advance();
+    }
+    // A declaration names something; a comparison does not.
+    const bool declaring = (depth == 0 && cur.kind == TOK_IDENTIFIER);
+    restore(probe);
+    if (!declaring) return false;
+
+    errorAtCurrent("templates are not supported in this version");
+    skipConstruct();
+    suppressSync = true;
+    return true;
+}
+
 // One token past a '(' -- enough to tell a function pointer's declarator from
 // an ordinary parenthesised expression.
 bool Parser::peekIsStar() {
@@ -209,6 +255,7 @@ Function *Parser::parseSingleFunction() {
 // --- declarations -----------------------------------------------------
 
 Decl *Parser::parseDeclaration() {
+    if (skipTemplateDeclaration()) return 0;    // `vector<int> v;` at file scope
     if (skipReservedConstruct()) return 0;
     // #include is accepted and ignored.  There is no header to read -- a
     // native binds by being declared without a body -- but every C++ program a
@@ -488,6 +535,7 @@ Stmt *Parser::parseStatementImpl() {
     case TOK_CONTINUE: advance(); expect(TOK_SEMI, "after continue"); s = new ContinueStmt(); break;
     case TOK_SEMI:     advance(); return 0;         // an empty statement
     default: {
+        if (skipTemplateDeclaration()) return 0;
         State st = save();
         Type *t = parseType();                      // virtual
         if (t) {

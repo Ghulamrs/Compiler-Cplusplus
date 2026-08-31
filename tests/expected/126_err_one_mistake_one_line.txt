@@ -1,0 +1,54 @@
+126_err_one_mistake_one_line.cpp:25:13: error: declaring more than one field in a statement is not supported in this version; write a declaration each
+126_err_one_mistake_one_line.cpp:29:5: error: templates are not supported in this version
+126_err_one_mistake_one_line.cpp:30:5: error: templates are not supported in this version
+Class Holder
+  Field public rows : int
+Function main returns int
+  Block
+    Var a : int
+      init:
+        1
+    Var b : int
+      init:
+        2
+    ExprStmt
+      Binary <<
+        Binary <<
+          cout
+          Binary <
+            a
+            b
+        endl
+    ExprStmt
+      Binary <<
+        Binary <<
+          cout
+          Binary >
+            b
+            a
+        endl
+    Return
+      0
+
+class Holder  size=4 align=4
+    +0  rows (4 bytes)
+
+class __endl_t  size=4 align=4
+    +0  _ (4 bytes)
+    construct: field _ -> __endl_t() body
+    destroy:   ~__endl_t() body -> field _
+
+class errstream  size=4 align=4
+    +0  _ (4 bytes)
+    construct: field _ -> errstream() body
+    destroy:   ~errstream() body -> field _
+
+class istream  size=4 align=4
+    +0  _ (4 bytes)
+    construct: field _ -> istream() body
+    destroy:   ~istream() body -> field _
+
+class ostream  size=4 align=4
+    +0  _ (4 bytes)
+    construct: field _ -> ostream() body
+    destroy:   ~ostream() body -> field _

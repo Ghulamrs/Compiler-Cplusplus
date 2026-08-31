@@ -1049,6 +1049,8 @@ protected:
 
     void skipParenGroup();
     bool peekIsStar();
+    // `vector<int> v;` named as a template rather than read as a comparison.
+    bool skipTemplateDeclaration();
     // Set by skipReservedConstruct so the caller does not resynchronise on top
     // of a skip that already landed cleanly.
     bool suppressSync;
@@ -4121,6 +4123,52 @@ bool Parser::skipReservedConstruct() {
     return true;
 }
 
+// `vector<int> v;` -- a template instantiation, which this version does not
+// have and which nothing recognised.  The '<' was read as a comparison, so the
+// type never existed and what came out was five errors about expressions, not
+// one about templates, in the shape a beginner is most likely to type.
+//
+// It has to be a probe, because `a < b;` is an ordinary comparison and looks
+// identical up to the '<'.  What separates them is what comes AFTER the
+// matching '>': a name being declared.  That is the same test the class-name
+// path already makes for `Widget w;`.
+bool Parser::skipTemplateDeclaration() {
+    if (cur.kind != TOK_IDENTIFIER) return false;
+    const State probe = save();
+
+    // Past any qualifier first: the name a user writes is `std::vector<int>`
+    // far more often than `vector<int>`, and the qualifier is handled in the
+    // expression parser, which this never reaches.
+    while (cur.kind == TOK_IDENTIFIER) {
+        advance();
+        if (cur.kind != TOK_COLONCOLON) break;
+        advance();
+    }
+    if (cur.kind != TOK_LT) { restore(probe); return false; }
+
+    int depth = 0;
+    while (cur.kind != TOK_EOF && cur.kind != TOK_SEMI &&
+           cur.kind != TOK_LBRACE && cur.kind != TOK_RBRACE) {
+        if (cur.kind == TOK_LT) ++depth;
+        else if (cur.kind == TOK_GT) {
+            --depth;
+            advance();
+            if (depth == 0) break;
+            continue;
+        }
+        advance();
+    }
+    // A declaration names something; a comparison does not.
+    const bool declaring = (depth == 0 && cur.kind == TOK_IDENTIFIER);
+    restore(probe);
+    if (!declaring) return false;
+
+    errorAtCurrent("templates are not supported in this version");
+    skipConstruct();
+    suppressSync = true;
+    return true;
+}
+
 // One token past a '(' -- enough to tell a function pointer's declarator from
 // an ordinary parenthesised expression.
 bool Parser::peekIsStar() {
@@ -4257,6 +4305,7 @@ Function *Parser::parseSingleFunction() {
 // --- declarations -----------------------------------------------------
 
 Decl *Parser::parseDeclaration() {
+    if (skipTemplateDeclaration()) return 0;    // `vector<int> v;` at file scope
     if (skipReservedConstruct()) return 0;
     // #include is accepted and ignored.  There is no header to read -- a
     // native binds by being declared without a body -- but every C++ program a
@@ -4536,6 +4585,7 @@ Stmt *Parser::parseStatementImpl() {
     case TOK_CONTINUE: advance(); expect(TOK_SEMI, "after continue"); s = new ContinueStmt(); break;
     case TOK_SEMI:     advance(); return 0;         // an empty statement
     default: {
+        if (skipTemplateDeclaration()) return 0;
         State st = save();
         Type *t = parseType();                      // virtual
         if (t) {
@@ -5359,6 +5409,7 @@ bool Parser::looksLikeConstructor(const std::string &className) {
 }
 
 Decl *Parser::parseMemberDecl(const std::string &className, Access access) {
+    if (skipTemplateDeclaration()) return 0;    // `vector<int> v;` as a field
     // `friend` is a grant of access, not a member: it produces nothing here.
     if (cur.kind == TOK_RESERVED && cur.text == "friend") {
         parseFriend();
@@ -5475,6 +5526,23 @@ Decl *Parser::parseMemberDecl(const std::string &className, Access access) {
     fd->ownerClass = className;
     fd->line = line;
     fd->col = col;
+    // `int rows, cols;` is one rule broken once, and a field had no message
+    // for it -- only "expected ';' ... found ','", which names the punctuation
+    // and not the rule, and then two more lines as the rest of the list was
+    // read as declarations of its own.
+    // The local form has said the right thing for a while; a field says it
+    // now too.  What follows is one more line -- "undeclared identifier
+    // 'cols'" -- and that one stays: it is a true statement about the program
+    // the compiler was given, not the parser losing its place.  Declaring the
+    // skipped names to silence it would need a type clone the parser does not
+    // have, and a fourth copy of that idiom is a worse trade than a second
+    // line.
+    if (cur.kind == TOK_COMMA) {
+        errorAtCurrent("declaring more than one field in a statement is not "
+                       "supported in this version; write a declaration each");
+        while (cur.kind != TOK_SEMI && cur.kind != TOK_RBRACE &&
+               cur.kind != TOK_EOF) advance();
+    }
     expect(TOK_SEMI, ("after field " + name).c_str());
     return fd;
 }

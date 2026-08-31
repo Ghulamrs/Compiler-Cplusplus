@@ -218,6 +218,7 @@ bool Parser::looksLikeConstructor(const std::string &className) {
 }
 
 Decl *Parser::parseMemberDecl(const std::string &className, Access access) {
+    if (skipTemplateDeclaration()) return 0;    // `vector<int> v;` as a field
     // `friend` is a grant of access, not a member: it produces nothing here.
     if (cur.kind == TOK_RESERVED && cur.text == "friend") {
         parseFriend();
@@ -334,6 +335,23 @@ Decl *Parser::parseMemberDecl(const std::string &className, Access access) {
     fd->ownerClass = className;
     fd->line = line;
     fd->col = col;
+    // `int rows, cols;` is one rule broken once, and a field had no message
+    // for it -- only "expected ';' ... found ','", which names the punctuation
+    // and not the rule, and then two more lines as the rest of the list was
+    // read as declarations of its own.
+    // The local form has said the right thing for a while; a field says it
+    // now too.  What follows is one more line -- "undeclared identifier
+    // 'cols'" -- and that one stays: it is a true statement about the program
+    // the compiler was given, not the parser losing its place.  Declaring the
+    // skipped names to silence it would need a type clone the parser does not
+    // have, and a fourth copy of that idiom is a worse trade than a second
+    // line.
+    if (cur.kind == TOK_COMMA) {
+        errorAtCurrent("declaring more than one field in a statement is not "
+                       "supported in this version; write a declaration each");
+        while (cur.kind != TOK_SEMI && cur.kind != TOK_RBRACE &&
+               cur.kind != TOK_EOF) advance();
+    }
     expect(TOK_SEMI, ("after field " + name).c_str());
     return fd;
 }
