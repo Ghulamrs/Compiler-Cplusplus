@@ -10,7 +10,8 @@
 namespace cc {
 
 Parser::Parser(const std::string &s, Diagnostics &d)
-    : lexer(createLexer(s)), diag(d), suppressSync(false), nesting(0), nestingReported(false) {
+    : lexer(createLexer(s)), diag(d), suppressSync(false), nesting(0), nestingReported(false),
+      exprNesting(0), chainLinks(0), chainReported(false) {
     advance();
 }
 
@@ -393,6 +394,20 @@ CompoundStmt *Parser::parseBlock() {
 // the declaration rule is tried first and rewound if it fails.  parseType() is
 // VIRTUAL, so this one C rule also declares the C++ layer's types.
 Stmt *Parser::parseStatement() {
+    // Statements nest too, and not only through blocks -- `else if` chains an
+    // if-statement onto an if-statement with no block between them, so the
+    // depth grows without parseCompound ever seeing it.  Twenty thousand of
+    // them parsed, and then the semantic pass walked the same shape and did
+    // not.  This is the same counter parseCompound uses, and every nested
+    // statement is a level of it however it was reached.
+    if (tooDeep()) return 0;
+    ++nesting;
+    Stmt *s = parseStatementImpl();
+    --nesting;
+    return s;
+}
+
+Stmt *Parser::parseStatementImpl() {
     if (skipReservedConstruct()) return 0;
 
     // A label is only useful with goto, which this subset does not have, so it
@@ -680,6 +695,28 @@ resolve:
 // Each level parses the one below and loops on its own operators, so reading
 // top to bottom is reading the precedence table.
 
+// One more link in the tree the current expression is building.
+//
+// Refusing to go deeper is not enough on its own: the loops above are still
+// looking at the tokens, and `*` is both a dereference and a multiplication,
+// so an abandoned `***...p` came straight back as a multiplication chain and
+// went on growing the tree one BinaryExpr at a time.  The tokens have to stop
+// being an expression, not merely stop being parsed -- so the rest of it is
+// consumed here, at the point of refusal, which is the same thing the
+// excluded operators do a few lines below and for the same reason.
+bool Parser::chainTooDeep() {
+    ++chainLinks;
+    if (chainLinks <= MaxNesting) return false;
+    if (!chainReported) {
+        errorAtCurrent("expression nested too deeply");
+        chainReported = true;
+        while (cur.kind != TOK_SEMI && cur.kind != TOK_RPAREN &&
+               cur.kind != TOK_RBRACE && cur.kind != TOK_COMMA &&
+               cur.kind != TOK_EOF) advance();
+    }
+    return true;
+}
+
 bool Parser::tooDeep() {
     if (nesting < MaxNesting) return false;
     if (!nestingReported) {
@@ -691,9 +728,26 @@ bool Parser::tooDeep() {
 
 Expr *Parser::parseExpression() {
     if (tooDeep()) return 0;
+    // The count is one expression's, so it starts again at the outermost one.
+    // A nested expression -- an argument, a parenthesised group -- goes on
+    // counting into the same total, which is right: it is the same tree.
+    const bool outermost = (exprNesting == 0);
+    if (outermost) { chainLinks = 0; chainReported = false; }
     ++nesting;
+    ++exprNesting;
     Expr *e = parseAssign();
+    --exprNesting;
     --nesting;
+
+    // Refusing the expression abandons it partway, and the rest of it is still
+    // sitting there for whatever asked for the expression to complain about
+    // next.  One mistake costs one line, so the remains go here -- the same
+    // skip the excluded operators below make, for the same reason.
+    if (outermost && chainReported) {
+        while (cur.kind != TOK_SEMI && cur.kind != TOK_RPAREN &&
+               cur.kind != TOK_RBRACE && cur.kind != TOK_EOF) advance();
+        return e;
+    }
 
     // An operator left out of the subset lands here, where a complete
     // expression has been parsed and something follows it that no rule above
@@ -845,6 +899,12 @@ Expr *Parser::parseMulDiv() {
 }
 
 Expr *Parser::parseUnary() {
+    // Every link in every chain passes through here exactly once, whichever
+    // loop above is building it: a binary level parses its right operand by
+    // descending to this point, and a unary operator reaches it by recursion.
+    // So this is the one place that can count the depth of the tree without
+    // the seven precedence loops each having to remember to.
+    if (chainTooDeep()) return 0;
     UnaryOp op;
     switch (cur.kind) {
     case TOK_MINUS:      op = UN_Neg; break;

@@ -166,6 +166,25 @@ the message it must produce. Their README explains how they were built.
   member beside the array never ran its own, and one owning memory was freed
   twice. The list is not where to look for what an array member does.
 
+## Embedding
+
+The compiler is a library that happens to ship a command line. `dist/` builds
+with `-DCOMPILERPP_NO_MAIN` for a host that has its own `main`, and
+`tests/embed_smoke.cpp` is the worked example: compile in memory, redirect
+`cout`/`cerr` into strings, reuse the VM, repeat. Two things a host must know.
+
+**Compile on a thread with at least 1MB of stack.** Nesting is bounded at 100,
+and that number came from measuring what the passes AFTER the parser survive --
+they walk the same tree with much larger frames. 1MB is the default main-thread
+stack on Windows and iOS and everything works there; 512KB, which is what an
+iOS `DispatchQueue` worker gets, does not, so a host compiling off the main
+thread should make the thread itself.
+
+**One compile at a time.** There is no mutable file-scope state, so a compile
+on a background thread is safe — but capturing output means swapping
+`std::cout`'s buffer, which is process-wide, so two concurrent compiles would
+take each other's output.
+
 ## Traps
 
 - **Early returns that skip the common path.** Four have been found: an operator

@@ -123,14 +123,45 @@ protected:
     // Recursive descent has exactly one failure mode a program can reach from
     // outside: nest deeply enough and the C++ stack runs out before the parse
     // does.  A limit turns a crash into a diagnostic.
-    static const int MaxNesting = 256;
+    //
+    // The number is not the parser's to choose.  What the parser accepts, the
+    // semantic pass, the lowering and the AST's destructor each walk again,
+    // recursively, with much larger frames -- analyzeExprImpl alone is 514
+    // lines -- so the limit has to be one those passes survive on the smallest
+    // stack this compiler is expected to run on.  Measured, on a chain of
+    // `cout << x`, which is the most expensive link a program is likely to
+    // write: 512KB dies between 60 and 80, 1MB between 120 and 160.  1MB is
+    // the default main-thread stack on Windows and on iOS, so 100 is the
+    // number, with the margin on the side of the constrained host.  256 was
+    // chosen when the parser was the only thing counting, and a program at 256
+    // crashed everything downstream on both.
+    static const int MaxNesting = 100;
     int nesting;
     bool nestingReported;
     bool tooDeep();                 // reports once, then stays quiet
 
+    // The same failure, reached the other way.  `a + b + c + ...` is parsed by
+    // a LOOP, so the parser's own recursion never grows -- but the tree it
+    // builds is one level deeper per operator, and every pass after the parser
+    // walks that tree recursively.  So the parse survived 20,000 terms and the
+    // semantic pass, the lowering and the AST's own destructor did not.
+    //
+    // Counted per outermost EXPRESSION, because the depth that matters is one
+    // expression's, not a function's: four hundred short statements are fine
+    // and a program made of them must stay fine.  `nesting` cannot answer that
+    // question -- a block bumps it too, so inside any function it is never
+    // zero and the count would run on across every statement in the body.
+    int exprNesting;
+    long chainLinks;
+    bool chainReported;
+    bool chainTooDeep();            // counts one link, reports once
+
     // --- extension points overridden by the C++ layer ---------------------
     virtual Decl *parseDeclaration();
     virtual Stmt *parseStatement();
+    // The body of it.  parseStatement itself is only the depth count, so that
+    // one place answers for every shape of nesting a statement can have.
+    Stmt *parseStatementImpl();
     virtual Expr *parsePrimary();
     virtual Type *parseType();
     virtual Expr *parseMemberSuffix(Expr *base);    // 0 if not a member access

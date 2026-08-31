@@ -170,10 +170,17 @@ diagnostic. `Semantic.cpp:2027`.
 
 ### Robustness and diagnostics
 
-**Deep expressions overflow the stack.** `Parser.h:126` caps paren and block
-nesting at 256, but nothing bounds operand-chain depth: `1+1+…` with 20,000
-terms is parsed iteratively and then segfaults in the recursive semantic pass
-and destructors. `!!!…x`, `***…p` and `a.b.c.d…` do the same.
+**Deep nesting needs a 1MB stack, and says so instead of crashing.** Closed as
+a crash, open as a requirement. Operand chains, prefix chains, dereference
+chains and statement chains are all bounded at 100 now, so no input segfaults
+the compiler — and the limit was chosen from the stack, not from taste, because
+what the parser accepts three later passes walk again with much larger frames.
+Measured on `cout << x` chains, the most expensive link a program is likely to
+write: 512KB dies between 60 and 80, 1MB between 120 and 160. 1MB is the
+default main-thread stack on Windows and on iOS, so the limit sits at 100 and
+everything works there. **512KB does not**, which is what an iOS
+`DispatchQueue` worker gets by default: a host wanting to compile off the main
+thread must make the thread itself and give it a real stack.
 
 **`<<=`, `>>=` and `~` still have no named diagnostic.** The lexer splits the
 first two into two tokens, and `~` is a prefix operator so it can never reach

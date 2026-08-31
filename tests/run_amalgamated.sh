@@ -102,8 +102,10 @@ fi
 # difference; without it the POSIX name is passed through unchanged, which is
 # correct everywhere cl is not involved.
 AMALG="$WORK/amalg"
+HOST_IS_CL=no
 case "$(basename "$HOSTCXX")" in
     cl|cl.exe)
+        HOST_IS_CL=yes
         AMALG="$WORK/amalg.exe"
         NATIVE_WORK="$WORK"
         if command -v cygpath >/dev/null 2>&1; then
