@@ -79,10 +79,19 @@ All six must pass before anything is committed. Add `--accept` to a runner to
 re-record its golden files — and then **read the diff**, because `--accept`
 happily records a bug. `run_differential.sh` and `run_driver.sh` have no golden
 files to record: for the first the host compiler is the answer, and for the
-second the check is written beside the argument line it makes. `run_differential.sh` needs a
-GCC-style host compiler and says **NOTHING WAS COMPARED** where there is none —
-which is Windows, `cl` taking different flags — so the four that do run there
-are the coverage on that platform.
+second the check is written beside the argument line it makes. `run_differential.sh` takes any of the
+three host compilers, `cl` included, and reports the same total everywhere:
+
+    clang   62 agreed, 0 differed, 2 allowed, 1 skipped, of 65 cases
+    gcc     62 agreed, 0 differed, 2 allowed, 1 skipped, of 65 cases
+    cl      64 agreed, 0 differed, 0 allowed, 1 skipped, of 65 cases
+
+The two that move between *agreed* and *allowed* are the elision pair: clang
+and GCC elide the copy out of a returned local and this compiler does not, so
+those two are allowed there — and MSVC does not elide either, so it agrees with
+this compiler outright and needs no allowance. That is the allowed list earning
+its place: a third implementation, reached independently, says the difference
+was only ever elision.
 
 `-pedantic` is clean except for twelve `-Wlong-long` warnings from the VM's
 fixed 64-bit word (`Bytecode.h`). That is the one knowing departure from the
