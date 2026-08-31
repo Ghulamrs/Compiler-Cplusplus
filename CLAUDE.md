@@ -71,7 +71,10 @@ All five must pass before anything is committed. Add `--accept` to a runner to
 re-record its golden files — and then **read the diff**, because `--accept`
 happily records a bug. `run_differential.sh` and `run_driver.sh` have no golden
 files to record: for the first the host compiler is the answer, and for the
-second the check is written beside the argument line it makes.
+second the check is written beside the argument line it makes. `run_differential.sh` needs a
+GCC-style host compiler and says **NOTHING WAS COMPARED** where there is none —
+which is Windows, `cl` taking different flags — so the four that do run there
+are the coverage on that platform.
 
 `-pedantic` is clean except for twelve `-Wlong-long` warnings from the VM's
 fixed 64-bit word (`Bytecode.h`). That is the one knowing departure from the

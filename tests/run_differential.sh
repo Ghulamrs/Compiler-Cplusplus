@@ -71,4 +71,16 @@ for case_file in cases/*run_*.cpp; do
 done
 echo
 echo "$pass agreed, $fail differed, $allow allowed, $skip skipped"
+
+# Nothing compared is not the same as nothing wrong.  Where there is no host
+# compiler -- Windows, where cl is not GCC-shaped and takes different flags --
+# every case skips and the suite would otherwise report success for a run that
+# checked nothing.  Say so; a green line that means "did not run" is the kind
+# of thing the other suites were already guilty of.
+if [ "$pass" -eq 0 ] && [ "$skip" -gt 0 ]; then
+    echo
+    echo "NOTHING WAS COMPARED: no case built with '$HOSTCXX'."
+    echo "This suite needs a GCC-style host compiler; pass one as the second"
+    echo "argument.  The other four suites still cover this platform."
+fi
 [ "$fail" -eq 0 ]
