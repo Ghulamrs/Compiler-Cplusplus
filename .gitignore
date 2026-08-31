@@ -1,6 +1,3 @@
-# Working snapshots kept beside the source; the history below replaces them.
-_backup_*/
-
 # Build output
 build/
 *.o

@@ -26,7 +26,6 @@ tests/
   run_amalgamated.sh  embed_smoke.cpp
 dist/              amalgamate.py and a single-file build of the whole compiler
                    -- generated, committed, and checked by run_amalgamated.sh
-_backup_*/         pre-git snapshots, gitignored, superseded by history
 ```
 
 ## The two layers
