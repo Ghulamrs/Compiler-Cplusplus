@@ -11,6 +11,11 @@
 //
 //   Run:              compilerpp -ast -layout path\\to\\input.cpp
 //
+// Define COMPILERPP_NO_MAIN to leave main() out, which is what an application
+// embedding the compiler wants: it has a main() already, and a second one does
+// not link.  Everything else -- the parser, the analyser, the lowering and the
+// VM -- is unchanged and is the whole of what an embedder calls.
+//
 // DO NOT EDIT.  Edit the files in Compiler++/ and regenerate.
 // C++98 only.
 
@@ -12918,6 +12923,8 @@ vmword VM::run(const Image &image, bool &ok) {
 }
 
 // ---------- main.cpp ----------
+
+#ifndef COMPILERPP_NO_MAIN
 //
 //  main.cpp
 //  Compiler++
@@ -13198,3 +13205,5 @@ int main(int argc, char **argv) {
     for (std::size_t i = 0; i < unit.size(); ++i) delete unit[i];
     return diag.hadError() ? 1 : 0;
 }
+
+#endif  // COMPILERPP_NO_MAIN

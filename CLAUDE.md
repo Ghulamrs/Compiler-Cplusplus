@@ -23,7 +23,7 @@ tests/
   images/          malformed .cxb files the VM must refuse, with their messages
   differential_shim.h  the natives a case calls, over the real <iostream>
   run_tests.sh run_exec.sh run_roundtrip.sh run_differential.sh run_driver.sh
-  run_amalgamated.sh
+  run_amalgamated.sh  embed_smoke.cpp
 dist/              amalgamate.py and a single-file build of the whole compiler
                    -- generated, committed, and checked by run_amalgamated.sh
 _backup_*/         pre-git snapshots, gitignored, superseded by history
@@ -67,7 +67,7 @@ sh tests/run_exec.sh      /tmp/b/compilerpp     # program output
 sh tests/run_roundtrip.sh /tmp/b/compilerpp     # same output through a .cxb
 sh tests/run_differential.sh /tmp/b/compilerpp  # same answer as a real compiler
 sh tests/run_driver.sh    /tmp/b/compilerpp     # what the ARGUMENTS do
-sh tests/run_amalgamated.sh /tmp/b/compilerpp   # dist/ is still this compiler
+sh tests/run_amalgamated.sh /tmp/b/compilerpp   # dist/ is this compiler, and embeds
 ```
 
 `run_amalgamated.sh` and `run_differential.sh` each take the host compiler as a

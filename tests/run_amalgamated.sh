@@ -165,9 +165,42 @@ for case_file in tests/cases/*.cpp; do
 done
 echo "ok       $same cases answered identically$([ "$differ" -gt 0 ] && echo ", $differ did not")"
 
+# --- 3. can something else LINK it? -----------------------------------------
+# The point of a single-file distribution is being dropped into a build that
+# already exists -- which, until COMPILERPP_NO_MAIN, it could not be: the file
+# carries the command-line driver's main(), and an application has one already.
+# embed_smoke.cpp is the shape of that application, and it also drives the
+# compiler the way one would: in memory, with the streams redirected, more than
+# once in a process.
+if [ -f tests/embed_smoke.cpp ]; then
+    if [ "$HOST_IS_CL" = yes ]; then
+        set -- -nologo -EHsc -w -DCOMPILERPP_NO_MAIN \
+               "-Fe:$NATIVE_WORK/embed.exe" "-Fo:$NATIVE_WORK/" tests/embed_smoke.cpp
+        EMBED="$WORK/embed.exe"
+    else
+        set -- -std=c++98 -Wall -Wextra -DCOMPILERPP_NO_MAIN \
+               -o "$WORK/embed" tests/embed_smoke.cpp
+        EMBED="$WORK/embed"
+    fi
+    if "$HOSTCXX" "$@" > "$WORK/embed.log" 2>&1; then
+        if "$EMBED" > "$WORK/embed.out" 2>&1; then
+            sed -n 's/^/         /p' "$WORK/embed.out" | grep -v '^ *$' | tail -n +1 > /dev/null
+            echo "ok       embeds: $(grep -c '^ok' "$WORK/embed.out") checks passed"
+        else
+            echo "FAIL     the embedding harness reported a failure"
+            sed -n '1,20p' "$WORK/embed.out"
+            fail=$((fail + 1))
+        fi
+    else
+        echo "FAIL     tests/embed_smoke.cpp does not build against the amalgamation"
+        sed -n '1,10p' "$WORK/embed.log"
+        fail=$((fail + 1))
+    fi
+fi
+
 echo
 if [ "$fail" -eq 0 ]; then
-    echo "amalgamation is current, builds clean, and is the same compiler"
+    echo "amalgamation is current, builds clean, is the same compiler, and embeds"
 else
     echo "amalgamation FAILED $fail check(s)"
 fi

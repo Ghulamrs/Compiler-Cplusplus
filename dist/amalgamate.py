@@ -36,6 +36,11 @@ BANNER = '''// compilerpp_amalgamated.cpp
 //
 //   Run:              compilerpp -ast -layout path\\\\to\\\\input.cpp
 //
+// Define COMPILERPP_NO_MAIN to leave main() out, which is what an application
+// embedding the compiler wants: it has a main() already, and a second one does
+// not link.  Everything else -- the parser, the analyser, the lowering and the
+// VM -- is unchanged and is the whole of what an embedder calls.
+//
 // DO NOT EDIT.  Edit the files in Compiler++/ and regenerate.
 // C++98 only.
 '''
@@ -77,7 +82,17 @@ def main():
         parts.append("\n// " + "=" * 70 + "\n// " + group + "\n// " + "=" * 70 + "\n")
         for name in names:
             parts.append("\n// ---------- %s ----------\n" % name)
-            parts.append(strip_local_includes(open(os.path.join(SRC, name)).read()))
+            body = strip_local_includes(open(os.path.join(SRC, name)).read())
+            # main.cpp is the command-line driver, and an application that
+            # embeds this file already has a main().  Two of them do not link,
+            # so the driver is the one part that can be compiled out.  Guarded
+            # here rather than in main.cpp itself: the per-file build has no
+            # such problem, and a #ifdef in the source would be a switch that
+            # only the amalgamation ever reads.
+            if name == "main.cpp":
+                body = ("\n#ifndef COMPILERPP_NO_MAIN\n" + body
+                        + "\n#endif  // COMPILERPP_NO_MAIN\n")
+            parts.append(body)
     text = "".join(parts)
     if not os.path.isdir("dist"):
         os.mkdir("dist")
