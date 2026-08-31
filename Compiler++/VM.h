@@ -29,6 +29,14 @@ public:
     const std::string &errorMessage() const { return error; }
     vmword stepCount() const { return steps; }
 
+    // The machine's size and patience.  Set before run(); the defaults are
+    // what the command line uses and what every test case assumes.  A run that
+    // cannot fit -- a call stack larger than the memory holding it -- is
+    // refused the way any other bad image is, with a named error rather than
+    // an assertion.
+    void setLimits(const MachineLimits &l) { limits = l; }
+    const MachineLimits &currentLimits() const { return limits; }
+
 private:
     // A value is 8 bytes either way; which half is live depends on the
     // instruction that produced it, exactly as in a real register file.
@@ -37,6 +45,7 @@ private:
         double d;
     };
 
+    MachineLimits limits;
     std::vector<unsigned char> mem;
     std::vector<Value> stack;       // the operand stack
     std::string error;

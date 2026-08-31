@@ -15,9 +15,13 @@ OUT = os.path.join("dist", "compilerpp_amalgamated.cpp")
 # Headers first, in DEPENDENCY order -- concatenation has no #include to
 # resolve the order for it, so this list is the dependency graph written out.
 # Then the translation units, in any order but kept parallel for readability.
-HEADERS = ["Token.h", "Lexer.h", "Diagnostics.h", "AST.h", "AST1.h",
-           "SymbolTable.h", "Parser.h", "Parser1.h", "Semantic.h", "Layout.h",
-           "IR.h", "Lower.h", "Lower1.h", "Bytecode.h", "CodeGen.h", "VM.h"]
+# Bytecode.h sits near the front because it describes the MACHINE -- the word
+# width, how much memory it has, what it will run -- and that is not only the
+# back end's business.  Layout refuses an object too big for the machine, which
+# means Layout needs `vmword`, which means Bytecode.h has to be there first.
+HEADERS = ["Token.h", "Lexer.h", "Diagnostics.h", "Bytecode.h", "AST.h",
+           "AST1.h", "SymbolTable.h", "Parser.h", "Parser1.h", "Semantic.h",
+           "Layout.h", "IR.h", "Lower.h", "Lower1.h", "CodeGen.h", "VM.h"]
 SOURCES = ["Lexer.cpp", "Diagnostics.cpp", "AST.cpp", "AST1.cpp",
            "SymbolTable.cpp", "Parser.cpp", "Parser1.cpp", "Semantic.cpp",
            "Layout.cpp", "IR.cpp", "Lower.cpp", "Lower1.cpp", "Bytecode.cpp",

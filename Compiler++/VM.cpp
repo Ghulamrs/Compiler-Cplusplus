@@ -12,9 +12,6 @@
 #include <sstream>
 
 namespace {
-const vmword MemorySize   = MachineMemory;   // Bytecode.h owns the number
-const vmword StackSize    = 1L * 1024 * 1024;
-const vmword MaxSteps     = 50L * 1000 * 1000;   // a runaway program stops itself
 const int  HeaderSize   = 16;                  // [size][next] before each block
 
 // -MIN and MIN / -1 have no answer in the range, and signed overflow is
@@ -529,18 +526,34 @@ vmword VM::run(const Image &image, bool &ok) {
     // claim larger than the machine wrote past the end of the vector's buffer
     // and corrupted the host's heap, which is not a fault the program can be
     // blamed for.
-    if (static_cast<vmword>(image.staticData.size()) > MemorySize) {
+    // A machine has to be big enough to be one.  The limits are the host's to
+    // choose and a host can choose badly, so they are checked here rather than
+    // trusted -- the heap starts after the call stack, and a call stack that
+    // does not fit puts every allocation past the end of memory.
+    if (limits.memory <= 0 || limits.callStack <= 0 || limits.maxSteps <= 0) {
+        trap("this machine has no memory, no call stack, or no step budget");
+        return 0;
+    }
+    if (limits.callStack >= limits.memory) {
+        trap("this machine's call stack does not fit in its memory");
+        return 0;
+    }
+    if (static_cast<vmword>(image.staticData.size()) + limits.callStack >= limits.memory) {
+        trap("static data and the call stack do not fit in this machine's memory");
+        return 0;
+    }
+    if (static_cast<vmword>(image.staticData.size()) > limits.memory) {
         trap("static data does not fit in this machine's memory");
         return 0;
     }
     img = &image;                   // the frame tables, for frameCapacity
-    mem.assign(MemorySize, 0);
+    mem.assign(static_cast<std::size_t>(limits.memory), 0);
     std::copy(image.staticData.begin(), image.staticData.end(), mem.begin());
 
     stackBase = static_cast<vmword>(image.staticData.size());
     if (stackBase % 8) stackBase += 8 - (stackBase % 8);
     stackTop = stackBase;
-    heapBase = stackBase + StackSize;
+    heapBase = stackBase + limits.callStack;
     heapTop = heapBase;
     freeList = 0;
 
@@ -565,7 +578,7 @@ vmword VM::run(const Image &image, bool &ok) {
     bool finiDone = false;
 
     while (!frames.empty() && !failed()) {
-        if (++steps > MaxSteps) { trap("execution did not terminate"); break; }
+        if (++steps > limits.maxSteps) { trap("execution did not terminate"); break; }
 
         Frame &fr = frames.back();
         const FuncImage &fi = image.functions[fr.func];

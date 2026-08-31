@@ -180,6 +180,22 @@ stack on Windows and iOS and everything works there; 512KB, which is what an
 iOS `DispatchQueue` worker gets, does not, so a host compiling off the main
 thread should make the thread itself.
 
+**The machine's size and patience are yours to set.** `MachineLimits` --
+memory, call stack, step budget -- defaults to the 4MB machine the command
+line uses, and that is most of what a run costs in memory. Measured on a
+program with a heap array, a copy constructor, a destructor and some
+recursion: a 4MB machine peaks at 6.3MB resident, a 256KB machine at 2.5MB,
+and both give the same answer. The floor of roughly 2.3MB is the compiler's own
+working set, not the VM's.
+
+The step budget deserves a second look before shipping: 50 million sounds
+generous and is not. A plain `while (i < 1000000)` loop spends **49 million
+steps**, so the default stops a real loop about as readily as a runaway one. A
+host that wants ordinary loops to finish should raise it and offer a Stop
+button rather than leave the guillotine where it is. `Layout::setMemoryLimit`
+takes the same number the VM does and must be given it: the front end refuses
+an array too big for the machine, and it cannot refuse what it was not told.
+
 **One compile at a time.** There is no mutable file-scope state, so a compile
 on a background thread is safe — but capturing output means swapping
 `std::cout`'s buffer, which is process-wide, so two concurrent compiles would

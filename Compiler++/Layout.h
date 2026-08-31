@@ -68,6 +68,11 @@ class Layout {
 public:
     explicit Layout(Diagnostics &d);
 
+    // The machine an object has to fit in.  Defaults to MachineMemory, which
+    // is what the VM defaults to; a host that shrinks one must shrink both, or
+    // the front end accepts an array the machine will refuse to load.
+    void setMemoryLimit(vmword bytes) { memoryLimit = bytes; }
+
     // Computes a layout for every class, base classes first.
     void computeAll(const std::map<std::string, cxx::ClassDecl*> &classes);
 
@@ -91,6 +96,7 @@ private:
     // oversized array would otherwise be reported once per mention.  One
     // mistake costs one line.
     mutable bool reportedOversize;
+    vmword memoryLimit;
     std::map<std::string, ClassLayout> layouts;
 
     // Needed during the recursion: a class-typed FIELD has to be laid out

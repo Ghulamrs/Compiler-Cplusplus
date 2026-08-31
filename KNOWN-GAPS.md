@@ -204,6 +204,15 @@ large.
 
 ### Design and structure
 
+**The step budget is not a good default for a host that runs real loops.**
+`MachineLimits::maxSteps` is 50 million, and a plain million-iteration loop
+spends 49 million of them — so the guard that exists to stop `while(1){}` stops
+an ordinary loop at nearly the same point. It is a parameter now rather than a
+constant, so a host can raise it, but the default is the one the command line
+uses and it is the wrong one for anything interactive. What that host really
+wants is a budget large enough not to matter plus a way to cancel, and the
+cancel does not exist: `run()` cannot be interrupted from another thread.
+
 **`long long` breaks the C++98 rule.** `Bytecode.h` pins the VM's word with
 `long long` (or `__int64` on MSVC), which is the right decision for a fixed
 64-bit word but takes the build from zero warnings to twelve `-Wlong-long` under

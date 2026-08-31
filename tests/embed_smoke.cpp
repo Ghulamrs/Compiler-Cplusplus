@@ -111,6 +111,21 @@ const char *OTHER =
 // Traps partway down a call chain, so the frames it leaves behind are many
 // and their func indices are high -- which is what makes a stale one point
 // past the end of a smaller image's function table.
+// Enough of a program to need a heap, a copy constructor, a destructor and
+// some recursion -- the shapes that actually use the machine's memory.
+const char *SIZED =
+    "#include <iostream>\n"
+    "class M { public: int n; double *a;\n"
+    "  M(int k){ n=k; a=new double[k]; int i=0; while(i<k){a[i]=i;i=i+1;} }\n"
+    "  M(const M &o){ n=o.n; a=new double[n]; int i=0; while(i<n){a[i]=o.a[i];i=i+1;} }\n"
+    "  ~M(){ delete[] a; } };\n"
+    "int fib(int n){ if (n < 2) return n; return fib(n-1) + fib(n-2); }\n"
+    "int main(){ M x(400); { M y = x; cout << y.a[399] << endl; } cout << fib(18) << endl; return 0; }\n";
+
+const char *LOOPS =
+    "#include <iostream>\n"
+    "int main(){ int i=0; int s=0; while (i < 1000) { s = s + i; i = i + 1; } cout << s << endl; return 0; }\n";
+
 const char *TRAPS =
     "#include <iostream>\n"
     "int deep(int n){ if (n > 0) return deep(n - 1); int *p = 0; return *p; }\n"
@@ -182,7 +197,82 @@ int main() {
         }
     }
 
-    // 5. Repeatedly, in one process, which is the shape of an application.
+    // 5. The machine's size and patience are the HOST's to choose.  The
+    //    defaults are a 4MB machine, which is most of what a run costs in
+    //    memory and far more than a student program needs; an application on a
+    //    phone would rather spend 256KB.
+    {
+        Image sized;
+        if (!compileToImage(SIZED, sized, diagnostics)) {
+            std::cout << "FAIL     compiling the sized program: " << diagnostics << std::endl;
+            return 1;
+        }
+        VM big;
+        bool ok = false;
+        const std::string wanted = runCapturing(big, sized, ok);
+
+        MachineLimits small;
+        small.memory    = 256 * 1024;
+        small.callStack =  64 * 1024;
+        VM vm;
+        vm.setLimits(small);
+        bool ok2 = false;
+        check("a 256KB machine gives the same answer", runCapturing(vm, sized, ok2), wanted);
+        if (!ok2) { std::cout << "FAIL     the small machine did not succeed" << std::endl; ++failures; }
+    }
+
+    // 6. And a host can choose badly.  A call stack that does not fit leaves
+    //    the heap past the end of memory, so it is refused by name rather than
+    //    trusted -- the same treatment a bad image gets.
+    {
+        Image image;
+        std::string ignored;
+        compileToImage(HELLO, image, ignored);
+        MachineLimits impossible;
+        impossible.memory    = 32 * 1024;
+        impossible.callStack = 64 * 1024;       // larger than the memory holding it
+        VM vm;
+        vm.setLimits(impossible);
+        bool ok = true;
+        runCapturing(vm, image, ok);
+        if (ok) {
+            std::cout << "FAIL     an impossible machine was not refused" << std::endl;
+            ++failures;
+        } else {
+            std::cout << "ok       an impossible machine is refused, not fatal" << std::endl;
+        }
+    }
+
+    // 7. The step budget is what stops a runaway program, and the default is
+    //    tighter than it looks -- a million-iteration loop spends 49 million
+    //    steps of the 50 million allowed.  A host that wants real loops to
+    //    finish raises it; one that wants a quick answer lowers it.
+    {
+        Image image;
+        std::string ignored;
+        compileToImage(LOOPS, image, ignored);
+        MachineLimits patient;
+        patient.maxSteps = 100L * 1000 * 1000;
+        VM vm;
+        vm.setLimits(patient);
+        bool ok = false;
+        check("a raised step budget lets a loop finish", runCapturing(vm, image, ok), "499500\n");
+
+        MachineLimits impatient;
+        impatient.maxSteps = 1000;
+        VM vm2;
+        vm2.setLimits(impatient);
+        bool ok2 = true;
+        runCapturing(vm2, image, ok2);
+        if (ok2) {
+            std::cout << "FAIL     a 1000-step budget did not stop the loop" << std::endl;
+            ++failures;
+        } else {
+            std::cout << "ok       a lowered step budget stops one" << std::endl;
+        }
+    }
+
+    // 8. Repeatedly, in one process, which is the shape of an application.
     {
         bool same = true;
         for (int i = 0; i < 50; ++i) {

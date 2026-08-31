@@ -8,7 +8,8 @@
 #include <iostream>
 #include <sstream>
 
-Layout::Layout(Diagnostics &d) : diag(d), reportedOversize(false), classIndex(0) {}
+Layout::Layout(Diagnostics &d)
+    : diag(d), reportedOversize(false), memoryLimit(MachineMemory), classIndex(0) {}
 
 int Layout::roundUp(int value, int alignment) {
     if (alignment <= 1) return value;
@@ -43,12 +44,12 @@ int Layout::sizeOf(cc::Type *t) const {
         const vmword elem  = sizeOf(at->element);
         const vmword count = static_cast<vmword>(at->count);
         const vmword bytes = count * elem;
-        if (elem > 0 && (count > MachineMemory / elem || bytes > MachineMemory)) {
+        if (elem > 0 && (count > memoryLimit / elem || bytes > memoryLimit)) {
             if (!reportedOversize) {
                 reportedOversize = true;
                 std::ostringstream ss;
                 ss << "an array of " << count << " x " << elem
-                   << " bytes does not fit in this machine's " << (MachineMemory / 1024 / 1024)
+                   << " bytes does not fit in this machine's " << (memoryLimit / 1024 / 1024)
                    << "MB of memory";
                 diag.error(at->line, at->col, ss.str());
             }

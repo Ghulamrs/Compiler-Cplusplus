@@ -50,7 +50,32 @@ typedef unsigned long long uvmword;
 // to fit is a thing the FRONT END should refuse, at the declaration, with a
 // line number -- and it cannot refuse what it cannot see.  Two constants that
 // had to agree would be one more thing to drift.
-const vmword MachineMemory = 4L * 1024 * 1024;
+const vmword MachineMemory   = 4L * 1024 * 1024;
+const vmword MachineStack    = 1L * 1024 * 1024;
+const vmword MachineMaxSteps = 50L * 1000 * 1000;
+
+// The three numbers above, as a thing that can be handed to a machine rather
+// than compiled into it.  A command line wants the defaults and never thinks
+// about them; an application embedding this compiler has different problems.
+//
+// `memory` is claimed whole on every run and is most of what the process is
+// holding while a program runs, so a host that runs small programs wants it
+// small.  `maxSteps` is what stops `while(1){}` -- and the default is tighter
+// than it looks: a plain million-iteration loop spends 49 million steps, so a
+// host that wants real loops to finish must raise it and offer a Stop instead.
+// `callStack` is the room for frames, taken out of `memory` before the heap
+// starts.
+//
+// They are one struct because they are one decision: memory has to exceed the
+// call stack plus whatever the program's statics need, and a host setting one
+// without looking at the others gets a machine that cannot start.
+struct MachineLimits {
+    vmword memory;
+    vmword callStack;
+    vmword maxSteps;
+    MachineLimits()
+        : memory(MachineMemory), callStack(MachineStack), maxSteps(MachineMaxSteps) {}
+};
 
 enum OpCode {
     // --- operand stack ---
