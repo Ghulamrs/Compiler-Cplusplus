@@ -1509,7 +1509,8 @@ public:
 
     const ClassLayout *forClass(const std::string &name) const;
 
-    // Byte size of any type; 0 and a diagnostic for something with no size.
+    // Byte size of any type; 0 and a diagnostic for something with no size,
+    // or for an object too large for the machine to hold.
     int sizeOf(cc::Type *t) const;
     int alignOf(cc::Type *t) const;
 
@@ -1522,6 +1523,10 @@ public:
 
 private:
     Diagnostics &diag;
+    // sizeOf is const and is called for every type in the program, so an
+    // oversized array would otherwise be reported once per mention.  One
+    // mistake costs one line.
+    mutable bool reportedOversize;
     std::map<std::string, ClassLayout> layouts;
 
     // Needed during the recursion: a class-typed FIELD has to be laid out
@@ -2213,6 +2218,13 @@ typedef unsigned __int64 uvmword;
 typedef long long          vmword;
 typedef unsigned long long uvmword;
 #endif
+
+// How much memory the machine has.  It lives here, with the word width, rather
+// than in VM.cpp, because it is not only the VM's business: an object too big
+// to fit is a thing the FRONT END should refuse, at the declaration, with a
+// line number -- and it cannot refuse what it cannot see.  Two constants that
+// had to agree would be one more thing to drift.
+const vmword MachineMemory = 4L * 1024 * 1024;
 
 enum OpCode {
     // --- operand stack ---
@@ -4323,6 +4335,11 @@ VarDecl *Parser::parseVarDeclTail(Type *type, const std::string &name,
 
 Type *Parser::parseArraySuffixes(Type *element) {
     std::vector<long> dims;
+    // Where the first '[' was.  A type has a position for the same reason an
+    // expression does -- something later has to be able to point at it, and
+    // Layout does when the array turns out not to fit in the machine.
+    const int line = cur.line;
+    const int col = cur.col;
     while (cur.kind == TOK_LBRACKET) {
         advance();
         long n = 0;
@@ -4338,7 +4355,10 @@ Type *Parser::parseArraySuffixes(Type *element) {
     }
     // Built inside out, so the LAST bound is the innermost element count.
     for (std::size_t i = dims.size(); i > 0; --i) {
-        element = new ArrayType(element, dims[i - 1]);
+        ArrayType *at = new ArrayType(element, dims[i - 1]);
+        at->line = line;
+        at->col = col;
+        element = at;
     }
     return element;
 }
@@ -8192,8 +8212,9 @@ cc::Type *SemanticAnalyzer::analyzeExprImpl(cc::Expr *e, bool &isLValue) {
 
 #include <cstddef>
 #include <iostream>
+#include <sstream>
 
-Layout::Layout(Diagnostics &d) : diag(d), classIndex(0) {}
+Layout::Layout(Diagnostics &d) : diag(d), reportedOversize(false), classIndex(0) {}
 
 int Layout::roundUp(int value, int alignment) {
     if (alignment <= 1) return value;
@@ -8212,9 +8233,34 @@ int Layout::sizeOf(cc::Type *t) const {
     cxx::ReferenceType *rt = dynamic_cast<cxx::ReferenceType*>(t);
     if (rt) return PointerSize;
     if (dynamic_cast<cc::PointerType*>(t)) return PointerSize;
-    // An array is its elements, laid end to end.
+    // An array is its elements, laid end to end -- computed in the machine's
+    // own word, not in int.  `int a[700000000];` overflowed this multiply,
+    // and a wrapped size is not a diagnostic: the array was laid out at some
+    // wrong size, the program compiled, it RAN, and it reported success. An
+    // accepted program that means nothing is the worst answer available.
+    //
+    // The size is also what the whole object will occupy, so this is where it
+    // can be compared against the memory the machine actually has, while there
+    // is still a declaration to point at.  The VM checks the same thing when
+    // it loads an image, but by then CodeGen has already materialised the
+    // bytes in the host: `int a[300000000];` reached a gigabyte of host memory
+    // before anything objected, which on a phone is not an error message.
     if (cc::ArrayType *at = dynamic_cast<cc::ArrayType*>(t)) {
-        return static_cast<int>(at->count) * sizeOf(at->element);
+        const vmword elem  = sizeOf(at->element);
+        const vmword count = static_cast<vmword>(at->count);
+        const vmword bytes = count * elem;
+        if (elem > 0 && (count > MachineMemory / elem || bytes > MachineMemory)) {
+            if (!reportedOversize) {
+                reportedOversize = true;
+                std::ostringstream ss;
+                ss << "an array of " << count << " x " << elem
+                   << " bytes does not fit in this machine's " << (MachineMemory / 1024 / 1024)
+                   << "MB of memory";
+                diag.error(at->line, at->col, ss.str());
+            }
+            return 0;
+        }
+        return static_cast<int>(bytes);
     }
     // bool is the C++ layer's, so the C layer's size table does not name it.
     if (dynamic_cast<cxx::BoolType*>(t)) return 1;
@@ -8326,8 +8372,12 @@ void Layout::computeFor(cxx::ClassDecl *cd) {
         const int fsize = sizeOf(fd->type);
         const int falign = alignOf(fd->type);
         if (fsize == 0) {
-            diag.error(fd->line, fd->col,
-                       "field '" + fd->name + "' has no size in class '" + cd->name + "'");
+            // Unless sizeOf has already said why, in which case this is the
+            // same mistake a second time.  One mistake costs one line.
+            if (!reportedOversize) {
+                diag.error(fd->line, fd->col,
+                           "field '" + fd->name + "' has no size in class '" + cd->name + "'");
+            }
             continue;
         }
         offset = roundUp(offset, falign);
@@ -12031,7 +12081,7 @@ void CodeGen::resolveLabels(const IRFunction &, FuncImage &out,
 #include <sstream>
 
 namespace {
-const vmword MemorySize   = 4L * 1024 * 1024;
+const vmword MemorySize   = MachineMemory;   // Bytecode.h owns the number
 const vmword StackSize    = 1L * 1024 * 1024;
 const vmword MaxSteps     = 50L * 1000 * 1000;   // a runaway program stops itself
 const int  HeaderSize   = 16;                  // [size][next] before each block

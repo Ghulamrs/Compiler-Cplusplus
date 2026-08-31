@@ -45,6 +45,13 @@ typedef long long          vmword;
 typedef unsigned long long uvmword;
 #endif
 
+// How much memory the machine has.  It lives here, with the word width, rather
+// than in VM.cpp, because it is not only the VM's business: an object too big
+// to fit is a thing the FRONT END should refuse, at the declaration, with a
+// line number -- and it cannot refuse what it cannot see.  Two constants that
+// had to agree would be one more thing to drift.
+const vmword MachineMemory = 4L * 1024 * 1024;
+
 enum OpCode {
     // --- operand stack ---
     OP_PushConst,       // push imm

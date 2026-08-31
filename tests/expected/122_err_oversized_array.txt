@@ -1,0 +1,56 @@
+Function print_int returns void
+  param:
+    Var  : int
+Class Big
+  Field public a : array[700000000] of int
+Function overflows returns int
+  Block
+    Var a : array[700000000] of int
+    Return
+      Index
+        a
+        0
+Function tooBig returns int
+  Block
+    Var b : array[300000000] of int
+    Return
+      Index
+        b
+        0
+Class Cell
+  Field public x : double
+  Field public y : double
+Function objects returns int
+  Block
+    Var c : array[50000000] of class Cell
+    Return
+      0
+Function main returns int
+  Block
+    Var big : class Big
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Binary +
+            Binary +
+              Binary +
+                Call
+                  overflows
+                Call
+                  tooBig
+              Call
+                objects
+            Index
+              Member .a
+                big
+              0
+    Return
+      0
+
+122_err_oversized_array.cpp:25:10: error: an array of 700000000 x 4 bytes does not fit in this machine's 4MB of memory
+class Big  size=1 align=1
+
+class Cell  size=16 align=8
+    +0  x (8 bytes)
+    +8  y (8 bytes)

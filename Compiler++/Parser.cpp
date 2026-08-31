@@ -321,6 +321,11 @@ VarDecl *Parser::parseVarDeclTail(Type *type, const std::string &name,
 
 Type *Parser::parseArraySuffixes(Type *element) {
     std::vector<long> dims;
+    // Where the first '[' was.  A type has a position for the same reason an
+    // expression does -- something later has to be able to point at it, and
+    // Layout does when the array turns out not to fit in the machine.
+    const int line = cur.line;
+    const int col = cur.col;
     while (cur.kind == TOK_LBRACKET) {
         advance();
         long n = 0;
@@ -336,7 +341,10 @@ Type *Parser::parseArraySuffixes(Type *element) {
     }
     // Built inside out, so the LAST bound is the innermost element count.
     for (std::size_t i = dims.size(); i > 0; --i) {
-        element = new ArrayType(element, dims[i - 1]);
+        ArrayType *at = new ArrayType(element, dims[i - 1]);
+        at->line = line;
+        at->col = col;
+        element = at;
     }
     return element;
 }

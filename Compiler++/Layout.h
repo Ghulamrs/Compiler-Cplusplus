@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "AST1.h"
+#include "Bytecode.h"
 #include "Diagnostics.h"
 
 struct FieldLayout {
@@ -72,7 +73,8 @@ public:
 
     const ClassLayout *forClass(const std::string &name) const;
 
-    // Byte size of any type; 0 and a diagnostic for something with no size.
+    // Byte size of any type; 0 and a diagnostic for something with no size,
+    // or for an object too large for the machine to hold.
     int sizeOf(cc::Type *t) const;
     int alignOf(cc::Type *t) const;
 
@@ -85,6 +87,10 @@ public:
 
 private:
     Diagnostics &diag;
+    // sizeOf is const and is called for every type in the program, so an
+    // oversized array would otherwise be reported once per mention.  One
+    // mistake costs one line.
+    mutable bool reportedOversize;
     std::map<std::string, ClassLayout> layouts;
 
     // Needed during the recursion: a class-typed FIELD has to be laid out

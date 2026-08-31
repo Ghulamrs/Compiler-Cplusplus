@@ -12,7 +12,7 @@
 #include <sstream>
 
 namespace {
-const vmword MemorySize   = 4L * 1024 * 1024;
+const vmword MemorySize   = MachineMemory;   // Bytecode.h owns the number
 const vmword StackSize    = 1L * 1024 * 1024;
 const vmword MaxSteps     = 50L * 1000 * 1000;   // a runaway program stops itself
 const int  HeaderSize   = 16;                  // [size][next] before each block
