@@ -60,7 +60,19 @@ bool Parser::skipReservedConstruct() {
             advance();
             if (cur.kind == TOK_IDENTIFIER && cur.text == "std") {
                 advance();
-                if (cur.kind == TOK_SEMI) { advance(); return true; }
+                if (cur.kind == TOK_SEMI) {
+                    advance();
+                    // Stepped over cleanly, so the caller must NOT resynchronise.
+                    // Without this the directive returned a null declaration that
+                    // read as a failed parse, and parseTranslationUnit's
+                    // `if (!d) synchronize()` then skipped the token after it: a
+                    // `template` on the next line was swallowed, and what was left
+                    // -- `<class T>` -- was parsed as a class, so the one thing the
+                    // reader needed to be told, that templates are excluded, was the
+                    // one thing four cascading errors never said.
+                    suppressSync = true;
+                    return true;
+                }
             }
         }
         restore(probe);

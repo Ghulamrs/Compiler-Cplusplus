@@ -1,0 +1,34 @@
+127_err_excluded_after_using.cpp:25:1: error: templates are not supported in this version
+127_err_excluded_after_using.cpp:27:1: error: 'enum' is not supported in this version
+127_err_excluded_after_using.cpp:29:1: error: 'typedef' is not supported in this version
+127_err_excluded_after_using.cpp:31:1: error: 'union' is not supported in this version
+Function main returns int
+  Block
+    ExprStmt
+      Binary <<
+        Binary <<
+          cout
+          "unreachable"
+        endl
+    Return
+      0
+
+class __endl_t  size=4 align=4
+    +0  _ (4 bytes)
+    construct: field _ -> __endl_t() body
+    destroy:   ~__endl_t() body -> field _
+
+class errstream  size=4 align=4
+    +0  _ (4 bytes)
+    construct: field _ -> errstream() body
+    destroy:   ~errstream() body -> field _
+
+class istream  size=4 align=4
+    +0  _ (4 bytes)
+    construct: field _ -> istream() body
+    destroy:   ~istream() body -> field _
+
+class ostream  size=4 align=4
+    +0  _ (4 bytes)
+    construct: field _ -> ostream() body
+    destroy:   ~ostream() body -> field _
