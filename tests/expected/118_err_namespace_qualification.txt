@@ -1,9 +1,7 @@
-118_err_namespace_qualification.cpp:27:5: error: namespaces are not supported in this version; write 'cout', not 'std::cout'
-118_err_namespace_qualification.cpp:27:29: error: namespaces are not supported in this version; write 'endl', not 'std::endl'
-118_err_namespace_qualification.cpp:28:13: error: namespaces are not supported in this version; write 'abs', not 'std::abs'
-Function abs returns int
-  param:
-    Var n : int
+118_err_namespace_qualification.cpp:30:13: error: namespaces are not supported in this version; write 'bar', not 'foo::bar'
+118_err_namespace_qualification.cpp:31:13: error: namespaces are not supported in this version; write 'thing', not 'other::thing'
+118_err_namespace_qualification.cpp:30:18: error: undeclared identifier 'bar'
+118_err_namespace_qualification.cpp:31:20: error: undeclared identifier 'thing'
 Class A
   Method public A::f returns int
     param:
@@ -33,15 +31,11 @@ Function main returns int
       Binary <<
         Binary <<
           cout
-          "hello"
+          bar
         endl
     Var v : int
       init:
-        Call
-          abs
-          arg 0:
-            Unary -
-              3
+        thing
     Return
       0
 

@@ -1,0 +1,5 @@
+qualified
+plain
+mixed 1 2
+4
+7

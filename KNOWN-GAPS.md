@@ -29,7 +29,7 @@ grep -h 'not supported in this version' Compiler++/*.cpp
 |---|---|
 | templates | `template` `typename` `export` |
 | exceptions | `throw` `try` `catch` |
-| namespaces | `namespace` `using`, and any `a::b` |
+| namespaces | `namespace`, `using`, and any `a::b` — **except `std::`, which is accepted and dropped, and `using namespace std;`, which is stepped over in silence**: this language's `<iostream>` already puts `cout`, `cin` and `endl` at global scope, so both ask for what is already true |
 | named casts | `static_cast` `const_cast` `dynamic_cast` `reinterpret_cast` — *use `(T)value`* |
 | storage classes | `volatile` `register` `extern` `auto` |
 | each on its own | `static` `mutable` `explicit` `inline` `goto` `sizeof` `enum` `union` `typedef` `wchar_t` `asm` |

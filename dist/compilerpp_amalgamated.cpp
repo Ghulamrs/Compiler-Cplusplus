@@ -4094,6 +4094,26 @@ bool Parser::match(TokenKind k) {
 // not have should cost the reader one line, not twenty.
 bool Parser::skipReservedConstruct() {
     if (cur.kind != TOK_RESERVED) return false;
+
+    // `using namespace std;` is stepped over WITHOUT a message, for the same
+    // reason `std::` is accepted in an expression: this language's <iostream>
+    // already puts cout, cin and endl at global scope, so the directive asks
+    // for what is true and the program means the same with it or without it.
+    // Every other `using` is still refused -- this is the one whose only
+    // effect is the effect the language already has.
+    if (cur.text == "using") {
+        const State probe = save();
+        advance();
+        if (cur.kind == TOK_RESERVED && cur.text == "namespace") {
+            advance();
+            if (cur.kind == TOK_IDENTIFIER && cur.text == "std") {
+                advance();
+                if (cur.kind == TOK_SEMI) { advance(); return true; }
+            }
+        }
+        restore(probe);
+    }
+
     const char *help = reservedWordHelp(cur.text);
     errorAtCurrent(help ? help : "this keyword is not supported in this version");
     skipConstruct();
@@ -5726,12 +5746,20 @@ QualifiedName *Parser::parseQualifiedName() {
 
 // Numbers, identifiers and parentheses are C's; these are not.
 cc::Expr *Parser::parsePrimary() {
-    // `std::cout` -- a namespace qualification, which this version does not
-    // have.  Without this it was an identifier followed by a stray '::', and
-    // three cascading errors that never said the word "namespace" -- in a
-    // language whose own <iostream> is the reason anyone types it.  The
-    // qualifier is dropped and the name kept, so one mistake costs one line
-    // and the rest of the expression still parses.
+    // A namespace qualification, which this version does not have -- with one
+    // exception it would be perverse not to make.
+    //
+    // `std::` is accepted and dropped.  This language's own <iostream> puts
+    // cout, cin and endl at global scope, so `std::cout` and `cout` name the
+    // same thing and the qualifier is the only difference between a program
+    // someone pasted in and one that compiles.  Refusing it bought nothing:
+    // the name resolves either way, and the error was a spelling complaint
+    // about the most common spelling there is.
+    //
+    // Every other qualifier is still refused, and refused rather than dropped,
+    // because `foo::bar` is not a program this compiler can be trusted to have
+    // understood -- there is no foo, and quietly reading it as `bar` would be
+    // answering a question nobody asked.
     while (cur.kind == TOK_IDENTIFIER && !namesAClass(cur.text)) {
         const State probe = save();
         const int line = cur.line, col = cur.col;
@@ -5740,9 +5768,11 @@ cc::Expr *Parser::parsePrimary() {
         if (cur.kind != TOK_COLONCOLON) { restore(probe); break; }
         advance();                              // '::'
         if (cur.kind != TOK_IDENTIFIER) { restore(probe); break; }
-        diag.error(line, col,
-                   "namespaces are not supported in this version; write '"
-                   + cur.text + "', not '" + qualifier + "::" + cur.text + "'");
+        if (qualifier != "std") {
+            diag.error(line, col,
+                       "namespaces are not supported in this version; write '"
+                       + cur.text + "', not '" + qualifier + "::" + cur.text + "'");
+        }
         // Loop, so a::b::c is named once per qualifier rather than cascading.
     }
 

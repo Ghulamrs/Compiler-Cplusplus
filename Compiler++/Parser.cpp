@@ -46,6 +46,26 @@ bool Parser::match(TokenKind k) {
 // not have should cost the reader one line, not twenty.
 bool Parser::skipReservedConstruct() {
     if (cur.kind != TOK_RESERVED) return false;
+
+    // `using namespace std;` is stepped over WITHOUT a message, for the same
+    // reason `std::` is accepted in an expression: this language's <iostream>
+    // already puts cout, cin and endl at global scope, so the directive asks
+    // for what is true and the program means the same with it or without it.
+    // Every other `using` is still refused -- this is the one whose only
+    // effect is the effect the language already has.
+    if (cur.text == "using") {
+        const State probe = save();
+        advance();
+        if (cur.kind == TOK_RESERVED && cur.text == "namespace") {
+            advance();
+            if (cur.kind == TOK_IDENTIFIER && cur.text == "std") {
+                advance();
+                if (cur.kind == TOK_SEMI) { advance(); return true; }
+            }
+        }
+        restore(probe);
+    }
+
     const char *help = reservedWordHelp(cur.text);
     errorAtCurrent(help ? help : "this keyword is not supported in this version");
     skipConstruct();
