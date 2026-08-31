@@ -1630,6 +1630,8 @@ private:
     cxx::MethodDecl *findCallOperator(cc::Type *ot, cc::CallExpr *call);
     cxx::MethodDecl *findIndexOperator(cxx::ClassDecl *cd, cc::Expr *index,
                                        cc::Type *it, bool objectConst, cc::ASTNode *at);
+    cc::Function *findUnaryMinusOperator(cc::Expr *operand, cc::Type *t,
+                                         cc::ASTNode *at);
     cxx::MethodDecl *findMemberOperator(cc::Type *lt, cc::BinaryOp op,
                                         cc::Expr *rhs, cc::Type *rt, cc::ASTNode *at);
     cc::Function *findFreeOperator(cc::Expr *lhs, cc::Type *lt,
@@ -6573,6 +6575,53 @@ cc::Function *SemanticAnalyzer::findOperator(cc::Expr *lhs, cc::Type *lt,
     return findFreeOperator(lhs, lt, rhs, rt, std::string("operator") + cc::binaryOpText(op));
 }
 
+// The unary minus of an object.  It is the one unary operator this compiler
+// overloads, and it is the one worth overloading: a vector, a matrix or a
+// complex number all have a negation, and none of them have a `!`.
+//
+// A MEMBER takes nothing at all -- `V operator-()` -- which is what makes it
+// unary; the one-parameter `operator-` beside it is the binary subtraction,
+// and the two are told apart here by nothing more than that count.  A
+// NON-MEMBER takes the operand itself, which is how a class whose definition
+// cannot be changed still gets a negation.
+cc::Function *SemanticAnalyzer::findUnaryMinusOperator(cc::Expr *operand,
+                                                       cc::Type *t,
+                                                       cc::ASTNode *at) {
+    if (!isClassType(t)) return 0;
+
+    cxx::ClassType *ct = dynamic_cast<cxx::ClassType*>(stripReference(t));
+    cxx::ClassDecl *cd = ct ? findClass(ct->className) : 0;
+    if (cd) {
+        const std::vector<cc::Function*> cands = findMethods(cd, "operator-");
+        for (std::size_t i = 0; i < cands.size(); ++i) {
+            cxx::MethodDecl *m = dynamic_cast<cxx::MethodDecl*>(cands[i]);
+            if (!m || !m->params.empty()) continue;
+            cxx::ClassDecl *owner = findClass(m->ownerClass);
+            if (!memberIsAccessible(m, owner)) {
+                error(at, std::string("'operator-' is ") + cxx::accessText(memberAccess(m))
+                          + " in class '" + (owner ? owner->name : ct->className) + "'");
+            }
+            checkConstUse(m, stripReference(t)->isConst, at);
+            return m;
+        }
+    }
+
+    std::map<std::string, std::vector<cc::Function*> >::const_iterator it =
+        overloads.find("operator-");
+    if (it == overloads.end()) return 0;
+    const std::vector<cc::Function*> &free = it->second;
+    cc::Function *exact = 0;
+    cc::Function *viable = 0;
+    for (std::size_t i = 0; i < free.size(); ++i) {
+        cc::Function *f = free[i];
+        if (f->params.size() != 1) continue;          // two is the binary one
+        cc::Type *want = f->params[0]->type;
+        if (exactForOverload(t, want))          { if (!exact)  exact  = f; continue; }
+        if (convertible(operand, t, want))      { if (!viable) viable = f; }
+    }
+    return exact ? exact : viable;
+}
+
 // The file-scope operator whose two parameters accept these two operands.
 cc::Function *SemanticAnalyzer::findFreeOperator(cc::Expr *lhs, cc::Type *lt,
                                                  cc::Expr *rhs, cc::Type *rt,
@@ -8311,6 +8360,17 @@ cc::Type *SemanticAnalyzer::analyzeExprImpl(cc::Expr *e, bool &isLValue) {
 
         switch (ue->op) {
         case cc::UN_Neg: {
+            // An object has no sign of its own.  A class that wants one says
+            // so, and then this expression is a call to what it said.
+            if (isClassType(t)) {
+                cc::Function *op = findUnaryMinusOperator(ue->operand, t, ue);
+                if (!op) {
+                    error(ue, "no 'operator-' for " + describe(t));
+                    return 0;
+                }
+                ue->resolvedOperator = op;
+                return op->retType;
+            }
             cc::BuiltinKind k;
             if (!arithmeticKind(t, k)) {
                 error(ue, "unary '-' needs an arithmetic type, got " + describe(t));
@@ -10157,6 +10217,11 @@ IRReg Lowering::lowerAddress(Expr *e) {
             return lowerValue(e);
         }
     }
+    if (UnaryExpr *uo = dynamic_cast<UnaryExpr*>(e)) {
+        if (uo->resolvedOperator && isObjectType(uo->resolvedOperator->retType)) {
+            return lowerValue(e);
+        }
+    }
 
     if (BinaryExpr *b = dynamic_cast<BinaryExpr*>(e)) {
         // An assignment is an lvalue; its address is the left side's.
@@ -10722,6 +10787,15 @@ bool Lowering::lowerLayerValue(cc::Expr *e, IRReg &out) {
         }
     }
 
+    // Unary minus on an object is the same call with the right operand
+    // missing -- the object is `this`, and there is nothing after it.
+    if (cc::UnaryExpr *ue = dynamic_cast<cc::UnaryExpr*>(e)) {
+        if (ue->resolvedOperator) {
+            out = emitOperatorCall(ue->resolvedOperator, ue->operand, 0, ue->line);
+            return true;
+        }
+    }
+
     if (dynamic_cast<ThisExpr*>(e)) {
         out = loadThis(e->line);
         return true;
@@ -10852,6 +10926,7 @@ cc::Type *Lowering::typeOf(cc::Expr *e) {
         }
     }
     if (cc::UnaryExpr *ue = dynamic_cast<cc::UnaryExpr*>(e)) {
+        if (ue->resolvedOperator) return ue->resolvedOperator->retType;
         if (ue->op == cc::UN_Not) return boolType();
     }
 
@@ -11101,6 +11176,10 @@ bool Lowering::yieldsObject(cc::Expr *e) const {
         return b->resolvedOperator
             && dynamic_cast<ClassType*>(b->resolvedOperator->retType) != 0;
     }
+    if (cc::UnaryExpr *u = dynamic_cast<cc::UnaryExpr*>(e)) {
+        return u->resolvedOperator
+            && dynamic_cast<ClassType*>(u->resolvedOperator->retType) != 0;
+    }
     return false;
 }
 
@@ -11271,8 +11350,10 @@ IRReg Lowering::emitOperatorCall(cc::Function *op, cc::Expr *lhsExpr,
     if (asMember) {
         args.push_back(lowerObjectValue(lhsExpr));          // `this`
         if (returnsObject(op)) args.push_back(allocReturnSlot(op, line, dest));
-        args.push_back(lowerOperandFor(op->params.empty() ? 0 : op->params[0]->type,
-                                       rhsExpr, line));
+        // A unary operator has no right operand and no parameter for one.
+        if (rhsExpr)
+            args.push_back(lowerOperandFor(op->params.empty() ? 0 : op->params[0]->type,
+                                           rhsExpr, line));
         return fn->emitCall(mangleOverload(asMember->ownerClass, op->name, op->params, asMember->isConstMethod),
                             args, true, line);
     }
@@ -11280,8 +11361,9 @@ IRReg Lowering::emitOperatorCall(cc::Function *op, cc::Expr *lhsExpr,
     if (returnsObject(op)) args.push_back(allocReturnSlot(op, line, dest));
     args.push_back(lowerOperandFor(op->params.size() > 0 ? op->params[0]->type : 0,
                                    lhsExpr, line));
-    args.push_back(lowerOperandFor(op->params.size() > 1 ? op->params[1]->type : 0,
-                                   rhsExpr, line));
+    if (rhsExpr)
+        args.push_back(lowerOperandFor(op->params.size() > 1 ? op->params[1]->type : 0,
+                                       rhsExpr, line));
     return fn->emitCall(symbolFor(op, ""), args, true, line);
 }
 

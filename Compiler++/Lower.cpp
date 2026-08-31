@@ -773,6 +773,11 @@ IRReg Lowering::lowerAddress(Expr *e) {
             return lowerValue(e);
         }
     }
+    if (UnaryExpr *uo = dynamic_cast<UnaryExpr*>(e)) {
+        if (uo->resolvedOperator && isObjectType(uo->resolvedOperator->retType)) {
+            return lowerValue(e);
+        }
+    }
 
     if (BinaryExpr *b = dynamic_cast<BinaryExpr*>(e)) {
         // An assignment is an lvalue; its address is the left side's.

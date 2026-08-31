@@ -194,6 +194,15 @@ bool Lowering::lowerLayerValue(cc::Expr *e, IRReg &out) {
         }
     }
 
+    // Unary minus on an object is the same call with the right operand
+    // missing -- the object is `this`, and there is nothing after it.
+    if (cc::UnaryExpr *ue = dynamic_cast<cc::UnaryExpr*>(e)) {
+        if (ue->resolvedOperator) {
+            out = emitOperatorCall(ue->resolvedOperator, ue->operand, 0, ue->line);
+            return true;
+        }
+    }
+
     if (dynamic_cast<ThisExpr*>(e)) {
         out = loadThis(e->line);
         return true;
@@ -324,6 +333,7 @@ cc::Type *Lowering::typeOf(cc::Expr *e) {
         }
     }
     if (cc::UnaryExpr *ue = dynamic_cast<cc::UnaryExpr*>(e)) {
+        if (ue->resolvedOperator) return ue->resolvedOperator->retType;
         if (ue->op == cc::UN_Not) return boolType();
     }
 
@@ -573,6 +583,10 @@ bool Lowering::yieldsObject(cc::Expr *e) const {
         return b->resolvedOperator
             && dynamic_cast<ClassType*>(b->resolvedOperator->retType) != 0;
     }
+    if (cc::UnaryExpr *u = dynamic_cast<cc::UnaryExpr*>(e)) {
+        return u->resolvedOperator
+            && dynamic_cast<ClassType*>(u->resolvedOperator->retType) != 0;
+    }
     return false;
 }
 
@@ -743,8 +757,10 @@ IRReg Lowering::emitOperatorCall(cc::Function *op, cc::Expr *lhsExpr,
     if (asMember) {
         args.push_back(lowerObjectValue(lhsExpr));          // `this`
         if (returnsObject(op)) args.push_back(allocReturnSlot(op, line, dest));
-        args.push_back(lowerOperandFor(op->params.empty() ? 0 : op->params[0]->type,
-                                       rhsExpr, line));
+        // A unary operator has no right operand and no parameter for one.
+        if (rhsExpr)
+            args.push_back(lowerOperandFor(op->params.empty() ? 0 : op->params[0]->type,
+                                           rhsExpr, line));
         return fn->emitCall(mangleOverload(asMember->ownerClass, op->name, op->params, asMember->isConstMethod),
                             args, true, line);
     }
@@ -752,8 +768,9 @@ IRReg Lowering::emitOperatorCall(cc::Function *op, cc::Expr *lhsExpr,
     if (returnsObject(op)) args.push_back(allocReturnSlot(op, line, dest));
     args.push_back(lowerOperandFor(op->params.size() > 0 ? op->params[0]->type : 0,
                                    lhsExpr, line));
-    args.push_back(lowerOperandFor(op->params.size() > 1 ? op->params[1]->type : 0,
-                                   rhsExpr, line));
+    if (rhsExpr)
+        args.push_back(lowerOperandFor(op->params.size() > 1 ? op->params[1]->type : 0,
+                                       rhsExpr, line));
     return fn->emitCall(symbolFor(op, ""), args, true, line);
 }
 

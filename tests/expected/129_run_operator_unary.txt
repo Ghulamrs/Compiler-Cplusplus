@@ -1,0 +1,585 @@
+Function print_int returns void
+  param:
+    Var  : int
+Function print_line returns void
+Class V
+  Field public a : int
+  Field public b : int
+  Constructor public V::V
+    param:
+      Var x : int
+    param:
+      Var y : int
+    init member a
+      x
+    init member b
+      y
+    Block
+  Constructor public V::V
+    init member a
+      0
+    init member b
+      0
+    Block
+  Method public V::operator- returns class V
+    Block
+      Return
+        Temporary class V
+          Unary -
+            a
+          Unary -
+            b
+  Method public V::operator- returns class V
+    param:
+      Var o : reference to class V
+    Block
+      Return
+        Temporary class V
+          Binary -
+            a
+            Member .a
+              o
+          Binary -
+            b
+            Member .b
+              o
+  Method public V::operator+ returns class V
+    param:
+      Var o : reference to class V
+    Block
+      Return
+        Temporary class V
+          Binary +
+            a
+            Member .a
+              o
+          Binary +
+            b
+            Member .b
+              o
+Function operator* returns class V
+  param:
+    Var k : int
+  param:
+    Var v : reference to class V
+  Block
+    Return
+      Temporary class V
+        Binary *
+          k
+          Member .a
+            v
+        Binary *
+          k
+          Member .b
+            v
+Class W
+  Field public v : int
+  Constructor public W::W
+    param:
+      Var x : int
+    init member v
+      x
+    Block
+Function operator- returns class W
+  param:
+    Var w : reference to class W
+  Block
+    Return
+      Temporary class W
+        Unary -
+          Member .v
+            w
+Function main returns int
+  Block
+    Var p : class V
+      construct with 2 argument(s):
+        3
+        4
+    Var q : class V
+      init:
+        Unary -
+          p
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Member .a
+            q
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Member .b
+            q
+    Var s : class V
+      init:
+        Binary -
+          p
+          q
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Member .a
+            s
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Member .b
+            s
+    Var t : class V
+      init:
+        Binary +
+          p
+          Unary -
+            q
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Member .a
+            t
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Member .b
+            t
+    Var u : class V
+      init:
+        Binary *
+          2
+          Unary -
+            p
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Member .a
+            u
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Member .b
+            u
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Member .a
+            Unary -
+              p
+    Var d : class V
+      init:
+        Unary -
+          Unary -
+            p
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Member .a
+            d
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Member .b
+            d
+    Var w : class W
+      construct with 1 argument(s):
+        5
+    Var n : class W
+      init:
+        Unary -
+          w
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Member .v
+            n
+    Var i : int
+      init:
+        0
+    Var acc : class V
+    While
+      Binary <
+        i
+        3
+      Block
+        ExprStmt
+          Binary =
+            acc
+            Binary +
+              acc
+              Unary -
+                Temporary class V
+                  i
+                  Binary *
+                    i
+                    2
+        ExprStmt
+          Binary =
+            i
+            Binary +
+              i
+              1
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Member .a
+            acc
+    ExprStmt
+      Call
+        print_int
+        arg 0:
+          Member .b
+            acc
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+class V  size=8 align=4
+    +0  a (4 bytes)
+    +4  b (4 bytes)
+    construct: field a -> field b -> V() body
+    destroy:   ~V() body -> field b -> field a
+
+class W  size=4 align=4
+    +0  v (4 bytes)
+    construct: field v -> W() body
+    destroy:   ~W() body -> field v
+
+function V__ctor$ii   ; V::V
+  #0 this  8 bytes  (param)
+  #1 x  4 bytes  (param)
+  #2 y  4 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = local #1
+    %3 = load [%2] :4
+    %4 = local #0
+    %5 = load [%4] :8
+    %6 = field %5 +0
+            store [%6] <- %3 :4
+    %7 = local #2
+    %8 = load [%7] :4
+    %9 = local #0
+    %10 = load [%9] :8
+    %11 = field %10 +4
+            store [%11] <- %8 :4
+            ret
+
+function V__ctor$v   ; V::V
+  #0 this  8 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = const 0
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+            store [%5] <- %2 :4
+    %6 = const 0
+    %7 = local #0
+    %8 = load [%7] :8
+    %9 = field %8 +4
+            store [%9] <- %6 :4
+            ret
+
+function V__operator-$v   ; V::operator-
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 $temp  8 bytes
+    %0 = local #1
+    %1 = load [%0] :8
+    %2 = local #2
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+    %6 = load [%5] :4
+    %7 = neg %6
+    %8 = local #0
+    %9 = load [%8] :8
+    %10 = field %9 +4
+    %11 = load [%10] :4
+    %12 = neg %11
+            call V__ctor$ii(%2, %7, %12)
+            memcpy [%1] <- [%2] :8
+            ret %1
+
+function V__operator-$RK1V   ; V::operator-
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 o  8 bytes  (param)
+  #3 $temp  8 bytes
+    %0 = local #1
+    %1 = load [%0] :8
+    %2 = local #3
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+    %6 = load [%5] :4
+    %7 = local #2
+    %8 = load [%7] :8
+    %9 = field %8 +0
+    %10 = load [%9] :4
+    %11 = sub %6, %10
+    %12 = local #0
+    %13 = load [%12] :8
+    %14 = field %13 +4
+    %15 = load [%14] :4
+    %16 = local #2
+    %17 = load [%16] :8
+    %18 = field %17 +4
+    %19 = load [%18] :4
+    %20 = sub %15, %19
+            call V__ctor$ii(%2, %11, %20)
+            memcpy [%1] <- [%2] :8
+            ret %1
+
+function V__operator+$RK1V   ; V::operator+
+  #0 this  8 bytes  (param)
+  #1 $ret  8 bytes  (param)
+  #2 o  8 bytes  (param)
+  #3 $temp  8 bytes
+    %0 = local #1
+    %1 = load [%0] :8
+    %2 = local #3
+    %3 = local #0
+    %4 = load [%3] :8
+    %5 = field %4 +0
+    %6 = load [%5] :4
+    %7 = local #2
+    %8 = load [%7] :8
+    %9 = field %8 +0
+    %10 = load [%9] :4
+    %11 = add %6, %10
+    %12 = local #0
+    %13 = load [%12] :8
+    %14 = field %13 +4
+    %15 = load [%14] :4
+    %16 = local #2
+    %17 = load [%16] :8
+    %18 = field %17 +4
+    %19 = load [%18] :4
+    %20 = add %15, %19
+            call V__ctor$ii(%2, %11, %20)
+            memcpy [%1] <- [%2] :8
+            ret %1
+
+function operator*$iRK1V   ; operator*
+  #0 $ret  8 bytes  (param)
+  #1 k  4 bytes  (param)
+  #2 v  8 bytes  (param)
+  #3 $temp  8 bytes
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = local #3
+    %3 = local #1
+    %4 = load [%3] :4
+    %5 = local #2
+    %6 = load [%5] :8
+    %7 = field %6 +0
+    %8 = load [%7] :4
+    %9 = mul %4, %8
+    %10 = local #1
+    %11 = load [%10] :4
+    %12 = local #2
+    %13 = load [%12] :8
+    %14 = field %13 +4
+    %15 = load [%14] :4
+    %16 = mul %11, %15
+            call V__ctor$ii(%2, %9, %16)
+            memcpy [%1] <- [%2] :8
+            ret %1
+
+function W__ctor$i   ; W::W
+  #0 this  8 bytes  (param)
+  #1 x  4 bytes  (param)
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = local #1
+    %3 = load [%2] :4
+    %4 = local #0
+    %5 = load [%4] :8
+    %6 = field %5 +0
+            store [%6] <- %3 :4
+            ret
+
+function operator-$RK1W   ; operator-
+  #0 $ret  8 bytes  (param)
+  #1 w  8 bytes  (param)
+  #2 $temp  4 bytes
+    %0 = local #0
+    %1 = load [%0] :8
+    %2 = local #2
+    %3 = local #1
+    %4 = load [%3] :8
+    %5 = field %4 +0
+    %6 = load [%5] :4
+    %7 = neg %6
+            call W__ctor$i(%2, %7)
+            memcpy [%1] <- [%2] :4
+            ret %1
+
+function main
+  #0 p  8 bytes
+  #1 q  8 bytes
+  #2 s  8 bytes
+  #3 t  8 bytes
+  #4 $result  8 bytes
+  #5 u  8 bytes
+  #6 $result  8 bytes
+  #7 $result  8 bytes
+  #8 d  8 bytes
+  #9 $result  8 bytes
+  #10 w  4 bytes
+  #11 n  4 bytes
+  #12 i  4 bytes
+  #13 acc  8 bytes
+  #14 $result  8 bytes
+  #15 $temp  8 bytes
+  #16 $result  8 bytes
+            call __global_init()
+    %0 = local #0
+    %1 = const 3
+    %2 = const 4
+            call V__ctor$ii(%0, %1, %2)
+    %3 = local #1
+    %4 = local #0
+    %5 = call V__operator-$v(%4, %3)
+    %6 = local #1
+    %7 = field %6 +0
+    %8 = load [%7] :4
+            call print_int(%8)
+    %9 = local #1
+    %10 = field %9 +4
+    %11 = load [%10] :4
+            call print_int(%11)
+    %12 = local #2
+    %13 = local #0
+    %14 = local #1
+    %15 = call V__operator-$RK1V(%13, %12, %14)
+    %16 = local #2
+    %17 = field %16 +0
+    %18 = load [%17] :4
+            call print_int(%18)
+    %19 = local #2
+    %20 = field %19 +4
+    %21 = load [%20] :4
+            call print_int(%21)
+    %22 = local #3
+    %23 = local #0
+    %24 = local #1
+    %25 = local #4
+    %26 = call V__operator-$v(%24, %25)
+    %27 = call V__operator+$RK1V(%23, %22, %26)
+    %28 = local #3
+    %29 = field %28 +0
+    %30 = load [%29] :4
+            call print_int(%30)
+    %31 = local #3
+    %32 = field %31 +4
+    %33 = load [%32] :4
+            call print_int(%33)
+    %34 = local #5
+    %35 = const 2
+    %36 = local #0
+    %37 = local #6
+    %38 = call V__operator-$v(%36, %37)
+    %39 = call operator*$iRK1V(%34, %35, %38)
+    %40 = local #5
+    %41 = field %40 +0
+    %42 = load [%41] :4
+            call print_int(%42)
+    %43 = local #5
+    %44 = field %43 +4
+    %45 = load [%44] :4
+            call print_int(%45)
+    %46 = local #0
+    %47 = local #7
+    %48 = call V__operator-$v(%46, %47)
+    %49 = field %48 +0
+    %50 = load [%49] :4
+            call print_int(%50)
+    %51 = local #8
+    %52 = local #0
+    %53 = local #9
+    %54 = call V__operator-$v(%52, %53)
+    %55 = call V__operator-$v(%54, %51)
+    %56 = local #8
+    %57 = field %56 +0
+    %58 = load [%57] :4
+            call print_int(%58)
+    %59 = local #8
+    %60 = field %59 +4
+    %61 = load [%60] :4
+            call print_int(%61)
+    %62 = local #10
+    %63 = const 5
+            call W__ctor$i(%62, %63)
+    %64 = local #11
+    %65 = local #10
+    %66 = call operator-$RK1W(%64, %65)
+    %67 = local #11
+    %68 = field %67 +0
+    %69 = load [%68] :4
+            call print_int(%69)
+    %70 = const 0
+    %71 = local #12
+            store [%71] <- %70 :4
+    %72 = local #13
+            call V__ctor$v(%72)
+    L0:
+    %73 = local #12
+    %74 = load [%73] :4
+    %75 = const 3
+    %76 = cmp.lt %74, %75
+            brz %76 L1
+    %77 = local #13
+    %78 = local #14
+    %79 = local #15
+    %80 = local #12
+    %81 = load [%80] :4
+    %82 = local #12
+    %83 = load [%82] :4
+    %84 = const 2
+    %85 = mul %83, %84
+            call V__ctor$ii(%79, %81, %85)
+    %86 = local #16
+    %87 = call V__operator-$v(%79, %86)
+    %88 = call V__operator+$RK1V(%77, %78, %87)
+    %89 = local #13
+            memcpy [%89] <- [%88] :8
+    %90 = local #12
+    %91 = load [%90] :4
+    %92 = const 1
+    %93 = add %91, %92
+    %94 = local #12
+            store [%94] <- %93 :4
+            jump L0
+    L1:
+    %95 = local #13
+    %96 = field %95 +0
+    %97 = load [%96] :4
+            call print_int(%97)
+    %98 = local #13
+    %99 = field %98 +4
+    %100 = load [%99] :4
+            call print_int(%100)
+            call print_line()
+    %101 = const 0
+            ret %101
+
+function __global_init
+            ret
+
+function __global_fini
+            ret

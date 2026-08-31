@@ -134,6 +134,8 @@ private:
     cxx::MethodDecl *findCallOperator(cc::Type *ot, cc::CallExpr *call);
     cxx::MethodDecl *findIndexOperator(cxx::ClassDecl *cd, cc::Expr *index,
                                        cc::Type *it, bool objectConst, cc::ASTNode *at);
+    cc::Function *findUnaryMinusOperator(cc::Expr *operand, cc::Type *t,
+                                         cc::ASTNode *at);
     cxx::MethodDecl *findMemberOperator(cc::Type *lt, cc::BinaryOp op,
                                         cc::Expr *rhs, cc::Type *rt, cc::ASTNode *at);
     cc::Function *findFreeOperator(cc::Expr *lhs, cc::Type *lt,
