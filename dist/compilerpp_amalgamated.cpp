@@ -1284,6 +1284,8 @@ private:
     void recordScopeExitDestruction(cc::CompoundStmt *block,
                                     const std::vector<cc::VarDecl*> &declared);
     bool hasDestructor(cc::Type *t);
+    // Names a parameter in a diagnostic, by name or, having none, by position.
+    static std::string parameterText(cc::Function *fn, std::size_t i);
     bool needsDestructor(cxx::ClassDecl *cd);
     // A class that owns something destructible gets a destructor whether or
     // not one was written -- otherwise nothing runs its members' destructors.
@@ -5974,6 +5976,20 @@ std::string SemanticAnalyzer::countText(std::size_t n) {
     return ss.str();
 }
 
+// How a diagnostic names a parameter.  A named one is named, which is what
+// three messages here always assumed -- they interpolated the name straight in
+// and read "the argument to ''" when there was none.  A parameter need not
+// have one: `void print_int(int);` is a complete declaration, and it heads a
+// good part of this project's own test corpus.  So an unnamed parameter is
+// given the two things that DO identify it, its position and its function.
+std::string SemanticAnalyzer::parameterText(cc::Function *fn, std::size_t i) {
+    if (fn && i < fn->params.size() && !fn->params[i]->name.empty())
+        return "parameter '" + fn->params[i]->name + "'";
+    std::ostringstream ss;
+    ss << "parameter " << (i + 1) << " of '" << (fn ? fn->name : std::string("?")) << "'";
+    return ss.str();
+}
+
 bool SemanticAnalyzer::isVoid(cc::Type *t) {
     cc::BuiltinKind k;
     return builtinKindOf(t, k) && k == cc::BK_Void;
@@ -7625,16 +7641,16 @@ void SemanticAnalyzer::checkCallArgs(cc::CallExpr *call, cc::Function *fn) {
         // a reference parameter needs an lvalue, same rule as a variable
         cxx::ReferenceType *rt = dynamic_cast<cxx::ReferenceType*>(pt);
         if (rt && !lv) {
-            error(call->args[i], "argument to reference parameter '"
-                                 + fn->params[i]->name + "' must be an lvalue");
+            error(call->args[i], "argument to reference " + parameterText(fn, i)
+                                 + " must be an lvalue");
             continue;
         }
         if (!convertible(call->args[i], at, pt)) {
-            error(call->args[i], "argument " + describe(at) + " does not match parameter '"
-                                 + fn->params[i]->name + "' of type " + describe(pt));
+            error(call->args[i], "argument " + describe(at) + " does not match "
+                                 + parameterText(fn, i) + " of type " + describe(pt));
         } else {
             warnIfNarrowing(call->args[i], at, pt, call->args[i],
-                            "the argument to '" + fn->params[i]->name + "'");
+                            "the argument to " + parameterText(fn, i));
         }
     }
 }

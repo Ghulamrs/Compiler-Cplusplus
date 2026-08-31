@@ -1,0 +1,78 @@
+121_err_unnamed_parameter_diagnostics.cpp:38:13: warning: narrowing unsigned int to int in the argument to parameter 1 of 'narrows'
+121_err_unnamed_parameter_diagnostics.cpp:39:18: warning: narrowing unsigned int to int in the argument to parameter 'howMany'
+121_err_unnamed_parameter_diagnostics.cpp:42:14: error: argument to reference parameter 1 of 'takesRef' must be an lvalue
+121_err_unnamed_parameter_diagnostics.cpp:43:19: error: argument to reference parameter 'slot' must be an lvalue
+121_err_unnamed_parameter_diagnostics.cpp:48:15: error: argument int does not match parameter 1 of 'takesPtr' of type A*
+121_err_unnamed_parameter_diagnostics.cpp:49:20: error: argument int does not match parameter 'which' of type A*
+Function print_line returns void
+Class A
+  Field public x : int
+Function narrows returns void
+  param:
+    Var  : int
+Function narrowsNamed returns void
+  param:
+    Var howMany : int
+Function takesRef returns int
+  param:
+    Var  : reference to int
+Function takesRefNamed returns int
+  param:
+    Var slot : reference to int
+Function takesPtr returns int
+  param:
+    Var  : pointer to class A
+Function takesPtrNamed returns int
+  param:
+    Var which : pointer to class A
+Function main returns int
+  Block
+    Var u : unsigned int
+      init:
+        5
+    ExprStmt
+      Call
+        narrows
+        arg 0:
+          u
+    ExprStmt
+      Call
+        narrowsNamed
+        arg 0:
+          u
+    ExprStmt
+      Call
+        takesRef
+        arg 0:
+          3
+    ExprStmt
+      Call
+        takesRefNamed
+        arg 0:
+          4
+    Var a : class A
+    ExprStmt
+      Binary =
+        Member .x
+          a
+        1
+    ExprStmt
+      Call
+        takesPtr
+        arg 0:
+          Member .x
+            a
+    ExprStmt
+      Call
+        takesPtrNamed
+        arg 0:
+          Member .x
+            a
+    ExprStmt
+      Call
+        print_line
+    Return
+      0
+
+class A  size=4 align=4
+    +0  x (4 bytes)

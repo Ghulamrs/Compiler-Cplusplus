@@ -1,4 +1,4 @@
-40_run_pointers.cpp:15:13: warning: narrowing long to int in the argument to 'n'
+40_run_pointers.cpp:15:13: warning: narrowing long to int in the argument to parameter 'n'
 Function print_int returns void
   param:
     Var n : int

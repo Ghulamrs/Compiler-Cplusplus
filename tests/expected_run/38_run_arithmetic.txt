@@ -1,6 +1,6 @@
-38_run_arithmetic.cpp:16:41: warning: narrowing unsigned int to int in the argument to 'n'
-38_run_arithmetic.cpp:21:42: warning: narrowing int to char in the argument to 'c'
-38_run_arithmetic.cpp:23:39: warning: narrowing double to int in the argument to 'n'
+38_run_arithmetic.cpp:16:41: warning: narrowing unsigned int to int in the argument to parameter 'n'
+38_run_arithmetic.cpp:21:42: warning: narrowing int to char in the argument to parameter 'c'
+38_run_arithmetic.cpp:23:39: warning: narrowing double to int in the argument to parameter 'n'
 i/2   = 3
 i%2   = 1
 u/3   = 3

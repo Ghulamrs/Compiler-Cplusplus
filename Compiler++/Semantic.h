@@ -84,6 +84,8 @@ private:
     void recordScopeExitDestruction(cc::CompoundStmt *block,
                                     const std::vector<cc::VarDecl*> &declared);
     bool hasDestructor(cc::Type *t);
+    // Names a parameter in a diagnostic, by name or, having none, by position.
+    static std::string parameterText(cc::Function *fn, std::size_t i);
     bool needsDestructor(cxx::ClassDecl *cd);
     // A class that owns something destructible gets a destructor whether or
     // not one was written -- otherwise nothing runs its members' destructors.

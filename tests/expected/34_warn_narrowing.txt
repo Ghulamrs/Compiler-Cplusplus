@@ -2,7 +2,7 @@
 34_warn_narrowing.cpp:5:10: warning: narrowing int to char in the initialisation of 'c'
 34_warn_narrowing.cpp:6:10: warning: narrowing int to short in the initialisation of 's'
 34_warn_narrowing.cpp:7:16: warning: narrowing int to unsigned int in the initialisation of 'u'
-34_warn_narrowing.cpp:10:21: warning: narrowing int to char in the argument to 'c'
+34_warn_narrowing.cpp:10:21: warning: narrowing int to char in the argument to parameter 'c'
 Function narrow returns int
   param:
     Var c : char

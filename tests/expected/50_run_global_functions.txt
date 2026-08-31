@@ -1,4 +1,4 @@
-50_run_global_functions.cpp:19:17: warning: narrowing double to int in the argument to 'n'
+50_run_global_functions.cpp:19:17: warning: narrowing double to int in the argument to parameter 'n'
 Function print_int returns void
   param:
     Var n : int
