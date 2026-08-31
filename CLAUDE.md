@@ -22,7 +22,7 @@ tests/
   input/           stdin for a case that reads cin (optional, by name)
   images/          malformed .cxb files the VM must refuse, with their messages
   differential_shim.h  the natives a case calls, over the real <iostream>
-  run_tests.sh run_exec.sh run_roundtrip.sh run_differential.sh
+  run_tests.sh run_exec.sh run_roundtrip.sh run_differential.sh run_driver.sh
 dist/              amalgamate.py and a single-file build of the whole compiler
 _backup_*/         pre-git snapshots, gitignored, superseded by history
 ```
@@ -64,12 +64,14 @@ sh tests/run_tests.sh     /tmp/b/compilerpp     # dumps + exit status
 sh tests/run_exec.sh      /tmp/b/compilerpp     # program output
 sh tests/run_roundtrip.sh /tmp/b/compilerpp     # same output through a .cxb
 sh tests/run_differential.sh /tmp/b/compilerpp  # same answer as a real compiler
+sh tests/run_driver.sh    /tmp/b/compilerpp     # what the ARGUMENTS do
 ```
 
-All four must pass before anything is committed. Add `--accept` to a runner to
+All five must pass before anything is committed. Add `--accept` to a runner to
 re-record its golden files — and then **read the diff**, because `--accept`
-happily records a bug. `run_differential.sh` has no golden files to record: the
-host compiler is the answer, which is the point of it.
+happily records a bug. `run_differential.sh` and `run_driver.sh` have no golden
+files to record: for the first the host compiler is the answer, and for the
+second the check is written beside the argument line it makes.
 
 `-pedantic` is clean except for twelve `-Wlong-long` warnings from the VM's
 fixed 64-bit word (`Bytecode.h`). That is the one knowing departure from the
