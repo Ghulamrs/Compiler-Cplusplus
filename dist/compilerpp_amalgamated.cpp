@@ -2556,6 +2556,14 @@ public:
     const std::string &errorMessage() const { return error; }
     vmword stepCount() const { return steps; }
 
+    // Why the machine stopped, when it stopped. A program that ran out of
+    // steps is not a program that did something wrong: it did something
+    // lawful for longer than this machine was willing to watch, and a host
+    // showing it to a person will want to say so differently from the way it
+    // says a null was dereferenced. Asking the VM beats matching on the text
+    // of errorMessage(), which is prose and is allowed to be reworded.
+    bool outOfSteps() const { return stepsExhausted; }
+
     // The machine's size and patience.  Set before run(); the defaults are
     // what the command line uses and what every test case assumes.  A run that
     // cannot fit -- a call stack larger than the memory holding it -- is
@@ -2573,6 +2581,7 @@ private:
     };
 
     MachineLimits limits;
+    bool stepsExhausted;
     std::vector<unsigned char> mem;
     std::vector<Value> stack;       // the operand stack
     std::string error;
@@ -12415,7 +12424,8 @@ vmword negate(vmword v) {
 }
 
 VM::VM()
-    : steps(0), stackBase(0), stackTop(0), heapBase(0), heapTop(0), freeList(0),
+    : stepsExhausted(false), steps(0), stackBase(0), stackTop(0), heapBase(0), heapTop(0),
+      freeList(0),
       img(0), inputGood(true) {}
 
 void VM::trap(const std::string &msg) {
@@ -12869,6 +12879,7 @@ vmword VM::run(const Image &image, bool &ok) {
     ok = false;
     error.clear();
     steps = 0;
+    stepsExhausted = false;
     // And the machine itself, which a trap leaves standing.  The driver builds
     // a fresh VM per run and exits, so only an embedder reuses one -- and it
     // inherited the previous run's frames, whose `func` is an index into the
@@ -12969,7 +12980,11 @@ vmword VM::run(const Image &image, bool &ok) {
     bool finiDone = false;
 
     while (!frames.empty() && !failed()) {
-        if (++steps > limits.maxSteps) { trap("execution did not terminate"); break; }
+        if (++steps > limits.maxSteps) {
+            stepsExhausted = true;
+            trap("execution did not terminate");
+            break;
+        }
 
         Frame &fr = frames.back();
         const FuncImage &fi = image.functions[fr.func];

@@ -24,7 +24,8 @@ vmword negate(vmword v) {
 }
 
 VM::VM()
-    : steps(0), stackBase(0), stackTop(0), heapBase(0), heapTop(0), freeList(0),
+    : stepsExhausted(false), steps(0), stackBase(0), stackTop(0), heapBase(0), heapTop(0),
+      freeList(0),
       img(0), inputGood(true) {}
 
 void VM::trap(const std::string &msg) {
@@ -478,6 +479,7 @@ vmword VM::run(const Image &image, bool &ok) {
     ok = false;
     error.clear();
     steps = 0;
+    stepsExhausted = false;
     // And the machine itself, which a trap leaves standing.  The driver builds
     // a fresh VM per run and exits, so only an embedder reuses one -- and it
     // inherited the previous run's frames, whose `func` is an index into the
@@ -578,7 +580,11 @@ vmword VM::run(const Image &image, bool &ok) {
     bool finiDone = false;
 
     while (!frames.empty() && !failed()) {
-        if (++steps > limits.maxSteps) { trap("execution did not terminate"); break; }
+        if (++steps > limits.maxSteps) {
+            stepsExhausted = true;
+            trap("execution did not terminate");
+            break;
+        }
 
         Frame &fr = frames.back();
         const FuncImage &fi = image.functions[fr.func];

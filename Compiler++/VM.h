@@ -29,6 +29,14 @@ public:
     const std::string &errorMessage() const { return error; }
     vmword stepCount() const { return steps; }
 
+    // Why the machine stopped, when it stopped. A program that ran out of
+    // steps is not a program that did something wrong: it did something
+    // lawful for longer than this machine was willing to watch, and a host
+    // showing it to a person will want to say so differently from the way it
+    // says a null was dereferenced. Asking the VM beats matching on the text
+    // of errorMessage(), which is prose and is allowed to be reworded.
+    bool outOfSteps() const { return stepsExhausted; }
+
     // The machine's size and patience.  Set before run(); the defaults are
     // what the command line uses and what every test case assumes.  A run that
     // cannot fit -- a call stack larger than the memory holding it -- is
@@ -46,6 +54,7 @@ private:
     };
 
     MachineLimits limits;
+    bool stepsExhausted;
     std::vector<unsigned char> mem;
     std::vector<Value> stack;       // the operand stack
     std::string error;

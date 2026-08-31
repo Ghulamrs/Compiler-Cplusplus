@@ -272,7 +272,45 @@ int main() {
         }
     }
 
-    // 8. Repeatedly, in one process, which is the shape of an application.
+    // 8. WHY it stopped, which a host has to know to say it well. A program
+    //    that ran out of steps did nothing wrong -- it did something lawful
+    //    for longer than this machine would watch -- and an application
+    //    showing that to a person will want to word it differently from a
+    //    null dereference. Matching on errorMessage() would work today and
+    //    break the day someone rewords it.
+    {
+        Image runaway, faulty;
+        std::string ignored;
+        compileToImage("int main(){ while (1) { } return 0; }\n", runaway, ignored);
+        compileToImage("#include <iostream>\n"
+                       "int main(){ int *p = 0; cout << *p << endl; return 0; }\n",
+                       faulty, ignored);
+
+        MachineLimits brief;
+        brief.maxSteps = 10000;
+        VM vm;
+        vm.setLimits(brief);
+        bool ok = true;
+        runCapturing(vm, runaway, ok);
+        if (!ok && vm.outOfSteps()) {
+            std::cout << "ok       a runaway says it ran out of steps" << std::endl;
+        } else {
+            std::cout << "FAIL     a runaway did not say why it stopped" << std::endl;
+            ++failures;
+        }
+
+        VM vm2;
+        bool ok2 = true;
+        runCapturing(vm2, faulty, ok2);
+        if (!ok2 && !vm2.outOfSteps()) {
+            std::cout << "ok       a fault says it was not the step budget" << std::endl;
+        } else {
+            std::cout << "FAIL     a fault was mistaken for a runaway" << std::endl;
+            ++failures;
+        }
+    }
+
+    // 9. Repeatedly, in one process, which is the shape of an application.
     {
         bool same = true;
         for (int i = 0; i < 50; ++i) {
