@@ -84,6 +84,9 @@ private:
     void recordScopeExitDestruction(cc::CompoundStmt *block,
                                     const std::vector<cc::VarDecl*> &declared);
     bool hasDestructor(cc::Type *t);
+    // A bodyless declaration of a built-in name IS the binding to it, so it
+    // has to agree with the machine's own signature.
+    void checkNativeDeclaration(cc::Function *fn);
     // Names a parameter in a diagnostic, by name or, having none, by position.
     static std::string parameterText(cc::Function *fn, std::size_t i);
     bool needsDestructor(cxx::ClassDecl *cd);

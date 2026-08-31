@@ -1,0 +1,23 @@
+123_err_native_signature.cpp:28:5: error: 'sin' is built in and returns a floating-point value, not int
+123_err_native_signature.cpp:31:8: error: 'pow' is built in and takes 2 argument(s), not 1
+123_err_native_signature.cpp:34:8: error: 'fabs' is built in and takes floating-point arguments; parameter 'n' is int
+Function print_line returns void
+Function sqrt returns double
+  param:
+    Var x : double
+Function sin returns int
+  param:
+    Var x : int
+Function pow returns double
+  param:
+    Var a : double
+Function fabs returns double
+  param:
+    Var n : int
+Function main returns int
+  Block
+    ExprStmt
+      Call
+        print_line
+    Return
+      0

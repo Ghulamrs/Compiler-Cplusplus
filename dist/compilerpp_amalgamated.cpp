@@ -1289,6 +1289,9 @@ private:
     void recordScopeExitDestruction(cc::CompoundStmt *block,
                                     const std::vector<cc::VarDecl*> &declared);
     bool hasDestructor(cc::Type *t);
+    // A bodyless declaration of a built-in name IS the binding to it, so it
+    // has to agree with the machine's own signature.
+    void checkNativeDeclaration(cc::Function *fn);
     // Names a parameter in a diagnostic, by name or, having none, by position.
     static std::string parameterText(cc::Function *fn, std::size_t i);
     bool needsDestructor(cxx::ClassDecl *cd);
@@ -5767,6 +5770,9 @@ cc::Expr *Parser::parseMemberSuffix(cc::Expr *base) {
 //  C++98 only.  See Semantic.h for how this pass spans both class layers.
 
 
+// The native table: a bodyless declaration of one of its names is a binding
+// to the machine, so the analyser has to be able to ask what it is binding to.
+
 #include <cmath>
 #include <cstddef>
 #include <sstream>
@@ -7200,6 +7206,7 @@ void SemanticAnalyzer::declareTopLevel(const std::vector<cc::Decl*> &units) {
         cxx::MethodDecl *asMethod = dynamic_cast<cxx::MethodDecl*>(units[i]);
         if (asMethod && !asMethod->ownerClass.empty()) continue;
         if (fn) {
+            checkNativeDeclaration(fn);
             std::vector<cc::Function*> &set = overloads[fn->name];
             // Two declarations with the same parameters are the same function;
             // a definition following a declaration is normal, two definitions
@@ -7648,6 +7655,61 @@ cc::Function *SemanticAnalyzer::resolveOverload(const std::vector<cc::Function*>
     }
     error(call, "no overload of '" + name + "' takes these arguments");
     return 0;
+}
+
+// A function with no body whose NAME is a native's is bound to that native --
+// that declaration is the whole of the binding, there being no linker in this
+// pipeline to check it against a symbol.  Nothing checked it against anything,
+// so a declaration that merely spelled the name right was accepted and the
+// call went through with whatever the machine's own signature was:
+//
+//     int sqrt(int x);      called as sqrt(4)     -> 0
+//     double pow(double a); called as pow(2.0)    -> 1
+//
+// Both compiled, ran, and printed a wrong number in silence.  The table knows
+// how many arguments each native takes and whether it answers in floating
+// point, so a declaration that disagrees is refused by name here.  What the
+// table does not record is each parameter's type -- except that a native
+// answering in floating point takes floating point throughout, which is true
+// of every entry that does.
+namespace {
+// Floating in the type model's own terms; a non-builtin is not.
+bool declaresFloating(cc::Type *t) {
+    cc::BuiltinType *bt = dynamic_cast<cc::BuiltinType*>(t);
+    return bt != 0 && cc::builtinIsFloating(bt->kind);
+}
+}
+
+void SemanticAnalyzer::checkNativeDeclaration(cc::Function *fn) {
+    if (!fn || fn->body) return;                       // a body is its own binding
+    const NativeId id = nativeByName(fn->name);
+    if (id == NAT_Count) return;                       // not a native at all
+
+    const std::size_t want = static_cast<std::size_t>(nativeArgCount(id));
+    if (fn->params.size() != want) {
+        error(fn, "'" + fn->name + "' is built in and takes " + countText(want)
+                  + " argument(s), not " + countText(fn->params.size()));
+        return;
+    }
+
+    const bool wantsFloat = nativeReturnsFloat(id);
+    const bool declaresFloat = declaresFloating(fn->retType);
+    if (wantsFloat != declaresFloat) {
+        error(fn, "'" + fn->name + "' is built in and returns "
+                  + (wantsFloat ? "a floating-point value" : "an integer")
+                  + ", not " + describe(fn->retType));
+        return;
+    }
+    if (wantsFloat) {
+        for (std::size_t i = 0; i < fn->params.size(); ++i) {
+            if (!declaresFloating(fn->params[i]->type)) {
+                error(fn, "'" + fn->name + "' is built in and takes floating-point "
+                          "arguments; " + parameterText(fn, i) + " is "
+                          + describe(fn->params[i]->type));
+                return;
+            }
+        }
+    }
 }
 
 // --- Calls ---
