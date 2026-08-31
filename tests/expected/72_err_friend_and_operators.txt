@@ -1,4 +1,4 @@
-72_err_friend_and_operators.cpp:10:10: error: a friend class is not supported in this version; name the function
+72_err_friend_and_operators.cpp:10:10: error: a friend class is not supported; name the function
 72_err_friend_and_operators.cpp:13:27: error: 'secret' is private in class 'Box'
 Function print_int returns void
   param:

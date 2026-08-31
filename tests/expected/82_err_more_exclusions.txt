@@ -1,9 +1,9 @@
-82_err_more_exclusions.cpp:5:9: error: bit-fields are not supported in this version
-82_err_more_exclusions.cpp:6:3: error: 'mutable' is not supported in this version
-82_err_more_exclusions.cpp:8:1: error: 'inline' is not supported in this version
-82_err_more_exclusions.cpp:10:14: error: brace initialisers are not supported in this version
-82_err_more_exclusions.cpp:12:11: error: named casts are not supported in this version; use (T)value
-82_err_more_exclusions.cpp:13:3: error: 'wchar_t' is not supported in this version
+82_err_more_exclusions.cpp:5:9: error: bit-fields are not supported
+82_err_more_exclusions.cpp:6:3: error: 'mutable' is not supported
+82_err_more_exclusions.cpp:8:1: error: 'inline' is not supported
+82_err_more_exclusions.cpp:10:14: error: brace initialisers are not supported
+82_err_more_exclusions.cpp:12:11: error: named casts are not supported; use (T)value
+82_err_more_exclusions.cpp:13:3: error: 'wchar_t' is not supported
 Class A
 Function main returns int
   Block

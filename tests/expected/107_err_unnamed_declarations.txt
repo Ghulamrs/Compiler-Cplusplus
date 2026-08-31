@@ -1,5 +1,5 @@
-107_err_unnamed_declarations.cpp:6:22: error: pure virtual functions are not supported in this version; give the method a body
-107_err_unnamed_declarations.cpp:8:21: error: array parameters are not supported in this version; pass a pointer
+107_err_unnamed_declarations.cpp:6:22: error: pure virtual functions are not supported; give the method a body
+107_err_unnamed_declarations.cpp:8:21: error: array parameters are not supported; pass a pointer
 Class Shape
   Field public tag : int
   Constructor public Shape::Shape

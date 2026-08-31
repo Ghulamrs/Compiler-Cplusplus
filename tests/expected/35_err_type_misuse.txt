@@ -1,4 +1,4 @@
-35_err_type_misuse.cpp:4:8: error: 'long long' is not supported in this version
+35_err_type_misuse.cpp:4:8: error: 'long long' is not supported
 35_err_type_misuse.cpp:5:17: error: 'void' cannot be combined with signed, unsigned, short or long
 35_err_type_misuse.cpp:6:15: error: 'float' cannot be combined with signed, unsigned, short or long
 35_err_type_misuse.cpp:3:13: error: '%' needs integer operands, not double and int

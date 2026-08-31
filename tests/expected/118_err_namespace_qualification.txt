@@ -1,5 +1,5 @@
-118_err_namespace_qualification.cpp:30:13: error: namespaces are not supported in this version; write 'bar', not 'foo::bar'
-118_err_namespace_qualification.cpp:31:13: error: namespaces are not supported in this version; write 'thing', not 'other::thing'
+118_err_namespace_qualification.cpp:30:13: error: namespaces are not supported; write 'bar', not 'foo::bar'
+118_err_namespace_qualification.cpp:31:13: error: namespaces are not supported; write 'thing', not 'other::thing'
 118_err_namespace_qualification.cpp:30:18: error: undeclared identifier 'bar'
 118_err_namespace_qualification.cpp:31:20: error: undeclared identifier 'thing'
 Class A

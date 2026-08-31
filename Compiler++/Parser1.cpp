@@ -158,7 +158,7 @@ ClassDecl *Parser::parseClass() {
         }
         // A deliberate limit, so say so rather than emitting a parse error.
         if (cur.kind == TOK_COMMA) {
-            errorAtCurrent("multiple inheritance is not supported in this version");
+            errorAtCurrent("multiple inheritance is not supported");
             while (cur.kind != TOK_LBRACE && cur.kind != TOK_EOF) advance();
         }
     }
@@ -272,7 +272,7 @@ Decl *Parser::parseMemberDecl(const std::string &className, Access access) {
     }
 
     if (cur.kind == TOK_CLASS || cur.kind == TOK_STRUCT) {
-        errorAtCurrent("nested classes are not supported in this version");
+        errorAtCurrent("nested classes are not supported");
         skipConstruct();
         suppressSync = true;            // the skip IS the recovery
         return 0;
@@ -307,7 +307,7 @@ Decl *Parser::parseMemberDecl(const std::string &className, Access access) {
     }
 
     if (cur.kind == TOK_COLON) {
-        errorAtCurrent("bit-fields are not supported in this version");
+        errorAtCurrent("bit-fields are not supported");
         while (cur.kind != TOK_SEMI && cur.kind != TOK_RBRACE && cur.kind != TOK_EOF) advance();
         match(TOK_SEMI);
         delete t;
@@ -348,7 +348,7 @@ Decl *Parser::parseMemberDecl(const std::string &className, Access access) {
     // line.
     if (cur.kind == TOK_COMMA) {
         errorAtCurrent("declaring more than one field in a statement is not "
-                       "supported in this version; write a declaration each");
+                       "supported; write a declaration each");
         while (cur.kind != TOK_SEMI && cur.kind != TOK_RBRACE &&
                cur.kind != TOK_EOF) advance();
     }
@@ -364,7 +364,7 @@ void Parser::parseFriend() {
     advance();                                  // consume 'friend'
 
     if (cur.kind == TOK_CLASS || cur.kind == TOK_STRUCT) {
-        errorAtCurrent("a friend class is not supported in this version; name the function");
+        errorAtCurrent("a friend class is not supported; name the function");
         skipConstruct();
         return;
     }
@@ -447,7 +447,7 @@ std::string Parser::operatorMemberName() {
         errorAtCurrent("expected an operator after 'operator'");
         return std::string();
     }
-    errorAtCurrent(std::string("this operator cannot be overloaded in this version"));
+    errorAtCurrent(std::string("this operator cannot be overloaded"));
     return std::string();
 }
 
@@ -647,7 +647,7 @@ cc::Expr *Parser::parsePrimary() {
         if (cur.kind != TOK_IDENTIFIER) { restore(probe); break; }
         if (qualifier != "std") {
             diag.error(line, col,
-                       "namespaces are not supported in this version; write '"
+                       "namespaces are not supported; write '"
                        + cur.text + "', not '" + qualifier + "::" + cur.text + "'");
         }
         // Loop, so a::b::c is named once per qualifier rather than cascading.

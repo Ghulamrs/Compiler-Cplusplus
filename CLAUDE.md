@@ -103,9 +103,14 @@ C++98 rule; see KNOWN-GAPS.md for the way to remove it.
    standing constraint, not a preference.
 2. **Change the minimum inside the files.** Architecture changes are welcome
    when they buy efficiency or comprehension, but not as a side effect.
-3. **Diagnostics say "in this version", never "in this subset."** They state
-   the fact and stop — no trailing advice, except where naming the alternative
-   IS the fact (`use (T)value`, `write a declaration each`).
+3. **Diagnostics name the construct and stop.** `templates are not supported`,
+   not "…in this version" and never "in this subset". The qualifier was on all
+   forty-three of them and earned its place on none: a reader who has just been
+   told templates are unavailable does not also need telling that this is the
+   version they are using, and forty-three repetitions of that made the message
+   longer without making it say more. Trailing advice stays only where naming
+   the alternative IS the fact — `use (T)value`, `write a declaration each`,
+   `pass a pointer`.
 4. **One mistake costs one line.** An excluded construct is lexed, named once,
    and skipped. A cascade of parse errors is a bug in the diagnostic, not in
    the program.

@@ -2753,36 +2753,36 @@ const char *tokenName(TokenKind k) {
 // the difference between a compiler that teaches and one that merely refuses.
 const char *reservedWordHelp(const std::string &w) {
     if (w == "template" || w == "typename" || w == "export") {
-        return "templates are not supported in this version";
+        return "templates are not supported";
     }
     if (w == "throw" || w == "try" || w == "catch") {
-        return "exceptions are not supported in this version";
+        return "exceptions are not supported";
     }
     if (w == "namespace" || w == "using") {
-        return "namespaces are not supported in this version";
+        return "namespaces are not supported";
     }
     if (w == "operator") {
-        return "operator overloading is not supported in this version";
+        return "operator overloading is not supported";
     }
-    if (w == "static") return "'static' is not supported in this version";
-    if (w == "friend")   return "'friend' is not supported in this version";
-    if (w == "mutable")  return "'mutable' is not supported in this version";
-    if (w == "explicit") return "'explicit' is not supported in this version";
-    if (w == "inline")   return "'inline' is not supported in this version";
-    if (w == "goto")     return "'goto' is not supported in this version";
-    if (w == "sizeof")   return "'sizeof' is not supported in this version";
-    if (w == "enum")     return "'enum' is not supported in this version";
-    if (w == "union")    return "'union' is not supported in this version";
-    if (w == "typedef")  return "'typedef' is not supported in this version";
+    if (w == "static") return "'static' is not supported";
+    if (w == "friend")   return "'friend' is not supported";
+    if (w == "mutable")  return "'mutable' is not supported";
+    if (w == "explicit") return "'explicit' is not supported";
+    if (w == "inline")   return "'inline' is not supported";
+    if (w == "goto")     return "'goto' is not supported";
+    if (w == "sizeof")   return "'sizeof' is not supported";
+    if (w == "enum")     return "'enum' is not supported";
+    if (w == "union")    return "'union' is not supported";
+    if (w == "typedef")  return "'typedef' is not supported";
     if (w == "static_cast" || w == "const_cast" ||
         w == "dynamic_cast" || w == "reinterpret_cast") {
-        return "named casts are not supported in this version; use (T)value";
+        return "named casts are not supported; use (T)value";
     }
     if (w == "volatile" || w == "register" || w == "extern" || w == "auto") {
-        return "storage-class keywords are not supported in this version";
+        return "storage-class keywords are not supported";
     }
-    if (w == "wchar_t")  return "'wchar_t' is not supported in this version";
-    if (w == "asm")      return "assembly is not supported in this version";
+    if (w == "wchar_t")  return "'wchar_t' is not supported";
+    if (w == "asm")      return "assembly is not supported";
     return 0;
 }
 
@@ -3164,7 +3164,7 @@ std::string expandDefines(const std::string &src, Diagnostics &diag) {
             if (name.empty()) {
                 diag.error(line, 1, "'#define' needs a name");
             } else if (j < src.size() && src[j] == '(') {
-                diag.error(line, 1, "function-like macros are not supported in this version");
+                diag.error(line, 1, "function-like macros are not supported");
             } else {
                 std::string body;
                 while (j < src.size() && src[j] != '\n') body += src[j++];
@@ -4169,7 +4169,7 @@ bool Parser::skipReservedConstruct() {
     }
 
     const char *help = reservedWordHelp(cur.text);
-    errorAtCurrent(help ? help : "this keyword is not supported in this version");
+    errorAtCurrent(help ? help : "this keyword is not supported");
     skipConstruct();
     suppressSync = true;
     return true;
@@ -4215,7 +4215,7 @@ bool Parser::skipTemplateDeclaration() {
     restore(probe);
     if (!declaring) return false;
 
-    errorAtCurrent("templates are not supported in this version");
+    errorAtCurrent("templates are not supported");
     skipConstruct();
     suppressSync = true;
     return true;
@@ -4371,7 +4371,7 @@ Decl *Parser::parseDeclaration() {
             const std::string what = (cur.kind == TOK_IDENTIFIER)
                                    ? ("'#" + cur.text + "'")
                                    : std::string("this directive");
-            errorAtCurrent(what + " is not supported in this version");
+            errorAtCurrent(what + " is not supported");
         }
         while (cur.kind != TOK_EOF && cur.line == line) advance();
         suppressSync = true;
@@ -4386,7 +4386,7 @@ Decl *Parser::parseDeclaration() {
     // int (*p)(int) -- a type, then a parenthesised '*'.  Nothing else in this
     // grammar looks like that, so it can be named instead of misread.
     if (cur.kind == TOK_LPAREN && peekIsStar()) {
-        errorAtCurrent("function pointers are not supported in this version");
+        errorAtCurrent("function pointers are not supported");
         delete t;
         skipConstruct();
         return 0;
@@ -4419,7 +4419,7 @@ void Parser::parseFunctionParamsAndBody(Function *fn) {
 
     while (cur.kind != TOK_RPAREN && cur.kind != TOK_EOF) {
         if (cur.kind == TOK_ELLIPSIS) {
-            errorAtCurrent("variadic functions are not supported in this version");
+            errorAtCurrent("variadic functions are not supported");
             while (cur.kind != TOK_RPAREN && cur.kind != TOK_EOF) advance();
             break;
         }
@@ -4431,12 +4431,12 @@ void Parser::parseFunctionParamsAndBody(Function *fn) {
         // Each is rejected by name: a bare "expected ')'" says nothing about
         // which feature the program was reaching for.
         if (cur.kind == TOK_ASSIGN) {
-            errorAtCurrent("default arguments are not supported in this version");
+            errorAtCurrent("default arguments are not supported");
             while (cur.kind != TOK_COMMA && cur.kind != TOK_RPAREN &&
                    cur.kind != TOK_EOF) advance();
         }
         if (cur.kind == TOK_LBRACKET) {
-            errorAtCurrent("array parameters are not supported in this version; "
+            errorAtCurrent("array parameters are not supported; "
                            "pass a pointer");
             while (cur.kind != TOK_COMMA && cur.kind != TOK_RPAREN &&
                    cur.kind != TOK_EOF) advance();
@@ -4460,7 +4460,7 @@ void Parser::parseFunctionParamsAndBody(Function *fn) {
     // `= 0` is the one thing that plausibly follows a signature and is not a
     // body, so it is worth its own sentence rather than a punctuation complaint.
     if (cur.kind == TOK_ASSIGN) {
-        errorAtCurrent("pure virtual functions are not supported in this version; "
+        errorAtCurrent("pure virtual functions are not supported; "
                        "give the method a body");
         while (cur.kind != TOK_SEMI && cur.kind != TOK_EOF) advance();
         match(TOK_SEMI);
@@ -4482,7 +4482,7 @@ VarDecl *Parser::parseVarDeclTail(Type *type, const std::string &name,
     // told a semicolon was expected, which is true and unhelpful.
     if (cur.kind == TOK_COMMA) {
         errorAtCurrent("declaring more than one variable in a statement is not "
-                       "supported in this version; write a declaration each");
+                       "supported; write a declaration each");
         while (cur.kind != TOK_SEMI && cur.kind != TOK_EOF) advance();
     }
     expect(TOK_SEMI, ("after declaration of " + name).c_str());
@@ -4524,7 +4524,7 @@ void Parser::parseVarInitializer(VarDecl *vd) {
     // int a[3] = {1, 2, 3};  -- a brace list, which this version does not take.
     // Name it, because "expected an expression, found '{'" explains nothing.
     if (cur.kind == TOK_LBRACE) {
-        errorAtCurrent("brace initialisers are not supported in this version");
+        errorAtCurrent("brace initialisers are not supported");
         int depth = 0;
         while (cur.kind != TOK_EOF) {
             if (cur.kind == TOK_LBRACE) ++depth;
@@ -4586,7 +4586,7 @@ Stmt *Parser::parseStatementImpl() {
         const std::string name = cur.text;
         advance();
         if (cur.kind == TOK_COLON) {
-            errorAtCurrent("labels are not supported in this version");
+            errorAtCurrent("labels are not supported");
             advance();
             suppressSync = true;
             return 0;
@@ -4650,7 +4650,7 @@ Stmt *Parser::parseStatementImpl() {
             }
             // int (*p)(int); -- a type, then a parenthesised '*'.
             if (cur.kind == TOK_LPAREN && peekIsStar()) {
-                errorAtCurrent("function pointers are not supported in this version");
+                errorAtCurrent("function pointers are not supported");
                 delete t;
                 skipConstruct();
                 suppressSync = true;
@@ -4798,7 +4798,7 @@ Type *Parser::parseType() {
         case TOK_SHORT:    if (length != LenNone) bad = true; length = LenShort; break;
         case TOK_LONG:
             if (length == LenLong) {
-                errorAtCurrent("'long long' is not supported in this version");
+                errorAtCurrent("'long long' is not supported");
                 bad = true;
                 alreadyReported = true;
             } else if (length != LenNone) bad = true;
@@ -4927,12 +4927,12 @@ Expr *Parser::parseExpression() {
     // be a separator -- an argument list consumes its own commas in
     // parseCallSuffix -- so seeing one here is always the operator itself.
     if (cur.kind == TOK_QUESTION) {
-        errorAtCurrent("the conditional operator '?:' is not supported in this "
-                       "version; use an if statement");
+        errorAtCurrent("the conditional operator '?:' is not supported; "
+                       "use an if statement");
         while (cur.kind != TOK_SEMI && cur.kind != TOK_RPAREN &&
                cur.kind != TOK_EOF) advance();
     } else if (cur.kind == TOK_AMP || cur.kind == TOK_PIPE || cur.kind == TOK_CARET) {
-        errorAtCurrent("bitwise operators are not supported in this version; "
+        errorAtCurrent("bitwise operators are not supported; "
                        "'<<' and '>>' are the only bit operations");
         while (cur.kind != TOK_SEMI && cur.kind != TOK_RPAREN &&
                cur.kind != TOK_EOF) advance();
@@ -5182,7 +5182,7 @@ Expr *Parser::parsePrimary() {
 
     if (cur.kind == TOK_RESERVED) {
         const char *help = reservedWordHelp(cur.text);
-        errorAtCurrent(help ? help : "this keyword is not supported in this version");
+        errorAtCurrent(help ? help : "this keyword is not supported");
         advance();
         // sizeof(T) and the named casts carry an operand; stepping over it
         // keeps one message from becoming three.
@@ -5222,7 +5222,7 @@ Expr *Parser::parseCastOrParen() {
     // commas in parseCallSuffix, so this pair of brackets is grouping and
     // nothing else.
     if (cur.kind == TOK_COMMA) {
-        errorAtCurrent("the comma operator is not supported in this version; "
+        errorAtCurrent("the comma operator is not supported; "
                        "write the two expressions as separate statements");
         while (cur.kind != TOK_RPAREN && cur.kind != TOK_SEMI &&
                cur.kind != TOK_EOF) advance();
@@ -5401,7 +5401,7 @@ ClassDecl *Parser::parseClass() {
         }
         // A deliberate limit, so say so rather than emitting a parse error.
         if (cur.kind == TOK_COMMA) {
-            errorAtCurrent("multiple inheritance is not supported in this version");
+            errorAtCurrent("multiple inheritance is not supported");
             while (cur.kind != TOK_LBRACE && cur.kind != TOK_EOF) advance();
         }
     }
@@ -5515,7 +5515,7 @@ Decl *Parser::parseMemberDecl(const std::string &className, Access access) {
     }
 
     if (cur.kind == TOK_CLASS || cur.kind == TOK_STRUCT) {
-        errorAtCurrent("nested classes are not supported in this version");
+        errorAtCurrent("nested classes are not supported");
         skipConstruct();
         suppressSync = true;            // the skip IS the recovery
         return 0;
@@ -5550,7 +5550,7 @@ Decl *Parser::parseMemberDecl(const std::string &className, Access access) {
     }
 
     if (cur.kind == TOK_COLON) {
-        errorAtCurrent("bit-fields are not supported in this version");
+        errorAtCurrent("bit-fields are not supported");
         while (cur.kind != TOK_SEMI && cur.kind != TOK_RBRACE && cur.kind != TOK_EOF) advance();
         match(TOK_SEMI);
         delete t;
@@ -5591,7 +5591,7 @@ Decl *Parser::parseMemberDecl(const std::string &className, Access access) {
     // line.
     if (cur.kind == TOK_COMMA) {
         errorAtCurrent("declaring more than one field in a statement is not "
-                       "supported in this version; write a declaration each");
+                       "supported; write a declaration each");
         while (cur.kind != TOK_SEMI && cur.kind != TOK_RBRACE &&
                cur.kind != TOK_EOF) advance();
     }
@@ -5607,7 +5607,7 @@ void Parser::parseFriend() {
     advance();                                  // consume 'friend'
 
     if (cur.kind == TOK_CLASS || cur.kind == TOK_STRUCT) {
-        errorAtCurrent("a friend class is not supported in this version; name the function");
+        errorAtCurrent("a friend class is not supported; name the function");
         skipConstruct();
         return;
     }
@@ -5690,7 +5690,7 @@ std::string Parser::operatorMemberName() {
         errorAtCurrent("expected an operator after 'operator'");
         return std::string();
     }
-    errorAtCurrent(std::string("this operator cannot be overloaded in this version"));
+    errorAtCurrent(std::string("this operator cannot be overloaded"));
     return std::string();
 }
 
@@ -5890,7 +5890,7 @@ cc::Expr *Parser::parsePrimary() {
         if (cur.kind != TOK_IDENTIFIER) { restore(probe); break; }
         if (qualifier != "std") {
             diag.error(line, col,
-                       "namespaces are not supported in this version; write '"
+                       "namespaces are not supported; write '"
                        + cur.text + "', not '" + qualifier + "::" + cur.text + "'");
         }
         // Loop, so a::b::c is named once per qualifier rather than cascading.
@@ -10933,7 +10933,7 @@ void Lowering::lowerVarDecl(cc::VarDecl *vd) {
         }
         if (!isAddressable(vd->init) && !yieldsObject(vd->init)) {
             diag.error(vd->line, vd->col,
-                       "an object can only be copied from another object in this version");
+                       "an object can only be copied from another object");
             return;
         }
         const IRReg src = lowerObjectValue(vd->init);

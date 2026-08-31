@@ -1,4 +1,4 @@
-17_err_multiple_inheritance.cpp:3:19: error: multiple inheritance is not supported in this version
+17_err_multiple_inheritance.cpp:3:19: error: multiple inheritance is not supported
 Class A
   Field public a : int
 Class B

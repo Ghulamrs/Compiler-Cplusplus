@@ -1,7 +1,7 @@
-127_err_excluded_after_using.cpp:25:1: error: templates are not supported in this version
-127_err_excluded_after_using.cpp:27:1: error: 'enum' is not supported in this version
-127_err_excluded_after_using.cpp:29:1: error: 'typedef' is not supported in this version
-127_err_excluded_after_using.cpp:31:1: error: 'union' is not supported in this version
+127_err_excluded_after_using.cpp:25:1: error: templates are not supported
+127_err_excluded_after_using.cpp:27:1: error: 'enum' is not supported
+127_err_excluded_after_using.cpp:29:1: error: 'typedef' is not supported
+127_err_excluded_after_using.cpp:31:1: error: 'union' is not supported
 Function main returns int
   Block
     ExprStmt

@@ -1,9 +1,9 @@
-106_err_unnamed_exclusions.cpp:13:12: error: declaring more than one variable in a statement is not supported in this version; write a declaration each
-106_err_unnamed_exclusions.cpp:14:13: error: the conditional operator '?:' is not supported in this version; use an if statement
-106_err_unnamed_exclusions.cpp:15:13: error: bitwise operators are not supported in this version; '<<' and '>>' are the only bit operations
-106_err_unnamed_exclusions.cpp:16:13: error: bitwise operators are not supported in this version; '<<' and '>>' are the only bit operations
-106_err_unnamed_exclusions.cpp:17:13: error: bitwise operators are not supported in this version; '<<' and '>>' are the only bit operations
-106_err_unnamed_exclusions.cpp:18:13: error: the comma operator is not supported in this version; write the two expressions as separate statements
+106_err_unnamed_exclusions.cpp:13:12: error: declaring more than one variable in a statement is not supported; write a declaration each
+106_err_unnamed_exclusions.cpp:14:13: error: the conditional operator '?:' is not supported; use an if statement
+106_err_unnamed_exclusions.cpp:15:13: error: bitwise operators are not supported; '<<' and '>>' are the only bit operations
+106_err_unnamed_exclusions.cpp:16:13: error: bitwise operators are not supported; '<<' and '>>' are the only bit operations
+106_err_unnamed_exclusions.cpp:17:13: error: bitwise operators are not supported; '<<' and '>>' are the only bit operations
+106_err_unnamed_exclusions.cpp:18:13: error: the comma operator is not supported; write the two expressions as separate statements
 Function one returns int
   param:
     Var n : int

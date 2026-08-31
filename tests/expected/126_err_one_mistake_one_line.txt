@@ -1,6 +1,6 @@
-126_err_one_mistake_one_line.cpp:25:13: error: declaring more than one field in a statement is not supported in this version; write a declaration each
-126_err_one_mistake_one_line.cpp:29:5: error: templates are not supported in this version
-126_err_one_mistake_one_line.cpp:30:5: error: templates are not supported in this version
+126_err_one_mistake_one_line.cpp:25:13: error: declaring more than one field in a statement is not supported; write a declaration each
+126_err_one_mistake_one_line.cpp:29:5: error: templates are not supported
+126_err_one_mistake_one_line.cpp:30:5: error: templates are not supported
 Class Holder
   Field public rows : int
 Function main returns int

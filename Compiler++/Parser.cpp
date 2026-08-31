@@ -79,7 +79,7 @@ bool Parser::skipReservedConstruct() {
     }
 
     const char *help = reservedWordHelp(cur.text);
-    errorAtCurrent(help ? help : "this keyword is not supported in this version");
+    errorAtCurrent(help ? help : "this keyword is not supported");
     skipConstruct();
     suppressSync = true;
     return true;
@@ -125,7 +125,7 @@ bool Parser::skipTemplateDeclaration() {
     restore(probe);
     if (!declaring) return false;
 
-    errorAtCurrent("templates are not supported in this version");
+    errorAtCurrent("templates are not supported");
     skipConstruct();
     suppressSync = true;
     return true;
@@ -281,7 +281,7 @@ Decl *Parser::parseDeclaration() {
             const std::string what = (cur.kind == TOK_IDENTIFIER)
                                    ? ("'#" + cur.text + "'")
                                    : std::string("this directive");
-            errorAtCurrent(what + " is not supported in this version");
+            errorAtCurrent(what + " is not supported");
         }
         while (cur.kind != TOK_EOF && cur.line == line) advance();
         suppressSync = true;
@@ -296,7 +296,7 @@ Decl *Parser::parseDeclaration() {
     // int (*p)(int) -- a type, then a parenthesised '*'.  Nothing else in this
     // grammar looks like that, so it can be named instead of misread.
     if (cur.kind == TOK_LPAREN && peekIsStar()) {
-        errorAtCurrent("function pointers are not supported in this version");
+        errorAtCurrent("function pointers are not supported");
         delete t;
         skipConstruct();
         return 0;
@@ -329,7 +329,7 @@ void Parser::parseFunctionParamsAndBody(Function *fn) {
 
     while (cur.kind != TOK_RPAREN && cur.kind != TOK_EOF) {
         if (cur.kind == TOK_ELLIPSIS) {
-            errorAtCurrent("variadic functions are not supported in this version");
+            errorAtCurrent("variadic functions are not supported");
             while (cur.kind != TOK_RPAREN && cur.kind != TOK_EOF) advance();
             break;
         }
@@ -341,12 +341,12 @@ void Parser::parseFunctionParamsAndBody(Function *fn) {
         // Each is rejected by name: a bare "expected ')'" says nothing about
         // which feature the program was reaching for.
         if (cur.kind == TOK_ASSIGN) {
-            errorAtCurrent("default arguments are not supported in this version");
+            errorAtCurrent("default arguments are not supported");
             while (cur.kind != TOK_COMMA && cur.kind != TOK_RPAREN &&
                    cur.kind != TOK_EOF) advance();
         }
         if (cur.kind == TOK_LBRACKET) {
-            errorAtCurrent("array parameters are not supported in this version; "
+            errorAtCurrent("array parameters are not supported; "
                            "pass a pointer");
             while (cur.kind != TOK_COMMA && cur.kind != TOK_RPAREN &&
                    cur.kind != TOK_EOF) advance();
@@ -370,7 +370,7 @@ void Parser::parseFunctionParamsAndBody(Function *fn) {
     // `= 0` is the one thing that plausibly follows a signature and is not a
     // body, so it is worth its own sentence rather than a punctuation complaint.
     if (cur.kind == TOK_ASSIGN) {
-        errorAtCurrent("pure virtual functions are not supported in this version; "
+        errorAtCurrent("pure virtual functions are not supported; "
                        "give the method a body");
         while (cur.kind != TOK_SEMI && cur.kind != TOK_EOF) advance();
         match(TOK_SEMI);
@@ -392,7 +392,7 @@ VarDecl *Parser::parseVarDeclTail(Type *type, const std::string &name,
     // told a semicolon was expected, which is true and unhelpful.
     if (cur.kind == TOK_COMMA) {
         errorAtCurrent("declaring more than one variable in a statement is not "
-                       "supported in this version; write a declaration each");
+                       "supported; write a declaration each");
         while (cur.kind != TOK_SEMI && cur.kind != TOK_EOF) advance();
     }
     expect(TOK_SEMI, ("after declaration of " + name).c_str());
@@ -434,7 +434,7 @@ void Parser::parseVarInitializer(VarDecl *vd) {
     // int a[3] = {1, 2, 3};  -- a brace list, which this version does not take.
     // Name it, because "expected an expression, found '{'" explains nothing.
     if (cur.kind == TOK_LBRACE) {
-        errorAtCurrent("brace initialisers are not supported in this version");
+        errorAtCurrent("brace initialisers are not supported");
         int depth = 0;
         while (cur.kind != TOK_EOF) {
             if (cur.kind == TOK_LBRACE) ++depth;
@@ -496,7 +496,7 @@ Stmt *Parser::parseStatementImpl() {
         const std::string name = cur.text;
         advance();
         if (cur.kind == TOK_COLON) {
-            errorAtCurrent("labels are not supported in this version");
+            errorAtCurrent("labels are not supported");
             advance();
             suppressSync = true;
             return 0;
@@ -560,7 +560,7 @@ Stmt *Parser::parseStatementImpl() {
             }
             // int (*p)(int); -- a type, then a parenthesised '*'.
             if (cur.kind == TOK_LPAREN && peekIsStar()) {
-                errorAtCurrent("function pointers are not supported in this version");
+                errorAtCurrent("function pointers are not supported");
                 delete t;
                 skipConstruct();
                 suppressSync = true;
@@ -708,7 +708,7 @@ Type *Parser::parseType() {
         case TOK_SHORT:    if (length != LenNone) bad = true; length = LenShort; break;
         case TOK_LONG:
             if (length == LenLong) {
-                errorAtCurrent("'long long' is not supported in this version");
+                errorAtCurrent("'long long' is not supported");
                 bad = true;
                 alreadyReported = true;
             } else if (length != LenNone) bad = true;
@@ -837,12 +837,12 @@ Expr *Parser::parseExpression() {
     // be a separator -- an argument list consumes its own commas in
     // parseCallSuffix -- so seeing one here is always the operator itself.
     if (cur.kind == TOK_QUESTION) {
-        errorAtCurrent("the conditional operator '?:' is not supported in this "
-                       "version; use an if statement");
+        errorAtCurrent("the conditional operator '?:' is not supported; "
+                       "use an if statement");
         while (cur.kind != TOK_SEMI && cur.kind != TOK_RPAREN &&
                cur.kind != TOK_EOF) advance();
     } else if (cur.kind == TOK_AMP || cur.kind == TOK_PIPE || cur.kind == TOK_CARET) {
-        errorAtCurrent("bitwise operators are not supported in this version; "
+        errorAtCurrent("bitwise operators are not supported; "
                        "'<<' and '>>' are the only bit operations");
         while (cur.kind != TOK_SEMI && cur.kind != TOK_RPAREN &&
                cur.kind != TOK_EOF) advance();
@@ -1092,7 +1092,7 @@ Expr *Parser::parsePrimary() {
 
     if (cur.kind == TOK_RESERVED) {
         const char *help = reservedWordHelp(cur.text);
-        errorAtCurrent(help ? help : "this keyword is not supported in this version");
+        errorAtCurrent(help ? help : "this keyword is not supported");
         advance();
         // sizeof(T) and the named casts carry an operand; stepping over it
         // keeps one message from becoming three.
@@ -1132,7 +1132,7 @@ Expr *Parser::parseCastOrParen() {
     // commas in parseCallSuffix, so this pair of brackets is grouping and
     // nothing else.
     if (cur.kind == TOK_COMMA) {
-        errorAtCurrent("the comma operator is not supported in this version; "
+        errorAtCurrent("the comma operator is not supported; "
                        "write the two expressions as separate statements");
         while (cur.kind != TOK_RPAREN && cur.kind != TOK_SEMI &&
                cur.kind != TOK_EOF) advance();

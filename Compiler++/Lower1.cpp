@@ -432,7 +432,7 @@ void Lowering::lowerVarDecl(cc::VarDecl *vd) {
         }
         if (!isAddressable(vd->init) && !yieldsObject(vd->init)) {
             diag.error(vd->line, vd->col,
-                       "an object can only be copied from another object in this version");
+                       "an object can only be copied from another object");
             return;
         }
         const IRReg src = lowerObjectValue(vd->init);

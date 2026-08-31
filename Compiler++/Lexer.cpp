@@ -107,36 +107,36 @@ const char *tokenName(TokenKind k) {
 // the difference between a compiler that teaches and one that merely refuses.
 const char *reservedWordHelp(const std::string &w) {
     if (w == "template" || w == "typename" || w == "export") {
-        return "templates are not supported in this version";
+        return "templates are not supported";
     }
     if (w == "throw" || w == "try" || w == "catch") {
-        return "exceptions are not supported in this version";
+        return "exceptions are not supported";
     }
     if (w == "namespace" || w == "using") {
-        return "namespaces are not supported in this version";
+        return "namespaces are not supported";
     }
     if (w == "operator") {
-        return "operator overloading is not supported in this version";
+        return "operator overloading is not supported";
     }
-    if (w == "static") return "'static' is not supported in this version";
-    if (w == "friend")   return "'friend' is not supported in this version";
-    if (w == "mutable")  return "'mutable' is not supported in this version";
-    if (w == "explicit") return "'explicit' is not supported in this version";
-    if (w == "inline")   return "'inline' is not supported in this version";
-    if (w == "goto")     return "'goto' is not supported in this version";
-    if (w == "sizeof")   return "'sizeof' is not supported in this version";
-    if (w == "enum")     return "'enum' is not supported in this version";
-    if (w == "union")    return "'union' is not supported in this version";
-    if (w == "typedef")  return "'typedef' is not supported in this version";
+    if (w == "static") return "'static' is not supported";
+    if (w == "friend")   return "'friend' is not supported";
+    if (w == "mutable")  return "'mutable' is not supported";
+    if (w == "explicit") return "'explicit' is not supported";
+    if (w == "inline")   return "'inline' is not supported";
+    if (w == "goto")     return "'goto' is not supported";
+    if (w == "sizeof")   return "'sizeof' is not supported";
+    if (w == "enum")     return "'enum' is not supported";
+    if (w == "union")    return "'union' is not supported";
+    if (w == "typedef")  return "'typedef' is not supported";
     if (w == "static_cast" || w == "const_cast" ||
         w == "dynamic_cast" || w == "reinterpret_cast") {
-        return "named casts are not supported in this version; use (T)value";
+        return "named casts are not supported; use (T)value";
     }
     if (w == "volatile" || w == "register" || w == "extern" || w == "auto") {
-        return "storage-class keywords are not supported in this version";
+        return "storage-class keywords are not supported";
     }
-    if (w == "wchar_t")  return "'wchar_t' is not supported in this version";
-    if (w == "asm")      return "assembly is not supported in this version";
+    if (w == "wchar_t")  return "'wchar_t' is not supported";
+    if (w == "asm")      return "assembly is not supported";
     return 0;
 }
 
@@ -518,7 +518,7 @@ std::string expandDefines(const std::string &src, Diagnostics &diag) {
             if (name.empty()) {
                 diag.error(line, 1, "'#define' needs a name");
             } else if (j < src.size() && src[j] == '(') {
-                diag.error(line, 1, "function-like macros are not supported in this version");
+                diag.error(line, 1, "function-like macros are not supported");
             } else {
                 std::string body;
                 while (j < src.size() && src[j] != '\n') body += src[j++];
