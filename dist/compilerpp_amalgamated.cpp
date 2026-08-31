@@ -12500,6 +12500,16 @@ vmword VM::run(const Image &image, bool &ok) {
     ok = false;
     error.clear();
     steps = 0;
+    // And the machine itself, which a trap leaves standing.  The driver builds
+    // a fresh VM per run and exits, so only an embedder reuses one -- and it
+    // inherited the previous run's frames, whose `func` is an index into the
+    // image they came from.  The dispatch loop reads image.functions[fr.func]
+    // before it checks anything, so a stale index into a SMALLER image is a
+    // read past the end of the table: ASan calls it a heap-buffer-overflow
+    // 9104 bytes past a 480-byte allocation, and it is reachable from nothing
+    // more exotic than running one program after another one trapped.
+    frames.clear();
+    stack.clear();
 
     if (image.entry < 0) { trap("no entry point"); return 0; }
     // A .cxb may have come from anywhere, so nothing in it is trusted: an

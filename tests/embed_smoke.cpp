@@ -108,6 +108,14 @@ const char *OTHER =
     "#include <iostream>\n"
     "int main(){ cout << \"two\" << endl; return 0; }\n";
 
+// Traps partway down a call chain, so the frames it leaves behind are many
+// and their func indices are high -- which is what makes a stale one point
+// past the end of a smaller image's function table.
+const char *TRAPS =
+    "#include <iostream>\n"
+    "int deep(int n){ if (n > 0) return deep(n - 1); int *p = 0; return *p; }\n"
+    "int main(){ cout << deep(20) << endl; return 0; }\n";
+
 } // namespace
 
 int main() {
@@ -146,7 +154,35 @@ int main() {
         check("one VM, second image", runCapturing(vm, second, ok), "two\n");
     }
 
-    // 4. Repeatedly, in one process, which is the shape of an application.
+    // 4. The same, with a TRAP in between.  A run that fails leaves its frames
+    //    behind, and those are what the next run walks into.
+    {
+        Image trapping;
+        if (!compileToImage(TRAPS, trapping, diagnostics)) {
+            std::cout << "FAIL     compiling the trapping program returned errors: "
+                      << diagnostics << std::endl;
+            return 1;
+        }
+        VM vm;
+        bool ok = true;
+        runCapturing(vm, trapping, ok);
+        if (ok) {
+            std::cout << "FAIL     the trapping program was not trapped" << std::endl;
+            ++failures;
+        } else {
+            std::cout << "ok       a trap is reported, not fatal" << std::endl;
+        }
+        bool ok2 = false;
+        check("a good run after a trap", runCapturing(vm, first, ok2), "one\n");
+        if (!ok2) {
+            std::cout << "FAIL     the run after a trap reported failure" << std::endl;
+            ++failures;
+        } else {
+            std::cout << "ok       and it reports success" << std::endl;
+        }
+    }
+
+    // 5. Repeatedly, in one process, which is the shape of an application.
     {
         bool same = true;
         for (int i = 0; i < 50; ++i) {
