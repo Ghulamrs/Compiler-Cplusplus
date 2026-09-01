@@ -7,9 +7,12 @@ rem and the failure then reads as a network fault rather than a missing script.
 rem
 rem   ssh windows "C:\Users\GRA\Documents\Compiler++\tests\windows\verify.cmd"
 rem
-rem Run it by its full path and with NO `cmd /c` in front: the default ssh shell
-rem here is cmd, and that prefix nests cmd in cmd, strips the outer quotes, and
-rem leaks one into %1.
+rem Run it by its full path, with NO `cmd /c` in front, and with `ssh -n`.
+rem
+rem   - `cmd /c` nests cmd in cmd, strips the outer quotes, and leaks one into %1.
+rem   - `ssh` WITHOUT -n hands its own stdin to the batch file, and something
+rem     under vcvars64.bat reads it and waits: the run then hangs before its
+rem     first line of output, which looks like a slow build and is not one.
 rem
 rem An optional first argument is the build directory; it defaults to C:\cppbuild.
 rem Keep it OUT of the checkout -- a directory of .obj beside the sources is the
@@ -22,13 +25,16 @@ set "ROOT=%~dp0..\.."
 set "OUT=%~1"
 if "%OUT%"=="" set "OUT=C:\cppbuild"
 
-if not exist "%VCVARS%" echo verify: no vcvars64.bat at "%VCVARS%" & exit /b 1
-if not exist "%GITBASH%" echo verify: no bash at "%GITBASH%" & exit /b 1
+rem Parenthesised, both of them. `if cond echo X & exit /b 1` separates at the
+rem `&` and runs the exit whatever the condition said, so an unparenthesised
+rem guard ends the script every time and says nothing on its way out.
+if not exist "%VCVARS%" ( echo verify: no vcvars64.bat at "%VCVARS%" & exit /b 1 )
+if not exist "%GITBASH%" ( echo verify: no bash at "%GITBASH%" & exit /b 1 )
 
 rem The redirect binds to the one command it follows, so `call ... >nul && set`
 rem would leave call reading stdin. Parenthesised, and fed from NUL.
 ( call "%VCVARS%" >nul ) < NUL
-if errorlevel 1 echo verify: vcvars64.bat failed & exit /b 1
+if errorlevel 1 ( echo verify: vcvars64.bat failed & exit /b 1 )
 
 if not exist "%OUT%" mkdir "%OUT%"
 del /q "%OUT%\*.obj" 2>nul
