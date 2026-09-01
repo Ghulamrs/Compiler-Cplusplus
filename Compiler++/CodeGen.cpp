@@ -80,12 +80,21 @@ void CodeGen::layoutStaticData(const IRModule &module, Image &out) {
     }
 }
 
-void CodeGen::generate(const IRModule &module, Image &out) {
+void CodeGen::generate(IRModule &module, Image &out) {
     collectSymbols(module, out);
     layoutStaticData(module, out);
     out.functions.resize(module.functions.size());
     for (std::size_t i = 0; i < module.functions.size(); ++i) {
-        generateFunction(*module.functions[i], out.functions[i]);
+        IRFunction &fn = *module.functions[i];
+        generateFunction(fn, out.functions[i]);
+        // Released here rather than when the module dies.  Held to the end,
+        // the IR and the finished image are both whole at the same moment and
+        // that moment is the compile's high-water mark -- while this half of
+        // it has been dead since the line above.  The C++98 way to make a
+        // vector give its memory back is to swap it with an empty one;
+        // `clear()` keeps the capacity, which is the whole of what is wanted
+        // back.
+        std::vector<IRInstr>().swap(fn.code);
     }
     if (out.entry < 0) diag.error(0, 0, "no 'main' function to run");
 }

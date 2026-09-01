@@ -30,7 +30,18 @@
 class CodeGen {
 public:
     CodeGen(Diagnostics &diag);
-    void generate(const IRModule &module, Image &out);
+
+    // CONSUMES the module's function bodies.  Each function's instruction list
+    // is released as soon as its bytecode exists, because otherwise the IR and
+    // the image are both whole in memory at the moment this pass ends -- which
+    // is the peak of a compile, and the IR half of it is already dead.  What
+    // survives is every function's name, shape and locals, so an index or a
+    // symbol looked up afterwards still answers; only the instructions go.
+    //
+    // A caller that wants to SEE the IR must print it before calling this.
+    // main.cpp does, and there is nothing else in the pass order that reads a
+    // function body after its bytecode has been made.
+    void generate(IRModule &module, Image &out);
 
 private:
     Diagnostics &diag;

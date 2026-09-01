@@ -2502,7 +2502,18 @@ private:
 class CodeGen {
 public:
     CodeGen(Diagnostics &diag);
-    void generate(const IRModule &module, Image &out);
+
+    // CONSUMES the module's function bodies.  Each function's instruction list
+    // is released as soon as its bytecode exists, because otherwise the IR and
+    // the image are both whole in memory at the moment this pass ends -- which
+    // is the peak of a compile, and the IR half of it is already dead.  What
+    // survives is every function's name, shape and locals, so an index or a
+    // symbol looked up afterwards still answers; only the instructions go.
+    //
+    // A caller that wants to SEE the IR must print it before calling this.
+    // main.cpp does, and there is nothing else in the pass order that reads a
+    // function body after its bytecode has been made.
+    void generate(IRModule &module, Image &out);
 
 private:
     Diagnostics &diag;
@@ -12208,12 +12219,21 @@ void CodeGen::layoutStaticData(const IRModule &module, Image &out) {
     }
 }
 
-void CodeGen::generate(const IRModule &module, Image &out) {
+void CodeGen::generate(IRModule &module, Image &out) {
     collectSymbols(module, out);
     layoutStaticData(module, out);
     out.functions.resize(module.functions.size());
     for (std::size_t i = 0; i < module.functions.size(); ++i) {
-        generateFunction(*module.functions[i], out.functions[i]);
+        IRFunction &fn = *module.functions[i];
+        generateFunction(fn, out.functions[i]);
+        // Released here rather than when the module dies.  Held to the end,
+        // the IR and the finished image are both whole at the same moment and
+        // that moment is the compile's high-water mark -- while this half of
+        // it has been dead since the line above.  The C++98 way to make a
+        // vector give its memory back is to swap it with an empty one;
+        // `clear()` keeps the capacity, which is the whole of what is wanted
+        // back.
+        std::vector<IRInstr>().swap(fn.code);
     }
     if (out.entry < 0) diag.error(0, 0, "no 'main' function to run");
 }
