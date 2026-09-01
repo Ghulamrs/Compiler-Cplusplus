@@ -61,7 +61,14 @@ for case_file in cases/*.cpp; do
         continue
     fi
 
-    if printf '%s\n' "$actual" | diff -u "$expected" - > /tmp/ccpp_diff.$$ 2>&1; then
+    # --strip-trailing-cr because the golden files are LF and MSVC's stdout is
+    # not: a text-mode C++ stream translates '\n' on Windows, so without this
+    # every case on that box reports as a failure while the compiler is
+    # entirely correct. It is the third box's whole suite, bought with a flag
+    # both BSD and GNU diff have had for years. Nothing in expected/ or
+    # expected_run/ contains a carriage return of its own, so there is nothing
+    # here for it to hide.
+    if printf '%s\n' "$actual" | diff -u --strip-trailing-cr "$expected" - > /tmp/ccpp_diff.$$ 2>&1; then
         echo "ok       $name"
         pass=$((pass + 1))
     else
